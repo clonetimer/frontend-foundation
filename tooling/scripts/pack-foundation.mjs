@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { runPnpm } from './pnpm-runner.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -49,14 +49,18 @@ const tools = {};
 const integrity = {};
 for (const item of await discoverPublishable()) {
   await verifyLibraryArtifacts(item);
-  const before = new Set((await readdir(out)).filter((file) => file.endsWith('.tgz')));
-  runPnpm(['--dir', item.dir, 'pack', '--pack-destination', out], { stdio: 'inherit' });
-  const after = (await readdir(out)).filter((file) => file.endsWith('.tgz'));
-  const created = after.filter((file) => !before.has(file));
-  if (created.length !== 1) {
-    throw new Error(`Expected one tarball for ${item.packageJson.name}, found ${created.length}`);
+  // Run from the package directory instead of forwarding pnpm's --dir flag.
+  // Nested invocations inherit pnpm lifecycle environment variables; with
+  // --dir those can make `pack` operate on the whole workspace recursively.
+  const packed = JSON.parse(runPnpm(['pack', '--pack-destination', out, '--json'], {
+    cwd: item.dir,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit']
+  }));
+  if (packed.name !== item.packageJson.name || dirname(resolve(packed.filename)) !== out) {
+    throw new Error(`Unexpected tarball result for ${item.packageJson.name}`);
   }
-  const file = basename(created[0]);
+  const file = basename(packed.filename);
   const target = item.group === 'packages' ? libraries : tools;
   target[item.packageJson.name] = file;
   const bytes = await readFile(join(out, file));

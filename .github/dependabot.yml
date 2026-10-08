@@ -8,6 +8,10 @@ updates:
       time: '04:00'
       timezone: UTC
     versioning-strategy: increase-if-necessary
+    ignore:
+      # Node 26 types are beyond the currently advertised Node 22/24 support range.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
     groups:
       frontend-foundation-runtime:
         patterns:
