@@ -1,0 +1,18 @@
+import { Button, Space } from 'antd';
+import { Page, PageContent, PageHeader, PanelBlock, WorkspacePattern } from '@foundation/ui';
+
+export function Component() {
+  return (
+    <Page>
+      <PageHeader title={{titleJson}} description="Workspace Pattern：工程/数据/Agent 工作区组合起点。" />
+      <PageContent>
+        <WorkspacePattern
+          toolbar={<Space><Button type="primary">运行</Button><Button>重置</Button></Space>}
+          main={<PanelBlock title="主工作区" style={{ height: '100%' }}>在这里接入编辑器、图表、地图、仿真或数据视图。</PanelBlock>}
+          side={<PanelBlock title="参数 / Inspector" style={{ height: '100%' }}>在这里接入参数表单与属性检查器。</PanelBlock>}
+          bottom={<PanelBlock title="日志 / 任务状态">在这里接入日志、异步任务和诊断信息。</PanelBlock>}
+        />
+      </PageContent>
+    </Page>
+  );
+}

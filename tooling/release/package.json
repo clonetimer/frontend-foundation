@@ -1,0 +1,11 @@
+{
+  "name": "@foundation/release-tools",
+  "version": "0.21.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --check preflight.mjs && node --check plan.mjs && node --check version.mjs && node --check public-api.mjs && node --check publish.mjs && node --check promote.mjs",
+    "typecheck": "node --check preflight.mjs && node --check plan.mjs && node --check version.mjs && node --check public-api.mjs && node --check publish.mjs && node --check promote.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

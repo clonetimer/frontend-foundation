@@ -1,0 +1,18 @@
+import { defineModule } from '@foundation/app';
+
+export const module = defineModule({
+  id: '{{slug}}',
+  routes: [
+    {
+      id: '{{slug}}.index',
+      index: true,
+      lazy: async () => import('./pages/index.route'),
+      handle: {
+        foundation: {
+          title: {{titleJson}},
+          navigation: { label: {{navigationLabelJson}}, order: {{order}} }{{permissionMeta}}
+        }
+      }
+    }
+  ]
+});

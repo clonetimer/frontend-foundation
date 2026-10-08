@@ -1,0 +1,18 @@
+import { List } from 'antd';
+import { MasterDetailPattern, Page, PageContent, PageHeader, PanelBlock } from '@foundation/ui';
+
+const examples = ['Item A', 'Item B', 'Item C'];
+
+export function Component() {
+  return (
+    <Page>
+      <PageHeader title={{titleJson}} description="Master-detail Pattern：主列表与详情工作区。" />
+      <PageContent>
+        <MasterDetailPattern
+          master={<PanelBlock title="列表"><List dataSource={examples} renderItem={(item) => <List.Item>{item}</List.Item>} /></PanelBlock>}
+          detail={<PanelBlock title="详情">选择左侧条目后，在这里渲染业务详情。</PanelBlock>}
+        />
+      </PageContent>
+    </Page>
+  );
+}

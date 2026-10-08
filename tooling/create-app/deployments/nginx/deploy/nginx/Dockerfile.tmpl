@@ -1,0 +1,13 @@
+ARG NGINX_IMAGE={{nginxImage}}
+FROM ${NGINX_IMAGE}
+
+COPY deploy/nginx/default.static.conf /etc/foundation/default.static.conf
+COPY deploy/nginx/default.proxy.conf.template /etc/foundation/default.proxy.conf.template
+COPY deploy/nginx/40-foundation-runtime.sh /docker-entrypoint.d/40-foundation-runtime.sh
+RUN chmod +x /docker-entrypoint.d/40-foundation-runtime.sh
+
+COPY dist/ /usr/share/nginx/html/
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1

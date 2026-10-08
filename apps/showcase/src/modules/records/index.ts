@@ -1,0 +1,1 @@
+export { recordsModule } from './routes';

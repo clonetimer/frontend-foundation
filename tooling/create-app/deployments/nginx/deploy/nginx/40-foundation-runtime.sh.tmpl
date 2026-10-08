@@ -1,0 +1,54 @@
+#!/bin/sh
+set -eu
+
+TEMPLATE_DIR="${FOUNDATION_TEMPLATE_DIR:-/etc/foundation}"
+WEB_ROOT="${FOUNDATION_WEB_ROOT:-/usr/share/nginx/html}"
+NGINX_CONF="${FOUNDATION_NGINX_CONF:-/etc/nginx/conf.d/default.conf}"
+APP_NAME_JSON='{{appTitleShellJson}}'
+
+APP_ENVIRONMENT="${APP_ENVIRONMENT:-production}"
+API_BASE_URL="${API_BASE_URL:-/api}"
+API_UPSTREAM="${API_UPSTREAM:-}"
+
+# Multiline env values make scalar JSON ambiguous and are rejected. Quotes and
+# backslashes are escaped explicitly below.
+case "$APP_ENVIRONMENT$API_BASE_URL" in
+  *'
+'*) echo "APP_ENVIRONMENT and API_BASE_URL must be single-line values" >&2; exit 1 ;;
+esac
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+APP_ENVIRONMENT_JSON="$(json_escape "$APP_ENVIRONMENT")"
+API_BASE_URL_JSON="$(json_escape "$API_BASE_URL")"
+
+mkdir -p "$WEB_ROOT" "$(dirname "$NGINX_CONF")"
+cat > "$WEB_ROOT/runtime-config.json" <<EOF_JSON
+{
+  "app": { "name": ${APP_NAME_JSON}, "environment": "${APP_ENVIRONMENT_JSON}" },
+  "api": { "baseUrl": "${API_BASE_URL_JSON}", "timeoutMs": 30000 },
+  "router": { "mode": "{{routerMode}}" },
+  "ui": { "theme": "system", "density": "default" },
+  "features": {}
+}
+EOF_JSON
+
+if [ -n "$API_UPSTREAM" ]; then
+  if [ "$API_BASE_URL" != "/api" ]; then
+    echo "When API_UPSTREAM is set, API_BASE_URL must be /api so the generated proxy contract is unambiguous." >&2
+    exit 1
+  fi
+  envsubst '${API_UPSTREAM}' \
+    < "$TEMPLATE_DIR/default.proxy.conf.template" \
+    > "$NGINX_CONF"
+else
+  case "$API_BASE_URL" in
+    /*)
+      echo "Relative API_BASE_URL=$API_BASE_URL requires API_UPSTREAM. Otherwise set API_BASE_URL to an absolute URL." >&2
+      exit 1
+      ;;
+  esac
+  cp "$TEMPLATE_DIR/default.static.conf" "$NGINX_CONF"
+fi

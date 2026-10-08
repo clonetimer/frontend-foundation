@@ -1,0 +1,57 @@
+{
+  "page": {
+    "description": "单页面模块：Page/Header/Content 基础结构。",
+    "requiredCapabilities": [
+      "application-shell",
+      "ui-patterns"
+    ]
+  },
+  "management": {
+    "description": "管理型模块：表格、表单和权限组合骨架。",
+    "requiredCapabilities": [
+      "application-shell",
+      "ui-patterns",
+      "data-table",
+      "forms",
+      "permission"
+    ]
+  },
+  "data-workbench": {
+    "description": "数据工作台模块：文件、异步任务和可视化组合骨架。",
+    "requiredCapabilities": [
+      "application-shell",
+      "ui-patterns",
+      "file-transfer",
+      "async-operation",
+      "visualization"
+    ]
+  },
+  "dashboard": {
+    "description": "仪表盘模块：指标、面板与响应式网格组合骨架。",
+    "requiredCapabilities": [
+      "application-shell",
+      "ui-patterns"
+    ]
+  },
+  "master-detail": {
+    "description": "主从模块：主列表与详情面板双栏组合骨架。",
+    "requiredCapabilities": [
+      "application-shell",
+      "ui-patterns"
+    ]
+  },
+  "split-pane": {
+    "description": "双栏模块：主区域与辅助区域通用组合骨架。",
+    "requiredCapabilities": [
+      "application-shell",
+      "ui-patterns"
+    ]
+  },
+  "workspace": {
+    "description": "通用工作台模块：工具栏、主区域、辅助侧栏和底部区域组合骨架。",
+    "requiredCapabilities": [
+      "application-shell",
+      "ui-patterns"
+    ]
+  }
+}

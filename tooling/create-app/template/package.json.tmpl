@@ -1,0 +1,31 @@
+{
+  "name": "{{packageName}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "{{packageManager}}",
+  "engines": {
+    "node": "{{nodeEngine}}"
+  },
+  "foundation": {
+    "profile": "{{profile}}",
+    "shell": "{{shellPreset}}",
+    "deployment": "{{deployment}}",
+    "contract": "{{contractMode}}"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "pnpm typecheck && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run --passWithNoTests",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "foundation:doctor": "foundation-doctor . --strict",
+    "foundation:generate": "foundation-generate",
+    "foundation:contract": "foundation-contract generate",
+    "foundation:contract:verify": "foundation-contract verify",
+    "foundation:upgrade": "foundation-upgrade",
+    "foundation:project": "foundation-project"
+  },
+  "dependencies": {{dependenciesJson}},
+  "devDependencies": {{devDependenciesJson}}
+}

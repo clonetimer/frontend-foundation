@@ -1,0 +1,71 @@
+{
+  "snapshotVersion": "0.5.0",
+  "generatedFor": "OSS convergence comparison",
+  "packages": {
+    "core": {
+      "files": 5,
+      "loc": 94,
+      "topLevelExportStatements": 0
+    },
+    "ui": {
+      "files": 4,
+      "loc": 102,
+      "topLevelExportStatements": 0
+    },
+    "data": {
+      "files": 4,
+      "loc": 89,
+      "topLevelExportStatements": 0
+    },
+    "forms": {
+      "files": 7,
+      "loc": 154,
+      "topLevelExportStatements": 0
+    },
+    "app": {
+      "files": 17,
+      "loc": 609,
+      "topLevelExportStatements": 0
+    },
+    "security": {
+      "files": 8,
+      "loc": 107,
+      "topLevelExportStatements": 0
+    },
+    "api": {
+      "files": 5,
+      "loc": 285,
+      "topLevelExportStatements": 0
+    },
+    "async": {
+      "files": 6,
+      "loc": 222,
+      "topLevelExportStatements": 0
+    },
+    "file": {
+      "files": 6,
+      "loc": 258,
+      "topLevelExportStatements": 0
+    },
+    "visualization": {
+      "files": 5,
+      "loc": 170,
+      "topLevelExportStatements": 0
+    },
+    "theme": {
+      "files": 3,
+      "loc": 104,
+      "topLevelExportStatements": 0
+    },
+    "observability": {
+      "files": 5,
+      "loc": 61,
+      "topLevelExportStatements": 0
+    },
+    "testing": {
+      "files": 6,
+      "loc": 180,
+      "topLevelExportStatements": 0
+    }
+  }
+}

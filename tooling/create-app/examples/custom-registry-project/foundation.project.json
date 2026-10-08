@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "id": "example.registry.project",
+    "packageName": "example-registry-project",
+    "title": "Custom Registry Example"
+  },
+  "foundation": {
+    "version": "0.21.0",
+    "profile": "management",
+    "shell": "workspace",
+    "router": "browser",
+    "deployment": "none",
+    "contract": "none"
+  },
+  "navigation": {
+    "items": [
+      {
+        "target": "overview",
+        "label": "Overview",
+        "order": 0
+      }
+    ]
+  },
+  "pages": [
+    {
+      "id": "overview",
+      "title": "Overview",
+      "pattern": "dashboard",
+      "index": true,
+      "state": [
+        {
+          "id": "itemId",
+          "type": "string",
+          "initial": "ITEM-1"
+        }
+      ],
+      "actions": [
+        {
+          "id": "selectItem",
+          "steps": [
+            {
+              "type": "set",
+              "state": "itemId",
+              "value": {
+                "event": "value"
+              }
+            }
+          ]
+        }
+      ],
+      "composition": {
+        "id": "overviewRoot",
+        "kind": "layout",
+        "type": "stack",
+        "children": [
+          {
+            "id": "analysisSection",
+            "kind": "widget",
+            "type": "example.analysis-section",
+            "props": {
+              "title": "Analysis section"
+            },
+            "children": [
+              {
+                "id": "overviewViewer",
+                "kind": "widget",
+                "type": "example.interactive-viewer",
+                "props": {
+                  "mode": "overview"
+                },
+                "bindings": {
+                  "itemId": {
+                    "state": "itemId"
+                  }
+                },
+                "events": {
+                  "select": [
+                    "selectItem"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "resources": []
+}

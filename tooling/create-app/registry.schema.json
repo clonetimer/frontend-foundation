@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://foundation.local/schema/registry-v1.json",
+  "title": "Frontend Foundation Custom Component Registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "widgets": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/component" } },
+    "blocks": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/component" } }
+  },
+  "$defs": {
+    "stateType": { "enum": ["string", "number", "boolean"] },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "kind"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
+        "label": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["text", "number", "boolean", "select", "json"] },
+        "options": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "required": { "type": "boolean" },
+        "default": true
+      }
+    },
+    "bindingType": {
+      "oneOf": [
+        { "$ref": "#/$defs/stateType" },
+        { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/stateType" } }
+      ]
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prop"],
+      "properties": {
+        "prop": { "type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
+        "valueType": { "oneOf": [{ "$ref": "#/$defs/stateType" }, { "type": "null" }] },
+        "parameter": { "type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "package", "version", "exportName", "description"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$" },
+        "package": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "exportName": { "type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
+        "description": { "type": "string", "minLength": 1 },
+        "acceptsChildren": { "type": "boolean" },
+        "properties": { "type": "array", "items": { "$ref": "#/$defs/property" } },
+        "bindings": { "type": "object", "additionalProperties": { "$ref": "#/$defs/bindingType" } },
+        "events": { "type": "object", "additionalProperties": { "$ref": "#/$defs/event" } }
+      }
+    }
+  }
+}

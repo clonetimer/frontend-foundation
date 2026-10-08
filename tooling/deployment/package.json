@@ -1,0 +1,11 @@
+{
+  "name": "@foundation/deployment-tooling",
+  "version": "0.21.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --check verify.mjs && node --check http-smoke.mjs",
+    "typecheck": "node --check verify.mjs && node --check http-smoke.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

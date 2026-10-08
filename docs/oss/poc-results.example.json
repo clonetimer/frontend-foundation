@@ -1,0 +1,27 @@
+{
+  "proComponents": {
+    "compiled": false,
+    "testsPassed": false,
+    "kernelContractChanges": 0,
+    "ownedLocBefore": 453,
+    "ownedLocAfter": null,
+    "foundationPublicExportDelta": null,
+    "bundleGzipDeltaKiB": null,
+    "antdDowngrade": false,
+    "routerDowngrade": false,
+    "apiContractPreserved": true
+  },
+  "refineCore": {
+    "compiled": false,
+    "testsPassed": false,
+    "kernelContractChanges": 0,
+    "bridgeLoc": null,
+    "projectGlueLocBefore": null,
+    "projectGlueLocAfter": null,
+    "usesRefineAntd": false,
+    "usesRefineRouter": false,
+    "antdDowngrade": false,
+    "routerDowngrade": false,
+    "apiContractPreserved": true
+  }
+}

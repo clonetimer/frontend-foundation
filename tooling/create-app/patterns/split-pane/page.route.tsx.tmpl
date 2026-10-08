@@ -1,0 +1,15 @@
+import { Page, PageContent, PageHeader, PanelBlock, SplitPanePattern } from '@foundation/ui';
+
+export function Component() {
+  return (
+    <Page>
+      <PageHeader title={{titleJson}} description="Split-pane Pattern：主区域与辅助区域的通用双栏组合。" />
+      <PageContent>
+        <SplitPanePattern
+          main={<PanelBlock title="主区域" style={{ height: '100%' }}>在这里接入项目主视图。</PanelBlock>}
+          side={<PanelBlock title="辅助区域" style={{ height: '100%' }}>在这里接入 Inspector、参数或上下文信息。</PanelBlock>}
+        />
+      </PageContent>
+    </Page>
+  );
+}

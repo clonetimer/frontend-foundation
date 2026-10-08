@@ -1,0 +1,67 @@
+import { Button, Card, Input, Space } from 'antd';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { DataTable } from '@foundation/data';
+import { FormActions, FormField, FormLayout, FormSection } from '@foundation/forms';
+import { PermissionGate } from '@foundation/security';
+import { Page, PageContent, PageHeader } from '@foundation/ui';
+
+interface Item { id: string; name: string }
+interface FormValues { name: string }
+
+export function Component() {
+  const [items, setItems] = useState<readonly Item[]>([]);
+  const form = useForm<FormValues>({ defaultValues: { name: '' } });
+  const submit = form.handleSubmit(({ name }) => {
+    const value = name.trim();
+    if (!value) {
+      form.setError('name', { message: '请输入名称' });
+      return;
+    }
+    setItems((current) => [...current, { id: `ITEM-${String(current.length + 1).padStart(3, '0')}`, name: value }]);
+    form.reset();
+  });
+
+  return (
+    <Page>
+      <PageHeader title={{titleJson}} description="管理型 Pattern：DataTable + Form + Permission。" />
+      <PageContent>
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          <Card title="列表">
+            <DataTable<Item>
+              rowKey="id"
+              data={items}
+              pagination={false}
+              columns={[
+                { title: 'ID', dataIndex: 'id' },
+                { title: '名称', dataIndex: 'name' },
+                {
+                  title: '操作',
+                  render: (_value, item) => (
+                    <PermissionGate permission={{permissionJson}}>
+                      <Button size="small" onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))}>移除</Button>
+                    </PermissionGate>
+                  )
+                }
+              ]}
+            />
+          </Card>
+          <Card title="新增">
+            <FormLayout onSubmit={submit}>
+              <FormSection title="基础信息">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  label="名称"
+                  required
+                  render={(field) => <Input {...field} {...(field.disabled !== undefined ? { disabled: field.disabled } : {})} />}
+                />
+              </FormSection>
+              <FormActions submitText="新增" disabled={form.formState.isSubmitting} />
+            </FormLayout>
+          </Card>
+        </Space>
+      </PageContent>
+    </Page>
+  );
+}

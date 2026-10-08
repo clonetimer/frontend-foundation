@@ -1,0 +1,50 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Foundation Admission Fixture",
+    "version": "1.0.0"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Audit": {
+        "type": "object",
+        "required": [
+          "approvable"
+        ],
+        "properties": {
+          "approvable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DetailNested": {
+        "type": "object",
+        "required": [
+          "editable"
+        ],
+        "properties": {
+          "editable": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        }
+      },
+      "ItemRead": {
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "detail": {
+                "$ref": "#/components/schemas/DetailNested"
+              }
+            }
+          },
+          {
+            "$ref": "#/components/schemas/Audit"
+          }
+        ]
+      }
+    }
+  }
+}

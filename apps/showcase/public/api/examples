@@ -1,0 +1,5 @@
+[
+  {"id":"EX-001","title":"Runtime configuration","status":"ready"},
+  {"id":"EX-002","title":"Permission + Route metadata","status":"ready"},
+  {"id":"EX-003","title":"API transport boundary","status":"ready"}
+]

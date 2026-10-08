@@ -1,0 +1,6 @@
+{
+  "name": "@foundation/oss-tooling",
+  "version": "0.21.0",
+  "private": true,
+  "type": "module"
+}

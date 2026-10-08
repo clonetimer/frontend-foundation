@@ -1,0 +1,488 @@
+{
+  "shells": [
+    {
+      "id": "sidebar",
+      "description": "经典左侧导航 + 顶部面包屑，兼容 0.10/0.11 默认体验。",
+      "useCases": [
+        "management",
+        "admin",
+        "operations"
+      ]
+    },
+    {
+      "id": "top-nav",
+      "description": "顶部主导航，适合 SaaS、门户和较浅的信息架构。",
+      "useCases": [
+        "saas",
+        "portal",
+        "product"
+      ]
+    },
+    {
+      "id": "workspace",
+      "description": "固定导航 + 视口工作区，适合工程、数据、Agent 和监控工具。",
+      "useCases": [
+        "engineering",
+        "data",
+        "agent",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "bare",
+      "description": "不注入导航和页面内边距，适合 Landing、地图、3D、嵌入式界面。",
+      "useCases": [
+        "landing",
+        "map",
+        "3d",
+        "embedded"
+      ]
+    }
+  ],
+  "layouts": [
+    {
+      "id": "stack",
+      "exportName": "StackLayout",
+      "package": "@foundation/ui",
+      "description": "纵向或横向顺序布局，类似 Qt BoxLayout。",
+      "acceptsChildren": true,
+      "properties": [
+        {
+          "key": "direction",
+          "label": "Direction",
+          "kind": "select",
+          "options": [
+            "vertical",
+            "horizontal"
+          ]
+        },
+        {
+          "key": "gap",
+          "label": "Gap",
+          "kind": "number"
+        },
+        {
+          "key": "align",
+          "label": "Align",
+          "kind": "select",
+          "options": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        {
+          "key": "wrap",
+          "label": "Wrap",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "id": "grid",
+      "exportName": "GridLayout",
+      "package": "@foundation/ui",
+      "description": "固定列或自适应栅格布局。",
+      "acceptsChildren": true,
+      "properties": [
+        {
+          "key": "columns",
+          "label": "Columns",
+          "kind": "number"
+        },
+        {
+          "key": "minColumnWidth",
+          "label": "Min column width",
+          "kind": "number"
+        },
+        {
+          "key": "gap",
+          "label": "Gap",
+          "kind": "number"
+        }
+      ]
+    },
+    {
+      "id": "split",
+      "exportName": "SplitLayout",
+      "package": "@foundation/ui",
+      "description": "双区域分割布局，类似 QSplitter 的结构角色。",
+      "acceptsChildren": true,
+      "properties": [
+        {
+          "key": "direction",
+          "label": "Direction",
+          "kind": "select",
+          "options": [
+            "horizontal",
+            "vertical"
+          ]
+        },
+        {
+          "key": "secondarySize",
+          "label": "Secondary size",
+          "kind": "number"
+        },
+        {
+          "key": "gap",
+          "label": "Gap",
+          "kind": "number"
+        },
+        {
+          "key": "minSize",
+          "label": "Minimum size",
+          "kind": "number"
+        }
+      ]
+    },
+    {
+      "id": "tabs",
+      "exportName": "TabsLayout",
+      "package": "@foundation/ui",
+      "description": "标签页容器，子节点使用 label 作为页签标题。",
+      "acceptsChildren": true,
+      "properties": [
+        {
+          "key": "tabPosition",
+          "label": "Tab position",
+          "kind": "select",
+          "options": [
+            "top",
+            "right",
+            "bottom",
+            "left"
+          ]
+        }
+      ]
+    }
+  ],
+  "widgets": [
+    {
+      "id": "panel",
+      "exportName": "PanelWidget",
+      "package": "@foundation/ui",
+      "description": "通用内容容器，可嵌套子节点。",
+      "acceptsChildren": true,
+      "bindings": {
+        "title": "string",
+        "description": "string"
+      },
+      "events": {},
+      "properties": [
+        {
+          "key": "title",
+          "label": "Title",
+          "kind": "text"
+        },
+        {
+          "key": "description",
+          "label": "Description",
+          "kind": "text"
+        }
+      ]
+    },
+    {
+      "id": "text",
+      "exportName": "TextWidget",
+      "package": "@foundation/ui",
+      "description": "标题、正文和辅助文字。",
+      "acceptsChildren": false,
+      "bindings": {
+        "text": "string"
+      },
+      "events": {},
+      "properties": [
+        {
+          "key": "text",
+          "label": "Text",
+          "kind": "text"
+        },
+        {
+          "key": "variant",
+          "label": "Variant",
+          "kind": "select",
+          "options": [
+            "body",
+            "secondary",
+            "title",
+            "subtitle"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "button",
+      "exportName": "ButtonWidget",
+      "package": "@foundation/ui",
+      "description": "操作按钮；事件通过受治理的 press → Action 连接表达。",
+      "acceptsChildren": false,
+      "bindings": {
+        "label": "string",
+        "disabled": "boolean"
+      },
+      "events": {
+        "press": {
+          "prop": "onPress",
+          "valueType": null
+        }
+      },
+      "properties": [
+        {
+          "key": "label",
+          "label": "Label",
+          "kind": "text"
+        },
+        {
+          "key": "type",
+          "label": "Button type",
+          "kind": "select",
+          "options": [
+            "default",
+            "primary",
+            "dashed",
+            "link",
+            "text"
+          ]
+        },
+        {
+          "key": "disabled",
+          "label": "Disabled",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "id": "input",
+      "exportName": "InputWidget",
+      "package": "@foundation/ui",
+      "description": "文本输入控件控件；支持受治理的 value/disabled Binding 与 change 事件。",
+      "acceptsChildren": false,
+      "bindings": {
+        "value": "string",
+        "disabled": "boolean"
+      },
+      "events": {
+        "change": {
+          "prop": "onValueChange",
+          "valueType": "string",
+          "parameter": "value"
+        }
+      },
+      "properties": [
+        {
+          "key": "label",
+          "label": "Label",
+          "kind": "text"
+        },
+        {
+          "key": "placeholder",
+          "label": "Placeholder",
+          "kind": "text"
+        },
+        {
+          "key": "defaultValue",
+          "label": "Default value",
+          "kind": "text"
+        },
+        {
+          "key": "disabled",
+          "label": "Disabled",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "id": "select",
+      "exportName": "SelectWidget",
+      "package": "@foundation/ui",
+      "description": "选择控件控件；支持受治理的 value/disabled Binding 与 change 事件。",
+      "acceptsChildren": false,
+      "bindings": {
+        "value": "string",
+        "disabled": "boolean"
+      },
+      "events": {
+        "change": {
+          "prop": "onValueChange",
+          "valueType": "string",
+          "parameter": "value"
+        }
+      },
+      "properties": [
+        {
+          "key": "label",
+          "label": "Label",
+          "kind": "text"
+        },
+        {
+          "key": "placeholder",
+          "label": "Placeholder",
+          "kind": "text"
+        },
+        {
+          "key": "defaultValue",
+          "label": "Default value",
+          "kind": "text"
+        },
+        {
+          "key": "options",
+          "label": "Options",
+          "kind": "json"
+        },
+        {
+          "key": "disabled",
+          "label": "Disabled",
+          "kind": "boolean"
+        }
+      ]
+    },
+    {
+      "id": "metric",
+      "exportName": "MetricWidget",
+      "package": "@foundation/ui",
+      "description": "单指标状态卡。",
+      "acceptsChildren": false,
+      "bindings": {
+        "value": [
+          "string",
+          "number"
+        ]
+      },
+      "events": {},
+      "properties": [
+        {
+          "key": "label",
+          "label": "Label",
+          "kind": "text"
+        },
+        {
+          "key": "value",
+          "label": "Value",
+          "kind": "text"
+        },
+        {
+          "key": "suffix",
+          "label": "Suffix",
+          "kind": "text"
+        },
+        {
+          "key": "description",
+          "label": "Description",
+          "kind": "text"
+        }
+      ]
+    },
+    {
+      "id": "placeholder",
+      "exportName": "PlaceholderWidget",
+      "package": "@foundation/ui",
+      "description": "领域组件占位，如轨道视图、地图、3D、日志终端。",
+      "acceptsChildren": false,
+      "bindings": {
+        "title": "string",
+        "description": "string"
+      },
+      "events": {},
+      "properties": [
+        {
+          "key": "title",
+          "label": "Title",
+          "kind": "text"
+        },
+        {
+          "key": "description",
+          "label": "Description",
+          "kind": "text"
+        }
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "panel",
+      "exportName": "PanelBlock",
+      "package": "@foundation/ui",
+      "description": "通用带标题内容面板。"
+    },
+    {
+      "id": "metric",
+      "exportName": "MetricBlock",
+      "package": "@foundation/ui",
+      "description": "单指标状态卡。"
+    },
+    {
+      "id": "metric-grid",
+      "exportName": "MetricGrid",
+      "package": "@foundation/ui",
+      "description": "自适应指标卡网格。"
+    }
+  ],
+  "patterns": [
+    {
+      "id": "dashboard",
+      "exportName": "DashboardPattern",
+      "package": "@foundation/ui",
+      "description": "可组合仪表盘页面。"
+    },
+    {
+      "id": "master-detail",
+      "exportName": "MasterDetailPattern",
+      "package": "@foundation/ui",
+      "description": "主列表 + 详情双栏页面。"
+    },
+    {
+      "id": "split-pane",
+      "exportName": "SplitPanePattern",
+      "package": "@foundation/ui",
+      "description": "主区域 + 辅助区域双栏页面。"
+    },
+    {
+      "id": "workspace",
+      "exportName": "WorkspacePattern",
+      "package": "@foundation/ui",
+      "description": "工具栏 + 主工作区 + 侧区 + 底部区。"
+    }
+  ],
+  "interaction": {
+    "stateTypes": [
+      "string",
+      "number",
+      "boolean"
+    ],
+    "actionSteps": [
+      "set",
+      "toggle",
+      "increment",
+      "reset",
+      "invoke",
+      "navigate"
+    ],
+    "dataSources": [
+      {
+        "type": "http",
+        "methods": [
+          "GET",
+          "POST",
+          "PUT",
+          "PATCH",
+          "DELETE"
+        ],
+        "responseModes": [
+          "json",
+          "text",
+          "none"
+        ],
+        "description": "API-relative HTTP endpoint definition compiled against @foundation/api ApiTransport."
+      }
+    ],
+    "operationFeatures": [
+      "query",
+      "json-body",
+      "pending-state",
+      "error-state",
+      "response-to-state"
+    ],
+    "description": "Structured signal/action/data model for Visual Composition. No arbitrary JavaScript strings."
+  }
+}

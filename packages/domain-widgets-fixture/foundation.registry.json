@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "widgets": [
+    {
+      "id": "example.interactive-viewer",
+      "package": "@example/domain-widgets",
+      "version": "^0.1.0",
+      "exportName": "InteractiveViewer",
+      "description": "Domain-neutral interactive visualization surface.",
+      "properties": [
+        {
+          "key": "itemId",
+          "label": "Item ID",
+          "kind": "text",
+          "required": true
+        },
+        {
+          "key": "mode",
+          "label": "Mode",
+          "kind": "select",
+          "options": [
+            "overview",
+            "detail"
+          ],
+          "default": "overview"
+        },
+        {
+          "key": "interactive",
+          "label": "Interactive",
+          "kind": "boolean",
+          "default": true
+        }
+      ],
+      "bindings": {
+        "itemId": "string",
+        "mode": "string",
+        "interactive": "boolean"
+      },
+      "events": {
+        "focus": {
+          "prop": "onItemChange",
+          "valueType": "string",
+          "parameter": "itemId"
+        }
+      }
+    },
+    {
+      "id": "example.time-series-chart",
+      "package": "@example/domain-widgets",
+      "version": "^0.1.0",
+      "exportName": "TimeSeriesChart",
+      "description": "Domain-neutral time-series visualization widget.",
+      "properties": [
+        {
+          "key": "seriesKey",
+          "label": "Series key",
+          "kind": "text",
+          "required": true
+        },
+        {
+          "key": "sampleCount",
+          "label": "Sample count",
+          "kind": "number",
+          "default": 32
+        },
+        {
+          "key": "showLegend",
+          "label": "Show legend",
+          "kind": "boolean",
+          "default": true
+        }
+      ],
+      "bindings": {
+        "seriesKey": "string",
+        "sampleCount": "number",
+        "showLegend": "boolean"
+      },
+      "events": {
+        "range-change": {
+          "prop": "onRangeChange",
+          "valueType": "string",
+          "parameter": "range"
+        }
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "example.analysis-section",
+      "package": "@example/domain-widgets",
+      "version": "^0.1.0",
+      "exportName": "AnalysisSection",
+      "description": "Child-accepting generic analysis section.",
+      "acceptsChildren": true,
+      "properties": [
+        {
+          "key": "title",
+          "label": "Title",
+          "kind": "text",
+          "required": true
+        },
+        {
+          "key": "dense",
+          "label": "Dense",
+          "kind": "boolean",
+          "default": false
+        }
+      ],
+      "bindings": {
+        "title": "string",
+        "dense": "boolean"
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+# Nginx deployment
+
+This target serves the built Vite SPA with Nginx {{nginxImage}} and keeps runtime configuration outside the JavaScript bundle.
+
+## Build and package
+
+```bash
+pnpm build
+docker build -f deploy/nginx/Dockerfile -t {{packageName}}:local .
+```
+
+Choose one API mode at container runtime.
+
+### Same-origin `/api` reverse proxy
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e APP_ENVIRONMENT=production \
+  -e API_BASE_URL=/api \
+  -e API_UPSTREAM=http://backend:8080 \
+  {{packageName}}:local
+```
+
+`API_UPSTREAM` preserves the `/api` prefix. The upstream must expose that public path.
+
+### Static frontend with an absolute API URL
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e APP_ENVIRONMENT=production \
+  -e API_BASE_URL=https://api.example.com \
+  {{packageName}}:local
+```
+
+In this mode Nginx does not proxy API traffic. Configure CORS on the API as appropriate.
+
+## Delivery guarantees
+
+- `/healthz` is independent of the API and reports whether the frontend server is alive.
+- `/runtime-config.json` is `no-store`/`no-cache` so one image can be configured per environment.
+- `/assets/` is cached for one year with `immutable`; Vite filenames are content hashed.
+- `index.html` is revalidated and BrowserRouter routes fall back through `try_files`.
+- API proxy caching is not enabled by default.
+- TLS/HSTS and application-specific CSP are expected to be configured at the owning edge/gateway because generic values can break legitimate embedding or CSS-in-JS behavior.
+
+For strict supply-chain environments, pin the Nginx container image by digest in CI even though the generated Dockerfile pins a stable version tag.

@@ -1,0 +1,18 @@
+{
+  "none": {
+    "description": "No deployment assets. Choose your own hosting platform.",
+    "files": []
+  },
+  "nginx": {
+    "description": "Static SPA delivery with Nginx, runtime config injection, health check, cache policy and optional /api reverse proxy.",
+    "nginxImage": "nginx:1.30.4-alpine",
+    "files": [
+      ".dockerignore",
+      "deploy/nginx/Dockerfile",
+      "deploy/nginx/default.static.conf",
+      "deploy/nginx/default.proxy.conf.template",
+      "deploy/nginx/40-foundation-runtime.sh",
+      "deploy/nginx/README.md"
+    ]
+  }
+}

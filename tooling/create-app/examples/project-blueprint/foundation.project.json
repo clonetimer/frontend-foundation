@@ -1,0 +1,349 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "id": "operations.console",
+    "packageName": "operations-console",
+    "title": "Operations Console"
+  },
+  "foundation": {
+    "version": "0.21.0",
+    "profile": "management",
+    "shell": "workspace",
+    "router": "browser",
+    "deployment": "none",
+    "contract": "none"
+  },
+  "theme": {
+    "primaryColor": "#1677ff",
+    "layout": {
+      "contentPadding": 16
+    }
+  },
+  "navigation": {
+    "items": [
+      {
+        "target": "overview",
+        "label": "Overview",
+        "order": 0
+      },
+      {
+        "target": "records",
+        "label": "Records",
+        "order": 10
+      },
+      {
+        "target": "workspace",
+        "label": "Workspace",
+        "order": 20
+      }
+    ]
+  },
+  "pages": [
+    {
+      "id": "overview",
+      "title": "Overview",
+      "pattern": "dashboard",
+      "index": true,
+      "composition": {
+        "id": "overviewRoot",
+        "kind": "layout",
+        "type": "stack",
+        "props": {
+          "gap": 16
+        },
+        "children": [
+          {
+            "id": "metrics",
+            "kind": "layout",
+            "type": "grid",
+            "props": {
+              "columns": 3,
+              "gap": 12
+            },
+            "children": [
+              {
+                "id": "activeItems",
+                "kind": "widget",
+                "type": "metric",
+                "props": {
+                  "label": "Active items",
+                  "value": 3
+                }
+              },
+              {
+                "id": "runningTasks",
+                "kind": "widget",
+                "type": "metric",
+                "props": {
+                  "label": "Running tasks",
+                  "value": 1
+                },
+                "bindings": {
+                  "value": {
+                    "state": "runCount"
+                  }
+                }
+              },
+              {
+                "id": "systemHealth",
+                "kind": "widget",
+                "type": "metric",
+                "props": {
+                  "label": "System health",
+                  "value": "Nominal"
+                },
+                "bindings": {
+                  "value": {
+                    "state": "statusText"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": "overviewSplit",
+            "kind": "layout",
+            "type": "split",
+            "props": {
+              "secondarySize": 320
+            },
+            "children": [
+              {
+                "id": "domainView",
+                "kind": "widget",
+                "type": "placeholder",
+                "props": {
+                  "title": "Domain overview",
+                  "description": "Replace with a chart, map, simulation view, or project-specific block."
+                }
+              },
+              {
+                "id": "quickActions",
+                "kind": "widget",
+                "type": "panel",
+                "props": {
+                  "title": "Quick actions"
+                },
+                "children": [
+                  {
+                    "id": "operationMode",
+                    "kind": "widget",
+                    "type": "select",
+                    "props": {
+                      "label": "Mode",
+                      "options": [
+                        {
+                          "label": "Nominal",
+                          "value": "nominal"
+                        },
+                        {
+                          "label": "Analysis",
+                          "value": "analysis"
+                        }
+                      ]
+                    },
+                    "bindings": {
+                      "value": {
+                        "state": "operationMode"
+                      }
+                    },
+                    "events": {
+                      "change": [
+                        "updateMode"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "startOperation",
+                    "kind": "widget",
+                    "type": "button",
+                    "props": {
+                      "label": "Start operation",
+                      "type": "primary"
+                    },
+                    "bindings": {
+                      "disabled": {
+                        "state": "running"
+                      }
+                    },
+                    "events": {
+                      "press": [
+                        "startOperation"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "resetOperation",
+                    "kind": "widget",
+                    "type": "button",
+                    "props": {
+                      "label": "Reset operation"
+                    },
+                    "events": {
+                      "press": [
+                        "resetOperation"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "operationError",
+                    "kind": "widget",
+                    "type": "text",
+                    "props": {
+                      "text": "No operation error",
+                      "variant": "secondary"
+                    },
+                    "bindings": {
+                      "text": {
+                        "state": "operationError"
+                      }
+                    }
+                  },
+                  {
+                    "id": "openRecords",
+                    "kind": "widget",
+                    "type": "button",
+                    "props": {
+                      "label": "Open records"
+                    },
+                    "events": {
+                      "press": [
+                        "goRecords"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "state": [
+        {
+          "id": "operationMode",
+          "type": "string",
+          "initial": "nominal"
+        },
+        {
+          "id": "running",
+          "type": "boolean",
+          "initial": false
+        },
+        {
+          "id": "statusText",
+          "type": "string",
+          "initial": "Idle"
+        },
+        {
+          "id": "runCount",
+          "type": "number",
+          "initial": 0
+        },
+        {
+          "id": "operationError",
+          "type": "string",
+          "initial": ""
+        }
+      ],
+      "actions": [
+        {
+          "id": "updateMode",
+          "steps": [
+            {
+              "type": "set",
+              "state": "operationMode",
+              "value": {
+                "event": "value"
+              }
+            }
+          ]
+        },
+        {
+          "id": "startOperation",
+          "steps": [
+            {
+              "type": "set",
+              "state": "statusText",
+              "value": "Starting"
+            },
+            {
+              "type": "invoke",
+              "operation": "startOperationRequest"
+            },
+            {
+              "type": "increment",
+              "state": "runCount"
+            }
+          ]
+        },
+        {
+          "id": "resetOperation",
+          "steps": [
+            {
+              "type": "reset",
+              "state": "running"
+            },
+            {
+              "type": "reset",
+              "state": "statusText"
+            },
+            {
+              "type": "reset",
+              "state": "runCount"
+            }
+          ]
+        },
+        {
+          "id": "goRecords",
+          "steps": [
+            {
+              "type": "navigate",
+              "to": "/records"
+            }
+          ]
+        }
+      ],
+      "dataSources": [
+        {
+          "id": "operationStartApi",
+          "type": "http",
+          "method": "POST",
+          "path": "/operations/start",
+          "response": "json"
+        }
+      ],
+      "operations": [
+        {
+          "id": "startOperationRequest",
+          "source": "operationStartApi",
+          "body": {
+            "mode": {
+              "$state": "operationMode"
+            }
+          },
+          "lifecycle": {
+            "pendingState": "running",
+            "errorState": "operationError"
+          },
+          "result": [
+            {
+              "state": "statusText",
+              "path": "status"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "workspace",
+      "title": "Workspace",
+      "pattern": "workspace",
+      "route": "workspace"
+    }
+  ],
+  "resources": [
+    {
+      "source": "resources/records.resource.json"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@foundation/core": [
+        "./packages/core/src/index.ts"
+      ],
+      "@foundation/theme": [
+        "./packages/theme/src/index.ts"
+      ],
+      "@foundation/ui": [
+        "./packages/ui/src/index.ts"
+      ],
+      "@foundation/api": [
+        "./packages/api/src/index.ts"
+      ],
+      "@foundation/security": [
+        "./packages/security/src/index.ts"
+      ],
+      "@foundation/observability": [
+        "./packages/observability/src/index.ts"
+      ],
+      "@foundation/app": [
+        "./packages/app/src/index.ts"
+      ],
+      "@foundation/testing": [
+        "./packages/testing/src/index.ts"
+      ],
+      "@foundation/data": [
+        "./packages/data/src/index.ts"
+      ],
+      "@foundation/forms": [
+        "./packages/forms/src/index.ts"
+      ],
+      "@foundation/file": [
+        "./packages/file/src/index.ts"
+      ],
+      "@foundation/async": [
+        "./packages/async/src/index.ts"
+      ],
+      "@foundation/visualization": [
+        "./packages/visualization/src/index.ts"
+      ]
+    }
+  }
+}

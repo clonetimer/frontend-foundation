@@ -1,0 +1,62 @@
+{
+  "snapshotDate": "2026-10-05",
+  "policy": "OSS-first, contract-preserving convergence",
+  "upstreams": {
+    "proComponents": {
+      "package": "@ant-design/pro-components",
+      "version": "3.1.15-3",
+      "license": "MIT",
+      "decision": "approved-shadow-poc",
+      "compatibility": {
+        "antd": "^6.0.0",
+        "react": ">=18.0.0",
+        "react-dom": ">=18.0.0"
+      },
+      "source": "https://github.com/ant-design/pro-components/blob/master/package.json"
+    },
+    "refineCore": {
+      "package": "@refinedev/core",
+      "version": "5.1.0",
+      "license": "MIT",
+      "decision": "gated-shadow-poc",
+      "compatibility": {
+        "react": "^18.0.0 || ^19.0.0",
+        "react-dom": "^18.0.0 || ^19.0.0",
+        "tanstackQuery": "^5.81.5"
+      },
+      "source": "https://github.com/refinedev/refine/blob/main/packages/core/package.json"
+    },
+    "refineReactRouter": {
+      "package": "@refinedev/react-router",
+      "version": "2.0.4",
+      "license": "MIT",
+      "decision": "do-not-adopt-currently",
+      "reason": "Current peer dependency is react-router ^7.0.2 while Foundation is on React Router 8.",
+      "source": "https://github.com/refinedev/refine/blob/main/packages/react-router/package.json"
+    },
+    "refineAntd": {
+      "package": "@refinedev/antd",
+      "version": "6.0.3",
+      "license": "MIT",
+      "decision": "do-not-adopt-currently",
+      "reason": "Despite package major 6, current dependency/peer is antd ^5.23.0; Foundation is on Ant Design 6.",
+      "source": "https://github.com/refinedev/refine/blob/main/packages/antd/package.json"
+    },
+    "antDesignPro": {
+      "repository": "ant-design/ant-design-pro",
+      "version": "6.0.3",
+      "license": "MIT",
+      "decision": "benchmark-only",
+      "reason": "Strong reference implementation but application-template architecture is coupled to Umi Max 4.",
+      "source": "https://github.com/ant-design/ant-design-pro/blob/master/package.json"
+    },
+    "reactAdmin": {
+      "package": "react-admin",
+      "version": "5.15.4",
+      "license": "MIT",
+      "decision": "benchmark-only",
+      "reason": "Mature data/admin framework but centered on MUI and React Router 6/7 rather than Ant Design 6 + RR8.",
+      "source": "https://github.com/marmelab/react-admin/blob/master/packages/react-admin/package.json"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: UTC
+    versioning-strategy: increase-if-necessary
+    groups:
+      frontend-foundation-runtime:
+        patterns:
+          - react
+          - react-dom
+          - react-router
+          - antd
+          - '@tanstack/*'
+      frontend-foundation-tooling:
+        patterns:
+          - typescript
+          - vite
+          - vitest
+          - eslint
+          - 'typescript-eslint'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:30'
+      timezone: UTC

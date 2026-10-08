@@ -1,0 +1,40 @@
+{
+  "name": "@foundation/api",
+  "version": "0.21.0",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@foundation/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "react": "catalog:",
+    "@types/react": "catalog:",
+    "msw": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:"
+  },
+  "description": "HTTP transport and API context primitives for Frontend Foundation.",
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  }
+}

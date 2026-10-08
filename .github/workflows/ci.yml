@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-gates:
+    name: Static gates (no install)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node tooling/scripts/architecture-check.mjs
+      - run: node tooling/scripts/repository-check.mjs
+      - run: node tooling/scripts/capability-check.mjs
+      - run: node tooling/oss/verify.mjs
+      - run: node tooling/deployment/verify.mjs
+
+  node22-compat:
+    name: Node 22 compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:offline
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  release-gates:
+    name: Node 24 release gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm release:api
+      - name: Install Nginx for runtime delivery smoke
+        run: sudo apt-get update && sudo apt-get install -y nginx
+      - run: pnpm deploy:smoke
+      - run: pnpm storybook:build
+      - run: pnpm consumer:test
+      - run: pnpm release:preflight
+      - run: pnpm release:plan
+      - run: pnpm pack:foundation
+      - name: Ensure validation did not mutate tracked files
+        run: git diff --exit-code
+      - uses: actions/upload-artifact@v7
+        with:
+          name: foundation-release-artifacts-${{ github.sha }}
+          path: artifacts/packages/
+          if-no-files-found: error
+          retention-days: 14

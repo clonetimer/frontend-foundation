@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "widgets": [
+    {
+      "id": "secondary.priority-badge",
+      "package": "@example/secondary-controls",
+      "version": "^0.3.0",
+      "exportName": "PriorityBadge",
+      "description": "Independent validation widget with select, number and boolean properties plus a signal without a value payload.",
+      "properties": [
+        { "key": "label", "label": "Label", "kind": "text", "required": true },
+        { "key": "level", "label": "Level", "kind": "select", "options": ["low", "medium", "high"], "default": "medium" },
+        { "key": "count", "label": "Count", "kind": "number", "default": 0 },
+        { "key": "muted", "label": "Muted", "kind": "boolean", "default": false }
+      ],
+      "bindings": {
+        "label": "string",
+        "count": "number",
+        "muted": "boolean"
+      },
+      "events": {
+        "acknowledge": { "prop": "onAcknowledge", "valueType": null }
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "secondary.inspector-frame",
+      "package": "@example/secondary-controls",
+      "version": "^0.3.0",
+      "exportName": "InspectorFrame",
+      "description": "Independent child-accepting validation block with numeric and boolean binding contracts.",
+      "acceptsChildren": true,
+      "properties": [
+        { "key": "title", "label": "Title", "kind": "text", "required": true },
+        { "key": "width", "label": "Width", "kind": "number", "default": 320 },
+        { "key": "collapsed", "label": "Collapsed", "kind": "boolean", "default": false }
+      ],
+      "bindings": {
+        "width": "number",
+        "collapsed": "boolean"
+      },
+      "events": {
+        "collapseChanged": { "prop": "onCollapseChange", "valueType": "boolean", "parameter": "collapsed" }
+      }
+    }
+  ]
+}

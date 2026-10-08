@@ -1,0 +1,40 @@
+{
+  "name": "@foundation/showcase",
+  "version": "0.21.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@foundation/app": "workspace:*",
+    "@foundation/api": "workspace:*",
+    "@foundation/core": "workspace:*",
+    "@foundation/ui": "workspace:*",
+    "@tanstack/react-query": "catalog:",
+    "antd": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "catalog:",
+    "zod": "catalog:",
+    "@foundation/data": "workspace:*",
+    "@foundation/forms": "workspace:*",
+    "react-hook-form": "catalog:",
+    "@hookform/resolvers": "catalog:",
+    "@foundation/file": "workspace:*",
+    "@foundation/async": "workspace:*",
+    "@foundation/visualization": "workspace:*",
+    "echarts": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

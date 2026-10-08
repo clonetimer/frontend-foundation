@@ -1,0 +1,52 @@
+{
+  "name": "@foundation/create-app",
+  "version": "0.21.0",
+  "type": "module",
+  "bin": {
+    "create-foundation-app": "./index.mjs",
+    "foundation-doctor": "./doctor.mjs",
+    "foundation-upgrade": "./upgrade.mjs",
+    "foundation-generate": "./generate.mjs",
+    "foundation-contract": "./contract.mjs",
+    "foundation-project": "./project.mjs",
+    "foundation-domain": "./domain-component.mjs"
+  },
+  "scripts": {
+    "build": "node --check index.mjs && node --check doctor.mjs && node --check upgrade.mjs && node --check generate.mjs && node --check contract.mjs && node --check resource.mjs && node --check project.mjs && node --check visual-composition.mjs && node --check interaction-model.mjs && node --check data-operation.mjs && node --check custom-registry.mjs && node --check domain-component.mjs",
+    "typecheck": "node --check index.mjs && node --check doctor.mjs && node --check upgrade.mjs && node --check generate.mjs && node --check contract.mjs && node --check resource.mjs && node --check project.mjs && node --check visual-composition.mjs && node --check interaction-model.mjs && node --check data-operation.mjs && node --check custom-registry.mjs && node --check domain-component.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "description": "Create, inspect, and safely align applications built on Frontend Foundation.",
+  "files": [
+    "index.mjs",
+    "doctor.mjs",
+    "upgrade.mjs",
+    "versions.json",
+    "profiles.json",
+    "template",
+    "README.md",
+    "deployments.json",
+    "deployments",
+    "generate.mjs",
+    "composition.json",
+    "patterns.json",
+    "patterns",
+    "contract.mjs",
+    "contracts.json",
+    "contracts",
+    "contract-fixtures",
+    "resource.mjs",
+    "project.mjs",
+    "visual-composition.mjs",
+    "interaction-model.mjs",
+    "data-operation.mjs",
+    "project.schema.json",
+    "examples",
+    "custom-registry.mjs",
+    "registry.schema.json",
+    "domain-component.mjs"
+  ],
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  }
+}

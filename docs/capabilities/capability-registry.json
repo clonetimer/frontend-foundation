@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "capabilities": {
+    "application-shell": {
+      "publicContract": "@foundation/app",
+      "ownership": "strategic-owned",
+      "reason": "Application bootstrap, runtime config, modules and routing are organization-level stability contracts.",
+      "candidates": []
+    },
+    "error-model": {
+      "publicContract": "@foundation/core",
+      "ownership": "strategic-owned",
+      "reason": "AppError, normalization and shared UI text semantics are cross-cutting stability contracts used by generated project code.",
+      "candidates": []
+    },
+    "ui-patterns": {
+      "publicContract": "@foundation/ui",
+      "ownership": "replaceable-implementation",
+      "reason": "Page/state patterns should remain stable while implementation may reuse mature upstream components.",
+      "candidates": [
+        {
+          "package": "@ant-design/pro-components",
+          "status": "shadow-poc"
+        }
+      ]
+    },
+    "data-table": {
+      "publicContract": "@foundation/data",
+      "ownership": "replaceable-implementation",
+      "reason": "Projects need a stable table contract; mature upstream implementations may reduce maintenance.",
+      "candidates": [
+        {
+          "package": "@ant-design/pro-components",
+          "status": "shadow-poc"
+        }
+      ]
+    },
+    "forms": {
+      "publicContract": "@foundation/forms",
+      "ownership": "replaceable-implementation",
+      "reason": "Form layout and AppError mapping are organizational contracts; widgets may be upstream-backed.",
+      "candidates": [
+        {
+          "package": "@ant-design/pro-components",
+          "status": "shadow-poc"
+        }
+      ]
+    },
+    "permission": {
+      "publicContract": "@foundation/security",
+      "ownership": "replaceable-implementation",
+      "reason": "Permission UX contract stays stable; provider internals may reuse a headless upstream if it proves cheaper.",
+      "candidates": [
+        {
+          "package": "@refinedev/core",
+          "status": "shadow-poc"
+        }
+      ]
+    },
+    "api-transport": {
+      "publicContract": "@foundation/api",
+      "ownership": "strategic-owned",
+      "reason": "Problem Details, trace IDs, abort/timeout semantics and OpenAPI integration are organization-specific contracts.",
+      "candidates": []
+    },
+    "file-transfer": {
+      "publicContract": "@foundation/file",
+      "ownership": "strategic-owned",
+      "reason": "Validation and transfer-state semantics are reused by engineering/data applications.",
+      "candidates": []
+    },
+    "async-operation": {
+      "publicContract": "@foundation/async",
+      "ownership": "strategic-owned",
+      "reason": "Long-running tasks, cancellation, polling and logs are a recurring non-CRUD requirement.",
+      "candidates": []
+    },
+    "visualization": {
+      "publicContract": "@foundation/visualization",
+      "ownership": "strategic-owned",
+      "reason": "Engineering/data projects need consistent ECharts lifecycle and time-series semantics.",
+      "candidates": []
+    },
+    "theme": {
+      "publicContract": "@foundation/theme",
+      "ownership": "strategic-owned",
+      "reason": "Semantic tokens and project branding must stay under Foundation governance.",
+      "candidates": []
+    },
+    "observability": {
+      "publicContract": "@foundation/observability",
+      "ownership": "strategic-owned",
+      "reason": "Telemetry adapters must keep business code vendor-neutral.",
+      "candidates": []
+    }
+  }
+}

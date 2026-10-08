@@ -1,0 +1,54 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "paths": {
+      "@foundation/core": [
+        "../../packages/core/src/index.ts"
+      ],
+      "@foundation/theme": [
+        "../../packages/theme/src/index.ts"
+      ],
+      "@foundation/ui": [
+        "../../packages/ui/src/index.ts"
+      ],
+      "@foundation/api": [
+        "../../packages/api/src/index.ts"
+      ],
+      "@foundation/security": [
+        "../../packages/security/src/index.ts"
+      ],
+      "@foundation/observability": [
+        "../../packages/observability/src/index.ts"
+      ],
+      "@foundation/app": [
+        "../../packages/app/src/index.ts"
+      ],
+      "@foundation/testing": [
+        "../../packages/testing/src/index.ts"
+      ],
+      "@foundation/data": [
+        "../../packages/data/src/index.ts"
+      ],
+      "@foundation/forms": [
+        "../../packages/forms/src/index.ts"
+      ],
+      "@foundation/file": [
+        "../../packages/file/src/index.ts"
+      ],
+      "@foundation/async": [
+        "../../packages/async/src/index.ts"
+      ],
+      "@foundation/visualization": [
+        "../../packages/visualization/src/index.ts"
+      ],
+      "@example/domain-widgets": [
+        "../../packages/domain-widgets-fixture/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    ".storybook"
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "modes": {
+    "none": {
+      "description": "No API contract generator is configured.",
+      "contracts": []
+    },
+    "openapi": {
+      "description": "Generate runtime-free TypeScript contract types from a committed OpenAPI document.",
+      "contracts": [
+        {
+          "name": "api",
+          "kind": "openapi",
+          "source": "contracts/openapi.json",
+          "output": "src/contracts/generated",
+          "adapter": "hey-api-typescript"
+        }
+      ],
+      "runtimeFiles": [
+        "src/contracts/runtime.ts",
+        "src/contracts/README.md"
+      ]
+    }
+  },
+  "adapters": {
+    "hey-api-typescript": {
+      "description": "Types-only adapter backed by @hey-api/openapi-ts. Runtime requests remain owned by @foundation/api.",
+      "package": "@hey-api/openapi-ts",
+      "version": "0.99.0",
+      "plugins": [
+        "@hey-api/typescript"
+      ],
+      "supportedOpenApi": [
+        "3.1"
+      ],
+      "stability": "candidate",
+      "evaluationOpenApi": [
+        "3.2"
+      ],
+      "blockedOpenApi": {
+        "3.0": "Blocked in Foundation 0.10 because @hey-api/openapi-ts 0.99.0 can silently drop composed $ref members in a known OpenAPI 3.0 parser case."
+      },
+      "inputFormats": [
+        "json"
+      ],
+      "securityGate": "candidate-json-only",
+      "admission": {
+        "status": "blocked",
+        "expectedLicense": "MIT",
+        "requirements": [
+          "exact-version",
+          "fixture-correctness",
+          "deterministic-output",
+          "dependency-security"
+        ],
+        "blockedDependencies": [
+          {
+            "package": "js-yaml",
+            "range": ">=4.0.0 <4.3.0",
+            "advisory": "GHSA-52cp-r559-cp3m"
+          },
+          {
+            "package": "js-yaml",
+            "range": ">=5.0.0 <=5.2.0",
+            "advisory": "GHSA-724g-mxrg-4qvm"
+          }
+        ],
+        "fixtures": [
+          {
+            "file": "contract-fixtures/hey-api-typescript/openapi-3.1-composition.json",
+            "mustContain": [
+              "Audit",
+              "approvable",
+              "DetailNested",
+              "editable",
+              "ItemRead"
+            ],
+            "mustNotContain": [
+              "@hey-api/client-fetch",
+              "@hey-api/client-axios"
+            ]
+          }
+        ],
+        "blockers": [
+          "Real upstream package bytes have not yet passed the Foundation admission suite.",
+          "Promotion is blocked until the installed dependency graph is free of Foundation-blocked versions."
+        ]
+      }
+    }
+  }
+}

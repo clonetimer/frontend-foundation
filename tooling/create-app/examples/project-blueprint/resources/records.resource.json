@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "records",
+  "title": "Records",
+  "route": "records",
+  "idField": "id",
+  "permissions": {
+    "read": "records.read",
+    "update": "records.update"
+  },
+  "api": {
+    "list": { "method": "GET", "path": "records" },
+    "detail": { "method": "GET", "path": "records/{id}" },
+    "update": { "method": "PUT", "path": "records/{id}" }
+  },
+  "fields": [
+    { "name": "id", "label": "ID", "type": "string", "list": true, "detail": true },
+    { "name": "title", "label": "Title", "type": "string", "list": true, "detail": true, "editable": true, "searchable": true }
+  ]
+}

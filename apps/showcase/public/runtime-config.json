@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "Foundation Showcase",
+    "environment": "development"
+  },
+  "api": {
+    "baseUrl": "/api",
+    "timeoutMs": 5000
+  },
+  "router": {
+    "mode": "browser"
+  },
+  "ui": {
+    "theme": "system",
+    "density": "default"
+  },
+  "features": {
+    "examples": true,
+    "records": true,
+    "capabilities": true
+  }
+}

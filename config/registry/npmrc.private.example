@@ -1,0 +1,5 @@
+# Copy to a user/CI-level .npmrc and replace the example host.
+# Never commit a real token.
+@foundation:registry=https://registry.example.invalid/
+always-auth=true
+//registry.example.invalid/:_authToken=${FOUNDATION_NPM_TOKEN}

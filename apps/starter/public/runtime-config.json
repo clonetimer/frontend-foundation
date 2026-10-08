@@ -1,0 +1,7 @@
+{
+  "app": { "name": "Foundation Starter", "environment": "development" },
+  "api": { "baseUrl": "/api", "timeoutMs": 30000 },
+  "router": { "mode": "browser" },
+  "ui": { "theme": "system", "density": "default" },
+  "features": {}
+}

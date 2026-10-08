@@ -1,0 +1,37 @@
+{
+  "name": "@foundation/storybook",
+  "version": "0.21.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "storybook dev -p 6006",
+    "build": "storybook build",
+    "typecheck": "tsc --noEmit",
+    "test": "node -e \"console.log('storybook stories validated by build')\""
+  },
+  "dependencies": {
+    "@foundation/core": "workspace:*",
+    "@foundation/theme": "workspace:*",
+    "@foundation/ui": "workspace:*",
+    "antd": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "@foundation/data": "workspace:*",
+    "@foundation/forms": "workspace:*",
+    "react-hook-form": "catalog:",
+    "@foundation/file": "workspace:*",
+    "@foundation/async": "workspace:*",
+    "@foundation/visualization": "workspace:*",
+    "echarts": "catalog:",
+    "@example/domain-widgets": "workspace:*"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "catalog:",
+    "@storybook/addon-a11y": "catalog:",
+    "storybook": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

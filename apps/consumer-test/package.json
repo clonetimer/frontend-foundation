@@ -1,0 +1,12 @@
+{
+  "name": "@foundation/consumer-test",
+  "version": "0.21.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "node -e \"console.log('consumer test runs after pnpm pack')\"",
+    "test": "node -e \"console.log('consumer test placeholder')\"",
+    "build": "node -e \"console.log('consumer build is executed by test:consumer')\"",
+    "test:consumer": "node ../../tooling/scripts/consumer-test.mjs"
+  }
+}

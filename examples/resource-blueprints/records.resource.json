@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "records",
+  "title": "Records",
+  "route": "records",
+  "idField": "id",
+  "api": {
+    "list": { "method": "GET", "path": "records" },
+    "detail": { "method": "GET", "path": "records/{id}" },
+    "update": { "method": "PUT", "path": "records/{id}" }
+  },
+  "permissions": {
+    "read": "records.read",
+    "update": "records.update"
+  },
+  "fields": [
+    { "name": "id", "label": "ID", "type": "string", "list": true, "detail": true, "editable": false },
+    { "name": "title", "label": "标题", "type": "string", "required": true, "list": true, "detail": true, "editable": true, "searchable": true },
+    { "name": "status", "label": "状态", "type": "enum", "values": ["draft", "ready", "archived"], "required": true, "list": true, "detail": true, "editable": true, "filterable": true },
+    { "name": "enabled", "label": "启用", "type": "boolean", "list": true, "detail": true, "editable": true, "filterable": true },
+    { "name": "score", "label": "分数", "type": "number", "list": true, "detail": true, "editable": true }
+  ]
+}

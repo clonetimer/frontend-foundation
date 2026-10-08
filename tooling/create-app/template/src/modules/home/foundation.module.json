@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "home",
+  "pattern": "page",
+  "route": { "index": true },
+  "requiredCapabilities": ["application-shell", "ui-patterns"]
+}

@@ -1,0 +1,62 @@
+name: Promote Stable dist-tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      registry_url:
+        description: Registry containing the already-published Candidate packages
+        required: true
+        type: string
+      version:
+        description: Exact version already validated by Registry Smoke
+        required: true
+        type: string
+      execute:
+        description: Change dist-tags after the dry-run plan
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: stable-promotion
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: ${{ inputs.registry_url }}
+          scope: '@foundation'
+      - name: Verify requested version matches repository version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          REPO_VERSION="$(node -p "require('./package.json').version")"
+          test "$REQUESTED_VERSION" = "$REPO_VERSION" || {
+            echo "Requested version $REQUESTED_VERSION does not match repository version $REPO_VERSION" >&2
+            exit 1
+          }
+      - name: Dry-run stable promotion
+        env:
+          FOUNDATION_REGISTRY: ${{ inputs.registry_url }}
+        run: pnpm release:promote -- --registry "$FOUNDATION_REGISTRY" --tag latest
+      - name: Promote candidate version to latest
+        if: inputs.execute
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          FOUNDATION_REGISTRY: ${{ inputs.registry_url }}
+        run: pnpm release:promote -- --registry "$FOUNDATION_REGISTRY" --tag latest --execute

@@ -1,0 +1,60 @@
+name: Release packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      registry_url:
+        description: Registry URL for @foundation packages
+        required: true
+        type: string
+      publish:
+        description: Actually publish after all gates pass
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: release
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+          registry-url: ${{ inputs.registry_url }}
+          scope: '@foundation'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:release
+      - run: pnpm release:plan
+      - run: pnpm pack:foundation
+      - name: Dry-run publish plan
+        env:
+          FOUNDATION_REGISTRY: ${{ inputs.registry_url }}
+        run: pnpm release:publish -- --registry "$FOUNDATION_REGISTRY" --tag candidate
+      - uses: actions/upload-artifact@v7
+        with:
+          name: foundation-${{ github.sha }}-candidate
+          path: artifacts/packages/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish verified tarballs
+        if: inputs.publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          FOUNDATION_REGISTRY: ${{ inputs.registry_url }}
+        run: pnpm release:publish -- --registry "$FOUNDATION_REGISTRY" --tag candidate --execute

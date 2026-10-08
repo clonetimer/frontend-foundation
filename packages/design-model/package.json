@@ -1,0 +1,11 @@
+{
+  "name": "@foundation/design-model",
+  "version": "0.21.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./composition": "./composition.json"
+  },
+  "description": "Browser-safe shared contracts and composition registry for Foundation authoring tools."
+}

@@ -1,0 +1,58 @@
+name: Registry smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      registry_url:
+        description: Registry containing the published @foundation packages
+        required: true
+        type: string
+      version:
+        description: Exact Foundation version to install (for example 0.10.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  clean-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: release
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: ${{ inputs.registry_url }}
+          scope: '@foundation'
+      - name: Create clean consumer from registry package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          FOUNDATION_REGISTRY: ${{ inputs.registry_url }}
+          FOUNDATION_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/foundation-registry-smoke"
+          rm -rf "$work"
+          mkdir -p "$work"
+          cd "$work"
+          printf '{"private":true,"packageManager":"pnpm@11.7.0"}\n' > package.json
+          pnpm add -D "@foundation/create-app@$FOUNDATION_VERSION" --registry "$FOUNDATION_REGISTRY" --save-exact
+          ./node_modules/.bin/create-foundation-app app \
+            --name registry-smoke \
+            --app-id registry.smoke \
+            --title "Registry Smoke" \
+            --profile management \
+            --foundation-version "$FOUNDATION_VERSION"
+          cd app
+          printf '@foundation:registry=%s\n' "$FOUNDATION_REGISTRY" > .npmrc
+          pnpm install
+          ./node_modules/.bin/foundation-doctor . --target "$FOUNDATION_VERSION" --strict
+          pnpm typecheck
+          pnpm build

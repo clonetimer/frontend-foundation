@@ -1,0 +1,26 @@
+import { Page, PageContent, PageHeader, DashboardBlock, DashboardPattern, MetricBlock, MetricGrid, PanelBlock } from '@foundation/ui';
+
+export function Component() {
+  return (
+    <Page>
+      <PageHeader title={{titleJson}} description="Dashboard Pattern：指标与业务面板的可组合起点。" />
+      <PageContent>
+        <DashboardPattern>
+          <DashboardBlock span={12}>
+            <MetricGrid>
+              <MetricBlock label="指标 A" value={0} description="替换为项目真实指标" />
+              <MetricBlock label="指标 B" value={0} description="替换为项目真实指标" />
+              <MetricBlock label="指标 C" value={0} description="替换为项目真实指标" />
+            </MetricGrid>
+          </DashboardBlock>
+          <DashboardBlock span={8}>
+            <PanelBlock title="主视图">在这里接入图表、列表或状态视图。</PanelBlock>
+          </DashboardBlock>
+          <DashboardBlock span={4}>
+            <PanelBlock title="辅助信息">在这里接入告警、任务或摘要信息。</PanelBlock>
+          </DashboardBlock>
+        </DashboardPattern>
+      </PageContent>
+    </Page>
+  );
+}

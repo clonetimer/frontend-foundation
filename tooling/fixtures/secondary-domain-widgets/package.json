@@ -1,0 +1,20 @@
+{
+  "name": "@example/secondary-controls",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "foundation.registry.json",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  }
+}

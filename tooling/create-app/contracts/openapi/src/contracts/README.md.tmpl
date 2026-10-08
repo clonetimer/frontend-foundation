@@ -1,0 +1,23 @@
+# API contracts
+
+This project uses the `openapi` contract mode. The committed source of truth is `contracts/openapi.json`.
+
+Generate runtime-free TypeScript contract types with:
+
+```bash
+pnpm foundation:contract
+```
+
+Verify generated output and the contract lock with:
+
+```bash
+pnpm foundation:contract:verify
+```
+
+Generated types are intentionally transport-agnostic. Runtime HTTP requests continue to use `@foundation/api`, preserving Foundation `AppError`, timeout/cancellation, authentication injection, request IDs, and trace semantics.
+
+`@hey-api/openapi-ts` is pinned exactly because the upstream package is pre-1.0. In Frontend Foundation 0.10 this adapter is Candidate and OpenAPI 3.1 is the only enabled specification line. OpenAPI 3.0 is blocked due to a known upstream parser correctness case; 3.2 remains an evaluation target until the real upstream fixture gate passes.
+
+The adapter is an implementation detail and may be replaced without changing application runtime contracts.
+
+0.10 Candidate accepts local committed JSON input only; YAML stays blocked until the upstream dependency security gate passes.

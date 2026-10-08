@@ -1,0 +1,46 @@
+packages:
+  - apps/*
+  - packages/*
+  - tooling/*
+
+pmOnFail: warn
+verifyDepsBeforeRun: warn
+catalogMode: strict
+autoInstallPeers: false
+strictPeerDependencies: true
+minimumReleaseAge: 1440
+
+# Build-script policy is explicit so installs are reproducible across developer machines and CI.
+# esbuild requires its install script; MSW does not require its postinstall for this repository.
+allowBuilds:
+  esbuild: true
+  msw: false
+
+catalog:
+  react: ^19.3.0
+  react-dom: ^19.3.0
+  react-router: ^8.4.0
+  antd: ^6.6.5
+  echarts: ^6.1.0
+  "@tanstack/react-query": ^5.104.0
+  zod: ^4.6.5
+  react-hook-form: ^7.89.0
+  "@hookform/resolvers": ^5.9.1
+  msw: ^2.15.0
+  "@testing-library/react": ^16.3.3
+  "@testing-library/dom": ^10.4.2
+  "@types/node": ^22.0.0
+  "@types/react": ^19.3.0
+  "@types/react-dom": ^19.3.0
+  "@vitejs/plugin-react": ^6.1.1
+  "@eslint/js": ^10.0.1
+  eslint: ^10.10.0
+  typescript-eslint: ^8.70.1
+  typescript: ~6.0.2
+  vite: ^8.3.2
+  vitest: ^5.0.2
+
+  # Storybook versions are intentionally aligned.
+  storybook: ^10.6.1
+  "@storybook/react-vite": ^10.6.1
+  "@storybook/addon-a11y": ^10.6.1

@@ -1,0 +1,41 @@
+import type { ApiTransport } from '@foundation/api';
+
+export interface ContractJsonRequest<TBody = never> {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  body?: TBody;
+  headers?: HeadersInit;
+  signal?: AbortSignal;
+}
+
+/**
+ * Project-side typed JSON facade for contract-backed calls.
+ *
+ * The generated OpenAPI package owns types only. Runtime HTTP, auth, timeout,
+ * trace ID and AppError semantics remain owned by @foundation/api.
+ */
+export async function requestContractJson<TResponse, TBody = never>(
+  transport: ApiTransport,
+  path: string,
+  options: ContractJsonRequest<TBody> = {}
+): Promise<TResponse> {
+  const headers = new Headers(options.headers);
+  let body: BodyInit | undefined;
+
+  if (options.body !== undefined) {
+    headers.set('content-type', 'application/json');
+    body = JSON.stringify(options.body);
+  }
+
+  const init: RequestInit = {
+    method: options.method ?? 'GET',
+    headers
+  };
+  if (body !== undefined) init.body = body;
+  if (options.signal !== undefined) init.signal = options.signal;
+
+  const response = await transport.fetch(path, init);
+  if (response.status === 204) return undefined as TResponse;
+  const text = await response.text();
+  if (!text) return undefined as TResponse;
+  return JSON.parse(text) as TResponse;
+}
