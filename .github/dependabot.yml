@@ -12,6 +12,12 @@ updates:
       # Node 26 types are beyond the currently advertised Node 22/24 support range.
       - dependency-name: '@types/node'
         update-types: [version-update:semver-major]
+      # typescript-eslint 8.x requires TypeScript <6.1; block TS 7 until supported.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Vitest 5.x (@vitest/mocker) requires MSW 2.x; block MSW 3.
+      - dependency-name: msw
+        update-types: [version-update:semver-major]
     groups:
       frontend-foundation-runtime:
         patterns:
