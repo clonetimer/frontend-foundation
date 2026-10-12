@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
-import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, type ChartSeries, type StudioWidgetKind } from './widgets';
+import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
 const rows = (value: unknown) => widgetItems(value).map((item, index) => { const [name, status = '—'] = item.split('|'); return { key: index, name, status }; });
@@ -108,6 +108,54 @@ function LineWidget({ items, series, title, unit }: { items: string[]; series: C
     <div className="pa-studio-plot-legend">{series.map((entry,i) => <span key={i}><i style={{backgroundColor:colors[i%colors.length]}}/>{entry.name}</span>)}</div>
   </div>;
 }
+/** GET data source is strictly opt-in; editor mode never sends requests. */
+function RemoteLineWidget({ props, live }: { props: Record<string, unknown>; live: boolean }) {
+  const title = label(props.title, '趋势分析');
+  const dataUrl = apiUrl(props.dataUrl);
+  const dataPath = label(props.dataPath, 'data');
+  const refreshMs = Math.min(60000, Math.max(0, Number(props.refreshMs) || 0));
+  const interval = refreshMs > 0 ? Math.max(5000, refreshMs) : 0;
+  const [dataset, setDataset] = useState<ChartDataset | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    if (!dataUrl || !live) { setDataset(null); setBusy(false); setError(''); return; }
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = async () => {
+      setBusy(true);
+      try {
+        const response = await fetch(dataUrl, { method: 'GET', credentials: 'same-origin', signal: controller.signal });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        if (Number(response.headers.get('content-length') || 0) > 131072) throw new Error('数据超过 128 KB');
+        const body = await response.text();
+        if (body.length > 131072) throw new Error('数据超过 128 KB');
+        const parsed = parseRemoteChartDataset(pathValue(JSON.parse(body) as unknown, dataPath));
+        if (!parsed) throw new Error('图表数据结构无效（需要 items 和 series）');
+        if (!controller.signal.aborted) { setDataset(parsed); setError(''); }
+      } catch (caught) {
+        if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : '数据加载失败');
+      } finally {
+        if (!controller.signal.aborted) {
+          setBusy(false);
+          if (interval) timer = setTimeout(() => { void load(); }, interval);
+        }
+      }
+    };
+    setDataset(null);
+    void load();
+    return () => { controller.abort(); if (timer) clearTimeout(timer); };
+  }, [dataUrl, dataPath, live, interval, revision]);
+  const chart = dataset ?? { items: widgetItems(props.items), series: parseChartSeries(props.series, props.values) };
+  return <div className="pa-studio-chart-remote" data-atlas-chart-source={dataset ? 'remote' : 'fallback'}>
+    <LineWidget items={chart.items} series={chart.series} title={title} unit={label(props.unit)}/>
+    {dataUrl ? <div className="pa-studio-widget-actions">
+      <Button size="small" disabled={!live || busy} loading={busy} onClick={() => setRevision((value) => value + 1)}>刷新数据</Button>
+      <small role="status">{error ? '数据读取失败：' + error : !live ? '体验模式中读取接口' : busy ? '正在加载…' : dataset ? (interval ? 'API 已更新 · 自动刷新' : 'API 已更新') : '显示备用数据'}</small>
+    </div> : null}
+  </div>;
+}
 function OverlayWidget({ kind, props, live }: { kind: 'modal' | 'drawer' | 'popconfirm'; props: Record<string, unknown>; live: boolean }) {
   const [open, setOpen] = useState(false);
   const [notify, context] = message.useMessage();
@@ -164,7 +212,7 @@ export function WidgetPreview({ kind, props, live }: { kind: StudioWidgetKind; p
     case 'file-list': return <div className="pa-studio-rich"><strong>{title}</strong><div className="pa-studio-file-list">{rows(props.items).map((item) => <div key={item.key}><span>▤ {item.name}</span><small>{item.status}</small></div>)}</div></div>;
     case 'async-task': return <AsyncTaskWidget props={props} live={live}/>;
     case 'async-log': return <div className="pa-studio-rich"><strong>{title}</strong><ol className="pa-studio-async-log">{rows(props.items).map((item) => <li key={item.key}><span>{item.name}</span><Tag>{item.status}</Tag></li>)}</ol></div>;
-    case 'line-chart': return <LineWidget items={items} series={parseChartSeries(props.series, props.values)} title={title} unit={label(props.unit)}/>;
+    case 'line-chart': return <RemoteLineWidget props={props} live={live}/>;
     case 'donut-chart': { const share = Math.min(100, Math.max(0, Number(props.value) || 0)); return <div className="pa-studio-rich"><strong>{title}</strong><div className="pa-studio-donut" role="img" aria-label={`${title} ${share}%`} style={{ background: `conic-gradient(#16936f ${share}%, #e4eee8 ${share}% 100%)` }}><div><strong>{share}{label(props.suffix, '%')}</strong><small>当前占比</small></div></div></div>; }
     case 'heatmap': return <div className="pa-studio-rich"><strong>{title}</strong><div className="pa-studio-heatmap" role="img" aria-label={`${title}，${values.length} 个值`}>{values.map((value, index) => <span key={index} title={`第 ${index+1} 格：${value}`} style={{ background: `rgba(18,133,94,${(.12 + value * .008).toFixed(2)})` }}/>)}</div></div>;
   }
