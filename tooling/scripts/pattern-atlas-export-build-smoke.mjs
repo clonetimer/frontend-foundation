@@ -56,6 +56,11 @@ function exec(program, args, cwd) {
         page.composition = insertNode(page.composition, page.composition.id, createNode(fixture.kind, fixture.id), 'inside');
         document = setDecoration(document, pageId + ':' + fixture.id, { widgetKind: fixture.kind, widgetProps: fixture.props });
       }
+      const page = document.blueprint.pages[0];
+      page.composition = insertNode(page.composition, page.composition.id, createNode('records', 'formList21'), 'inside');
+      document = setDecoration(document, pageId + ':formList21', {
+        recordList: { url: 'http://127.0.0.1:4198/api/list', itemsPath: 'data.items', idField: 'id', labelField: 'name', pageSize: 8 }
+      });
     }
     const files = projectExportFiles(document);
     const data = new Uint8Array(await zipTextFiles(files).arrayBuffer());
