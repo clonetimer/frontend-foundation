@@ -106,6 +106,8 @@ export async function runExportedBrowserSmoke(directory) {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
     vite.kill();
-    rmSync(profile, { recursive: true, force: true });
+    await pause(450);
+    try { rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 200 }); }
+    catch (error) { console.warn('Could not fully delete disposable Chrome profile:', String(error)); }
   }
 }
