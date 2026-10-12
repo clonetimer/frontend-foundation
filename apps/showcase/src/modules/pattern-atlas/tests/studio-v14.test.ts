@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { addLinkedRecordExample } from '../studio/record-template';
 import { createNode, createStudioDocument, insertNode, parseStudioFile, serializeStudioDocument, setDecoration, insertKinds } from '../studio/model';
 import { defaultWorkflowStep, isWorkflowUrl, normalizeStudioWorkflow, runStudioWorkflow, studioWorkflowRequest, type StudioWorkflow } from '../studio/studio-workflows';
-import { normalizeWidgetProps, studioWidgetKinds } from '../studio/widgets';
+import { normalizeWidgetProps, studioWidgetDefinitions, studioWidgetKinds } from '../studio/widgets';
 import { exportedWidgetCatalog, exportedWidgetPreview } from '../studio/exported-widgets';
 import { projectExportFiles, generateReactPage } from '../studio/exporter';
 
@@ -21,7 +21,7 @@ describe('Phase 14: reusable capabilities and serial workflows', () => {
   });
   it('registers usable file, async and visualization components in the palette', () => {
     expect(insertKinds).toEqual(expect.arrayContaining(['file-upload','file-list','async-task','async-log','line-chart','donut-chart','heatmap']));
-    expect(studioWidgetKinds.size).toBe(33);
+    expect(studioWidgetKinds.size).toBe(studioWidgetDefinitions.length);
     expect(exportedWidgetCatalog).toContain("kind: 'async-task'");
     expect(exportedWidgetPreview).toContain('fetch(url');
   });
