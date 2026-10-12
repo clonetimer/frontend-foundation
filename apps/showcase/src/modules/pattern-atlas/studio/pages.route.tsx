@@ -444,7 +444,8 @@ export function Component() {
       <SettingSelect title="动作" value={item.type} options={actionTypes} onChange={(type) => update(entries.map((old,i)=>i===childIndex ? defaultWorkflowStep(type as WorkflowStepType,item.id) as WorkflowActionStep : old))}/>
       {actionFields(item,(next) => update(entries.map((old,i)=>i===childIndex?next:old)))}
     </div>)}
-    <label className="pa-studio-setting"><span>追加{label}的动作（最多 6 步）</span><Select<WorkflowStepType> value={undefined} placeholder="选择动作" options={actionTypes} style={{width:'100%'}} disabled={entries.length>=6} onChange={(type) => {
+    <label className="pa-studio-setting"><span>追加{label}的动作（最多 6 步）</span><Select<WorkflowStepType | null> value={null} placeholder="选择动作" options={actionTypes} style={{width:'100%'}} disabled={entries.length>=6} onChange={(type) => {
+      if (type === null) return;
       let counter = entries.length+1; while(entries.some((item)=>item.id===`${step.id}-${side}-${counter}`)) counter++;
       update([...entries,defaultWorkflowStep(type as WorkflowStepType,`${step.id}-${side}-${counter}`) as WorkflowActionStep]);
     }}/></label></div>;
@@ -472,7 +473,7 @@ export function Component() {
       </> : actionFields(step,(next)=>changeWorkflowStep(index,next))}
       </div>
     </div>)}
-    <label className="pa-studio-setting"><span>追加步骤（每个按钮最多 12 步）</span><Select<WorkflowStepType> placeholder="选择动作" value={undefined} options={workflowTypes} disabled={workflowSteps.length>=12} onChange={(type)=>addWorkflowStep(type)} style={{width:'100%'}}/></label>
+    <label className="pa-studio-setting"><span>追加步骤（每个按钮最多 12 步）</span><Select<WorkflowStepType | null> placeholder="选择动作" value={null} options={workflowTypes} disabled={workflowSteps.length>=12} onChange={(type)=>{ if (type !== null) addWorkflowStep(type); }} style={{width:'100%'}}/></label>
     {workflowSteps.length ? <Button block danger onClick={()=>updateMeta({workflow:undefined})}>清空工作流</Button> : null}
     <div className="pa-studio-workflow-foot">可使用 selectedId、draft.title、results.step-1.data.id 等变量。流程中的请求结果仅在本次执行期间存在。</div>
     <div className="pa-studio-workflow-log-title"><strong>最近执行记录</strong><Button size="small" onClick={()=>setWorkflowTraces([])}>清空</Button></div>
