@@ -2,7 +2,7 @@
 export const REQUIRED_LOCAL_GATES = Object.freeze([
   'offline-verify', 'atlas-sanity', 'source-mirrors', 'workflow-runtime-test', 'gate-selftest', 'frozen-install', 'packages-build',
   'workspace-typecheck', 'workspace-test', 'workspace-build', 'workspace-lint',
-  'composition-compile', 'workflow-browser', 'pilot-browser'
+  'composition-compile', 'standalone-export-browser', 'workflow-browser', 'pilot-browser'
 ]);
 export function summarizeAtlasGates(mode, entries) {
   const indexed = new Map(entries.map((entry) => [entry.id, entry.status]));
