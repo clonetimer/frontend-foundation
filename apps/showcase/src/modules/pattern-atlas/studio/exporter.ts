@@ -374,8 +374,19 @@ export function zipTextFiles(entries: Array<{ name: string; text: string }>): Bl
   endView.setUint32(12, centralSize, true); endView.setUint32(16, offset, true);
   return new Blob([concat([...local, ...central, end]) as BlobPart], { type: 'application/zip' });
 }
+/** React/Vite output is a standalone app; no Foundation workspace runtime dependency. */
+const STANDALONE_PROJECT_PACKAGE = {
+  name: 'pattern-atlas-export', private: true, version: '1.0.0', type: 'module',
+  scripts: { dev: 'vite', build: 'tsc --noEmit && vite build', preview: 'vite preview' },
+  dependencies: { antd: '^6.6.5', react: '^19.3.0', 'react-dom': '^19.3.0' },
+  devDependencies: { '@types/react': '^19.3.0', '@types/react-dom': '^19.3.0', typescript: '~6.0.2', vite: '^8.3.2' }
+};
 export function projectExportFiles(document: StudioDocument): Array<{ name: string; text: string }> {
   const files: Array<{ name: string; text: string }> = [
+    { name: 'package.json', text: JSON.stringify(STANDALONE_PROJECT_PACKAGE, null, 2) + '\n' },
+    { name: 'index.html', text: '<!doctype html>\n<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pattern Atlas Export</title></head><body><div id="root"></div><script type="module" src="/src.tsx"></script></body></html>\n' },
+    { name: 'src.tsx', text: ["import { StrictMode } from 'react';", "import { createRoot } from 'react-dom/client';", "import 'antd/dist/reset.css';", "import StudioApp from './StudioApp';", "const root = document.getElementById('root');", "if (!root) throw new Error('Missing #root');", "createRoot(root).render(<StrictMode><StudioApp/></StrictMode>);", ""].join('\n') },
+    { name: 'tsconfig.json', text: JSON.stringify({ compilerOptions: { target: 'ES2022', useDefineForClassFields: true, lib: ['ES2022', 'DOM', 'DOM.Iterable'], module: 'ESNext', skipLibCheck: true, moduleResolution: 'Bundler', allowImportingTsExtensions: true, resolveJsonModule: true, isolatedModules: true, noEmit: true, jsx: 'react-jsx', strict: true, noFallthroughCasesInSwitch: true }, include: ['src.tsx', 'StudioApp.tsx', 'studio-*.ts', 'studio-*.tsx', 'widgets.ts', 'pages/**/*.tsx'] }, null, 2) + '\n' },
     { name: 'foundation.project.json', text: `${JSON.stringify(document.blueprint, null, 2)}\n` },
     { name: 'atlas.studio.json', text: serializeStudioDocument(document) },
     { name: 'studio-effects.css', text: exportedPageStyles },
@@ -386,6 +397,10 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
     { name: 'widgets.ts', text: exportedWidgetCatalog },
     { name: 'StudioApp.tsx', text: generateStudioApp(document) },
     { name: 'README.md', text: `# ${document.blueprint.project.title}
+
+## 单独启动
+
+解压后进入目录，执行 \`npm install\`、\`npm run build\` 和 \`npm run dev\`，浏览器访问 Vite 终端显示的地址。此项目仅依赖公开的 React/Ant Design/Vite 包。
 
 本文件包中包含：
 
