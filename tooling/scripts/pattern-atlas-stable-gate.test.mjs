@@ -12,6 +12,12 @@ test('missing browser smoke is not treated as success', () => {
   const entries = REQUIRED_LOCAL_GATES.filter((id) => id !== 'workflow-browser').map((id) => ({ id, status: 'passed' }));
   assert.equal(summarizeAtlasGates('full', entries).status, 'incomplete');
 });
+test('missing standalone export browser prevents Stable admission', () => {
+  const entries = REQUIRED_LOCAL_GATES.filter((id) => id !== 'standalone-export-browser').map((id) => ({ id, status: 'passed' }));
+  const result = summarizeAtlasGates('full', entries);
+  assert.equal(result.status, 'incomplete');
+  assert(result.missing.includes('standalone-export-browser'));
+});
 test('even full local green is not automatically promoted', () => {
   const result = summarizeAtlasGates('full', REQUIRED_LOCAL_GATES.map((id) => ({ id, status: 'passed' })));
   assert.equal(result.status, 'local-gates-passed'); assert.equal(result.promotionAllowed, false);
