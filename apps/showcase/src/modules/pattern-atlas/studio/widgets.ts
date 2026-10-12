@@ -26,8 +26,8 @@ export const studioWidgetDefinitions = [
   { kind: 'slider', label: '滑块', icon: '━', group: '表单', defaults: { title: '进度调整', percent: 45 } },
   { kind: 'rate', label: '评分', icon: '★', group: '表单', defaults: { title: '满意度' } },
 
-  { kind: 'modal', label: '模态弹窗', icon: '▣', group: '反馈', defaults: { title: '操作确认', triggerText: '打开弹窗', description: '请确认后继续操作。', okText: '确认', cancelText: '取消' } },
-  { kind: 'drawer', label: '侧边抽屉', icon: '◩', group: '反馈', defaults: { title: '详情面板', triggerText: '查看详情', description: '这里展示当前记录详情。', placement: 'right', width: 420 } },
+  { kind: 'modal', label: '模态弹窗', icon: '▣', group: '反馈', defaults: { title: '操作确认', triggerText: '打开弹窗', description: '请确认后继续操作。', okText: '确认', cancelText: '取消', formFields: '', submitUrl: '' } },
+  { kind: 'drawer', label: '侧边抽屉', icon: '◩', group: '反馈', defaults: { title: '详情面板', triggerText: '查看详情', description: '这里展示当前记录详情。', placement: 'right', width: 420, formFields: '', submitUrl: '', okText: '保存', cancelText: '取消' } },
   { kind: 'popconfirm', label: '气泡确认', icon: '☷', group: '反馈', defaults: { title: '确认操作？', triggerText: '执行操作', description: '操作前请确认。', okText: '确认', cancelText: '取消' } },
   { kind: 'skeleton', label: '骨架屏', icon: '▒', group: '反馈', defaults: { title: '加载占位' } },
   { kind: 'empty', label: '空状态', icon: '□', group: '反馈', defaults: { title: '暂无内容', description: '创建数据后会显示在这里' } },
@@ -68,6 +68,42 @@ export function parseChartSeries(series: unknown, legacyValues: unknown): ChartS
   return values.length ? [{ name: '数值', values }] : [];
 }
 
+/** Form declarations are bounded and declarative: key|label|text/email/number|required/optional. */
+export interface OverlayFormField { key: string; label: string; type: 'text' | 'email' | 'number'; required: boolean }
+export function parseOverlayFormFields(value: unknown): OverlayFormField[] {
+  if (typeof value !== 'string' || value.length > 1600 || !value.trim()) return [];
+  const lines = value.split(/\r?\n/).map((row) => row.trim()).filter(Boolean);
+  if (lines.length < 1 || lines.length > 8) return [];
+  const seen = new Set<string>();
+  const fields: OverlayFormField[] = [];
+  for (const line of lines) {
+    const pieces = line.split('|').map((part) => part.trim());
+    if (pieces.length !== 4) return [];
+    const [key, label, type, required] = pieces;
+    if (!key || !/^[a-zA-Z][a-zA-Z\d_]{0,39}$/.test(key) || ['__proto__', 'prototype', 'constructor'].includes(key) || seen.has(key)) return [];
+    if (!label || label.length > 48 || !['text', 'email', 'number'].includes(type) || !['required', 'optional'].includes(required)) return [];
+    seen.add(key);
+    fields.push({ key, label, type: type as OverlayFormField['type'], required: required === 'required' });
+  }
+  return fields;
+}
+export function validateOverlayForm(fields: readonly OverlayFormField[], draft: Record<string, string>): { errors: Record<string, string>; payload: Record<string, string | number> } {
+  const errors: Record<string, string> = {};
+  const payload: Record<string, string | number> = {};
+  for (const field of fields) {
+    const value = (draft[field.key] ?? '').trim();
+    if (field.required && !value) { errors[field.key] = '此项必填'; continue; }
+    if (value.length > 240) { errors[field.key] = '最多 240 个字符'; continue; }
+    if (!value) { if (!field.required) payload[field.key] = ''; continue; }
+    if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { errors[field.key] = '邮箱格式无效'; continue; }
+    if (field.type === 'number') {
+      if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value) || !Number.isFinite(Number(value)) || Math.abs(Number(value)) > 1e12) { errors[field.key] = '请输入有效数字'; continue; }
+      payload[field.key] = Number(value);
+    } else payload[field.key] = value;
+  }
+  return { errors, payload };
+}
+
 /** Strict bounded JSON contract for live chart APIs: {items, series:[{name,values}]}. */
 export interface ChartDataset { items: string[]; series: ChartSeries[] }
 export function parseRemoteChartDataset(value: unknown): ChartDataset | null {
@@ -100,7 +136,7 @@ export function normalizeWidgetProps(kind: StudioWidgetKind, value: unknown): Re
   const source = value as Record<string, unknown>;
   for (const [key, initial] of Object.entries(defaults)) {
     const candidate = Object.prototype.hasOwnProperty.call(source, key) ? source[key] : undefined;
-    if (typeof initial === 'string' && typeof candidate === 'string') defaults[key] = candidate.slice(0, ['src', 'statusUrl', 'uploadUrl', 'dataUrl'].includes(key) ? 500 : key === 'series' ? 1200 : 240);
+    if (typeof initial === 'string' && typeof candidate === 'string') defaults[key] = candidate.slice(0, ['src', 'statusUrl', 'uploadUrl', 'dataUrl', 'submitUrl'].includes(key) ? 500 : key === 'formFields' ? 1600 : key === 'series' ? 1200 : 240);
     if (typeof initial === 'number' && typeof candidate === 'number' && Number.isFinite(candidate)) defaults[key] = Math.round(Math.max(key === 'pollMs' ? 1500 : key === 'maxSizeMb' ? 1 : key === 'width' ? 280 : key === 'refreshMs' ? (candidate > 0 ? 5000 : 0) : 0, Math.min(key === 'pollMs' ? 30000 : key === 'refreshMs' ? 60000 : key === 'pageSize' ? 20 : key === 'maxSizeMb' ? 30 : key === 'width' ? 800 : 100, candidate)));
     if (Array.isArray(initial) && Array.isArray(candidate)) defaults[key] = candidate.filter((item): item is string => typeof item === 'string').slice(0,30).map((item) => item.slice(0,160));
   }
