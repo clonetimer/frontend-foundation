@@ -7,6 +7,7 @@ import { resolve, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Module from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { TextDecoder } from 'node:util';
 import ts from 'typescript';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const loadCompiled = Module.createRequire(import.meta.url);
