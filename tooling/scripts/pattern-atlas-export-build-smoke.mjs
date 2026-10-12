@@ -27,7 +27,12 @@ const { createStudioDocument, createNode, insertNode, setDecoration } = loadComp
 const { runExportedBrowserSmoke } = await import('./pattern-atlas-export-browser-check.mjs');
 const { projectExportFiles, zipTextFiles } = loadCompiled(join(studio, 'exporter.ts'));
 function exec(program, args, cwd) {
-  const result = spawnSync(program, args, { cwd, stdio:'inherit', timeout: 600000, env: { ...process.env, CI:'true' } });
+  // npm is a .cmd wrapper on Windows, which must be launched via cmd.exe.
+  // This helper is only called with fixed internal commands/flags, never user input.
+  const windowsNpm = process.platform === 'win32' && program === 'npm';
+  const command = windowsNpm ? (process.env.ComSpec || 'cmd.exe') : program;
+  const commandArgs = windowsNpm ? ['/d', '/c', 'npm', ...args] : args;
+  const result = spawnSync(command, commandArgs, { cwd, stdio:'inherit', timeout: 600000, env: { ...process.env, CI:'true' } });
   if (result.error) throw result.error;
   assert.equal(result.status, 0, program + ' ' + args.join(' ') + ' failed');
 }
