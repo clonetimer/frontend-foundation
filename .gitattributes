@@ -1,0 +1,6 @@
+# Keep source bytes deterministic across Linux and Windows.
+# The OSS owned-kernel baseline hashes the actual committed TS/TSX bytes.
+*.ts text eol=lf
+*.tsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
