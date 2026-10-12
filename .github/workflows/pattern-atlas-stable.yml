@@ -5,6 +5,10 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - 'apps/showcase/src/modules/pattern-atlas/studio/studio-workflows.ts'
+      - 'apps/showcase/src/modules/pattern-atlas/studio/exported-workflows.ts'
+      - 'apps/showcase/src/modules/pattern-atlas/studio/WidgetPreview.tsx'
+      - 'apps/showcase/src/modules/pattern-atlas/studio/widgets.ts'
       - 'tooling/scripts/pattern-atlas-stable-gate.mjs'
       - 'tooling/scripts/pattern-atlas-stable-policy.mjs'
       - 'tooling/scripts/pattern-atlas-stable-gate.test.mjs'
