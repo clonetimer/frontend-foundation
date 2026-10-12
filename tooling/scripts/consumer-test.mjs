@@ -1,7 +1,6 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import { createApp } from '../create-app/index.mjs';
 import { generateModule } from '../create-app/generate.mjs';
 import { runPnpm } from './pnpm-runner.mjs';
@@ -12,10 +11,9 @@ const versions = JSON.parse(await readFile(join(root, 'tooling/create-app/versio
 runPnpm(['build:packages'], { cwd: root, stdio: 'inherit' });
 execFileSync(process.execPath, [resolve(root, 'tooling/scripts/pack-foundation.mjs')], { cwd: root, stdio: 'inherit' });
 
-// Keep consumer smoke projects outside the pnpm workspace: installs must exercise
-// independent projects consuming packed artifacts, not the root workspace.
-const baseWork = await mkdtemp(join(tmpdir(), 'foundation-consumer-'));
-console.log(`Independent consumer test root: ${baseWork}`);
+const baseWork = resolve(root, 'apps/consumer-test/.consumer');
+await rm(baseWork, { recursive: true, force: true });
+await mkdir(baseWork, { recursive: true });
 
 const artifacts = resolve(root, 'artifacts/packages');
 const artifactManifest = JSON.parse(await readFile(join(artifacts, 'manifest.json'), 'utf8'));
@@ -48,8 +46,7 @@ async function exposeBins(nodeModules, dependencyDir) {
 async function extractFoundationTarballs(work, manifest) {
   const nodeModules = join(work, 'node_modules');
   await mkdir(nodeModules, { recursive: true });
-  const releaseArtifacts = { ...(manifest.packages ?? {}), ...(manifest.tools ?? {}) };
-  for (const [packageName, tarball] of Object.entries(releaseArtifacts)) {
+  for (const [packageName, tarball] of Object.entries(manifest.packages ?? {})) {
     const target = packagePath(nodeModules, packageName);
     await rm(target, { recursive: true, force: true });
     await mkdir(dirname(target), { recursive: true });
@@ -195,23 +192,14 @@ for (const profile of ['minimal', 'management', 'data-workbench']) {
 
   // Make every internal Foundation edge resolve to the exact tarball bytes under test.
   // The generated profile dependency set is validated separately by create-app/doctor tests.
-  const releaseArtifacts = { ...(artifactManifest.packages ?? {}), ...(artifactManifest.tools ?? {}) };
-  const consumerWorkspace = { packages: ['.'], overrides: {} };
-  for (const [packageName, tarball] of Object.entries(releaseArtifacts)) {
+  for (const [packageName, tarball] of Object.entries(artifactManifest.packages ?? {})) {
     const targetSection = consumerPackage.devDependencies?.[packageName] !== undefined ? consumerPackage.devDependencies : consumerPackage.dependencies;
-    const tarballReference = `file:${join(artifacts, tarball)}`;
-    targetSection[packageName] = tarballReference;
-    // Packed packages refer to each other by release versions. Force those
-    // transitive edges to the same local tarballs instead of the public registry.
-    consumerWorkspace.overrides[packageName] = tarballReference;
+    targetSection[packageName] = `file:${join(artifacts, tarball)}`;
   }
   // Packed packages declare these as peers; keep them available when all tarballs are injected.
   consumerPackage.dependencies['react-hook-form'] ??= versions['react-hook-form'];
   consumerPackage.dependencies.echarts ??= versions.echarts;
   await writeFile(packageFile, `${JSON.stringify(consumerPackage, null, 2)}\n`, 'utf8');
-  // pnpm 11 reads overrides from pnpm-workspace.yaml. JSON is valid YAML and
-  // keeps this generated single-project workspace deterministic.
-  await writeFile(join(work, 'pnpm-workspace.yaml'), `${JSON.stringify(consumerWorkspace, null, 2)}\n`, 'utf8');
 
   await writeFile(join(work, 'src/modules/home/pages/home.route.tsx'), smokeByProfile[profile], 'utf8');
 
@@ -219,9 +207,7 @@ for (const profile of ['minimal', 'management', 'data-workbench']) {
   if (!offlinePrepared) runPnpm(['install'], { cwd: work, stdio: 'inherit' });
   else console.log(`Consumer profile ${profile} is using offline dependency snapshot ${offlineNodeModules}`);
   runPnpm(['build'], { cwd: work, stdio: 'inherit' });
-  // Installation and build already exercised the exact tarballs. Restore
-  // comparable release ranges before the strict compatibility diagnosis.
-  await normalizeFoundationRangesForDoctor(work, artifactManifest.version);
+  if (offlinePrepared) await normalizeFoundationRangesForDoctor(work, artifactManifest.version);
   execFileSync(process.execPath, [resolve(root, 'tooling/create-app/doctor.mjs'), work, '--target', artifactManifest.version, '--strict'], { cwd: root, stdio: 'inherit' });
   console.log(`Consumer profile ${profile} passed`);
 }

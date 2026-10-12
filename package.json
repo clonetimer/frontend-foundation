@@ -9,6 +9,8 @@
   },
   "scripts": {
     "dev": "pnpm build:packages && pnpm --filter @foundation/showcase dev",
+    "dev:studio": "pnpm dev",
+    "dev:studio:legacy": "node tooling/scripts/dev-studio.mjs",
     "dev:starter": "pnpm build:packages && pnpm --filter @foundation/starter dev",
     "build": "pnpm -r --filter=!@foundation/storybook --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
@@ -59,7 +61,11 @@
     "domain:verify": "pnpm domain:primary-verify && pnpm domain:secondary-verify",
     "domain:neutrality": "node tooling/scripts/domain-neutrality-check.mjs",
     "domain:primary-verify": "pnpm --filter @example/domain-widgets build && node tooling/create-app/domain-component.mjs verify packages/domain-widgets-fixture --pack",
-    "domain:secondary-verify": "pnpm exec tsc -p tooling/fixtures/secondary-domain-widgets/tsconfig.build.json && node tooling/create-app/domain-component.mjs verify tooling/fixtures/secondary-domain-widgets --built --pack"
+    "domain:secondary-verify": "pnpm exec tsc -p tooling/fixtures/secondary-domain-widgets/tsconfig.build.json && node tooling/create-app/domain-component.mjs verify tooling/fixtures/secondary-domain-widgets --built --pack",
+    "patterns:pilot:browser-smoke": "node tooling/scripts/pattern-atlas-pilot-browser-smoke.mjs",
+    "patterns:workflow:browser-smoke": "node tooling/scripts/pattern-atlas-workflow-browser-smoke.mjs",
+    "patterns:stable:check": "node tooling/scripts/pattern-atlas-stable-gate.mjs",
+    "patterns:stable:offline": "node tooling/scripts/pattern-atlas-stable-gate.mjs --offline"
   },
   "devDependencies": {
     "@types/node": "catalog:",

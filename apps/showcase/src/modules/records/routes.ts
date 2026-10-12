@@ -9,8 +9,8 @@ export const recordsModule = defineModule({
       path: 'records',
       handle: {
         foundation: {
-          title: 'Records',
-          navigation: { label: 'Records', order: 20 },
+          title: '业务列表',
+          navigation: { label: '业务列表', order: 20 },
           permission: 'records.read'
         }
       },
@@ -20,6 +20,14 @@ export const recordsModule = defineModule({
           index: true,
           lazy: async () => import('./pages/records-list.route'),
           handle: { foundation: { breadcrumb: false } }
+        },
+        {
+          id: 'records.pilot',
+          path: 'pilot',
+          lazy: async () => import('./pages/records-pilot.route'),
+          handle: {
+            foundation: { title: 'Records 视觉试点', permission: 'records.read' }
+          }
         },
         {
           id: 'records.edit',

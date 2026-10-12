@@ -1,0 +1,205 @@
+{
+  "format": "pattern-atlas-studio",
+  "version": 1,
+  "blueprint": {
+    "schemaVersion": 1,
+    "project": {
+      "id": "my-workspace",
+      "packageName": "my-workspace",
+      "title": "我的项目"
+    },
+    "foundation": {
+      "version": "0.21.0",
+      "profile": "management",
+      "shell": "workspace",
+      "router": "browser",
+      "deployment": "none",
+      "contract": "none"
+    },
+    "theme": {
+      "primaryColor": "#1677ff",
+      "layout": {
+        "contentPadding": 20
+      }
+    },
+    "navigation": {
+      "items": [
+        {
+          "target": "overview",
+          "label": "项目概览",
+          "order": 0
+        }
+      ]
+    },
+    "pages": [
+      {
+        "id": "overview",
+        "title": "项目概览",
+        "pattern": "dashboard",
+        "composition": {
+          "id": "patternAtlasRoot",
+          "kind": "layout",
+          "type": "stack",
+          "props": {
+            "gap": 16
+          },
+          "children": [
+            {
+              "id": "overviewTitle",
+              "kind": "widget",
+              "type": "text",
+              "props": {
+                "text": "项目概览",
+                "variant": "title"
+              }
+            },
+            {
+              "id": "overviewGrid",
+              "kind": "layout",
+              "type": "grid",
+              "props": {
+                "columns": 3,
+                "gap": 12
+              },
+              "children": [
+                {
+                  "id": "featuredMetric",
+                  "kind": "widget",
+                  "type": "panel",
+                  "props": {
+                    "title": "重点指标"
+                  },
+                  "placement": {
+                    "span": 2
+                  },
+                  "children": [
+                    {
+                      "id": "featuredValue",
+                      "kind": "widget",
+                      "type": "metric",
+                      "props": {
+                        "label": "进展",
+                        "value": "76%"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "taskCount",
+                  "kind": "widget",
+                  "type": "metric",
+                  "props": {
+                    "label": "进行中",
+                    "value": 2
+                  }
+                },
+                {
+                  "id": "completedCount",
+                  "kind": "widget",
+                  "type": "metric",
+                  "props": {
+                    "label": "已完成",
+                    "value": 1
+                  }
+                },
+                {
+                  "id": "keyTasks",
+                  "kind": "widget",
+                  "type": "panel",
+                  "props": {
+                    "title": "关键事项",
+                    "description": "请替换为真实业务列表组件"
+                  },
+                  "placement": {
+                    "span": 2
+                  },
+                  "children": [
+                    {
+                      "id": "taskPlaceholder",
+                      "kind": "widget",
+                      "type": "placeholder",
+                      "props": {
+                        "title": "任务列表",
+                        "description": "接入你的领域组件 / 数据源"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "smokeTrigger",
+              "kind": "widget",
+              "type": "button",
+              "props": {
+                "label": "运行测试工作流",
+                "type": "primary"
+              }
+            }
+          ]
+        },
+        "index": true
+      }
+    ],
+    "resources": []
+  },
+  "design": {
+    "accent": "jade",
+    "surface": "light",
+    "density": "comfortable",
+    "radius": "soft",
+    "motion": "system",
+    "speed": "normal",
+    "font": "sans",
+    "typeScale": "regular",
+    "spacing": "balanced",
+    "elevation": "soft"
+  },
+  "decorations": {
+    "overview:smokeTrigger": {
+      "workflow": {
+        "steps": [
+          {
+            "id": "step-1",
+            "type": "request",
+            "method": "GET",
+            "url": "/api/studio-demo",
+            "body": ""
+          },
+          {
+            "id": "step-2",
+            "type": "branch",
+            "source": "results.step-1.data.count",
+            "operator": "exists",
+            "expected": "",
+            "onTrue": [
+              {
+                "id": "step-2-highlight",
+                "type": "emit",
+                "targetId": "overviewTitle",
+                "action": "highlight"
+              },
+              {
+                "id": "step-2-notify",
+                "type": "notify",
+                "text": "接口已返回 {{results.step-1.data.count}} 条"
+              }
+            ],
+            "onFalse": [
+              {
+                "id": "step-2-other",
+                "type": "notify",
+                "text": "接口结果为空"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "shell": {
+    "navigation": "sidebar",
+    "sidebarWidth": 188
+  },
+  "dataSources": []
+}

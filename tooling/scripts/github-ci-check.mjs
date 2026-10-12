@@ -41,7 +41,8 @@ const required = {
   '.github/workflows/pages.yml': [
     'pnpm storybook:build',
     'actions/configure-pages@v6',
-    'actions/upload-pages-artifact@v5'
+    'actions/upload-pages-artifact@v5',
+    'actions/deploy-pages@v4'
   ],
   '.github/dependabot.yml': [
     'package-ecosystem: npm',
@@ -64,13 +65,6 @@ for (const [relativePath, tokens] of Object.entries(required)) {
   for (const token of tokens) {
     if (!source.includes(token)) failures.push(`${relativePath} missing required token: ${token}`);
   }
-}
-
-// Dependabot may advance deploy-pages to a new supported major. Accept the
-// approved majors while still rejecting an arbitrary or missing action.
-const pages = await readFile(resolve(root, '.github/workflows/pages.yml'), 'utf8');
-if (!/actions\/deploy-pages@v(?:4|5)(?![0-9])/.test(pages)) {
-  failures.push('.github/workflows/pages.yml must use approved actions/deploy-pages@v4 or @v5');
 }
 
 const release = await readFile(resolve(root, '.github/workflows/release.yml'), 'utf8');

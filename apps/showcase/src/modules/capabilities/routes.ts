@@ -9,8 +9,8 @@ export const capabilitiesModule = defineModule({
       path: 'capabilities',
       handle: {
         foundation: {
-          title: 'Capabilities',
-          navigation: { label: 'Capabilities', order: 30 }
+          title: '能力',
+          navigation: { label: '能力', order: 30 }
         }
       },
       children: [
@@ -18,19 +18,19 @@ export const capabilitiesModule = defineModule({
           id: 'capabilities.file',
           path: 'file',
           lazy: async () => import('./pages/file.route'),
-          handle: { foundation: { title: 'File', navigation: { label: 'File', order: 10 } } }
+          handle: { foundation: { title: '文件', navigation: { label: '文件', order: 10 } } }
         },
         {
           id: 'capabilities.async',
           path: 'async',
           lazy: async () => import('./pages/async.route'),
-          handle: { foundation: { title: 'Async', navigation: { label: 'Async', order: 20 } } }
+          handle: { foundation: { title: '异步任务', navigation: { label: '异步任务', order: 20 } } }
         },
         {
           id: 'capabilities.visualization',
           path: 'visualization',
           lazy: async () => import('./pages/visualization.route'),
-          handle: { foundation: { title: 'Visualization', navigation: { label: 'Visualization', order: 30 } } }
+          handle: { foundation: { title: '可视化', navigation: { label: '可视化', order: 30 } } }
         }
       ]
     }

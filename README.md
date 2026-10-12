@@ -4,6 +4,26 @@
 
 **0.21.0 已完成源码、离线/真实依赖、打包消费者、双 Domain SDK 与制品反向验收的 Stable 收口。功能面继续冻结，不再扩充 Blueprint/Designer DSL。按照仓库既有发布规则，`0.21.0` 的不可变包应先以 `candidate` dist-tag 发布；用户接手的真实浏览器/视觉验收、GitHub exact-commit 与目标 registry smoke 通过后，再把同一批 `0.21.0` 字节提升到 `latest`。在完成外部 promotion 前，本源码交付状态称为 Stable-Ready。**
 
+## Showcase · 交互形式图鉴（应用层增量）
+
+Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
+
+
+## 统一页面设计器（Phase 7）
+
+从 Showcase 的「创建页面」开始选择项目与起始布局，通过 `/studio` 进入统一拖拽设计器：组件树、画布、**内容 / 形式 / 交互 / 特效 / 风格**配置都在同一应用中。`/create` 右侧展示可视化页面预览，不再默认展示 JSON；旧的 Showcase `/designer` 自动跳转到 `/studio`。
+
+```bash
+pnpm install --frozen-lockfile
+pnpm dev:studio   # 仅启动新的 Showcase 设计工作台
+```
+
+`/studio` 编辑时在浏览器本机自动保存，可以导入原 Foundation Blueprint 或 `atlas.studio.json`，导出的 ZIP 同时包含原生 `foundation.project.json`、可再次编辑的 `atlas.studio.json` 以及 React TSX/CSS 页面代码。**原 Foundation Project Compiler 只消费原生 Blueprint，不会自动携带 Studio 专有的交互/特效标记；需要特效时请集成导出的 TSX/CSS。** 现阶段仅对基础组件、若干布局模式、按钮示例行为提供可编辑和可导出能力，不能等同于全部 38 种交互模式的生产级实现。
+
+原有 `apps/designer` 未删除。为了现有 Blueprint / Registry / Designer 工具链兼容，仍可使用 `pnpm designer` 单独启动原设计器；`pnpm dev:studio:legacy` 保留旧双应用启动命令。正常新建页面不再依赖原设计器或双应用端口切换。
+
+详见 [`docs/PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md`](docs/PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md) 和 [`docs/PATTERN_ATLAS_AUTHORING_FLOW.md`](docs/PATTERN_ATLAS_AUTHORING_FLOW.md)。
+
 ## 当前状态
 
 0.21.0 Stable-Ready 延续私有 workspace 应用 `@foundation/designer`，仍直接编辑现有 `foundation.project.json`，没有 `designer.json`、没有运行时 JSON Renderer，也没有第二套页面模型。项目可以额外声明 `foundation.registry.json`，把领域 Widget/Block 作为一等设计模块加入同一 Palette / Property / Binding / Event / Compiler 链路。
@@ -297,3 +317,8 @@ Stable
 - `docs/releases/0.10.1.md`
 - `docs/KERNEL_COMPATIBILITY_0_10_1.md`
 - `docs/STABLE_GATES.md`
+
+
+### Pattern Atlas Phase 3 · 可视化配置中心（Showcase 扩展）
+
+在 `/patterns/config` 试用四套设计预设、十项局部 Token、三类组件动效绑定、三个模拟视口与五种业务状态。导出的方案 JSON 已升级为 v2，并可导入 Phase 2 的 v1 文件。该功能为实验选型，不会自动修改 Foundation 全局 Theme 或 Designer。详见 [`docs/PATTERN_ATLAS_CONFIG_CENTER.md`](docs/PATTERN_ATLAS_CONFIG_CENTER.md)。

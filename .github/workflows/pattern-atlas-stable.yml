@@ -1,0 +1,53 @@
+name: Pattern Atlas Stable
+
+# Manual admission gate for an exact candidate commit; does not publish or promote packages.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: ${{ matrix.os }} · Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: 22.23.2
+          - os: windows-latest
+            node: 24.12.0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Select isolated Chromium/Chrome binary
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo 'CHROMIUM_BIN=C:\Program Files\Google\Chrome\Application\chrome.exe' >> "$GITHUB_ENV"
+          else
+            CHROME=$(command -v google-chrome || command -v chromium || true)
+            test -n "$CHROME" || { echo 'No Chrome/Chromium binary on runner' >&2; exit 1; }
+            echo "CHROMIUM_BIN=$CHROME" >> "$GITHUB_ENV"
+          fi
+      - name: Full admission (no automatic Stable promotion)
+        run: pnpm patterns:stable:check --full
+      - name: Preserve evidence including failed reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pattern-atlas-${{ matrix.os }}-node-${{ matrix.node }}-${{ github.sha }}
+          path: artifacts/pattern-atlas/stable-gate-report.json
+          if-no-files-found: warn
+          retention-days: 30

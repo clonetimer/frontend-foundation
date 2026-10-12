@@ -1,12 +1,17 @@
 import { Button, Input, Select, Space, Tag, type TableColumnsType } from 'antd';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useApiTransport } from '@foundation/api';
 import { normalizeError } from '@foundation/core';
 import { DataTable, DataToolbar } from '@foundation/data';
+import { useRuntimeConfig } from '@foundation/app';
 import { Page, PageContent, PageHeader } from '@foundation/ui';
 import { getRecords, type RecordItem, type RecordStatus } from '../api/records-api';
+import { getActivePilotRevision, disablePilot } from '../../pattern-atlas/pilot/model';
+import { readRecordsPilot, saveRecordsPilot, subscribeRecordsPilot } from '../../pattern-atlas/pilot/store';
+import { ScopedRecordsTheme } from '../../pattern-atlas/pilot/ScopedRecordsTheme';
+import '../../pattern-atlas/pilot/styles.css';
 
 function positiveInt(value: string | null, fallback: number): number {
   const parsed = Number(value);
@@ -14,6 +19,11 @@ function positiveInt(value: string | null, fallback: number): number {
 }
 
 export function Component() {
+  const runtime = useRuntimeConfig();
+  const pilotAllowed = runtime.features.patternAtlasPilot === true;
+  const [pilot, setPilot] = useState(readRecordsPilot);
+  useEffect(() => subscribeRecordsPilot(() => setPilot(readRecordsPilot())), []);
+  const activePilot = pilotAllowed ? getActivePilotRevision(pilot) : null;
   const transport = useApiTransport();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -50,10 +60,7 @@ export function Component() {
     setSearchParams(next);
   };
 
-  return (
-    <Page>
-      <PageHeader title="Records" description="0.2 Data Capability：URL state + Query + ApiTransport + 受控 DataTable。" />
-      <PageContent>
+  const recordsContent = (<>
         <DataToolbar
           primary={
             <Input.Search
@@ -98,6 +105,22 @@ export function Component() {
             onChange: (nextPage, nextPageSize) => updateParams({ page: String(nextPage), pageSize: String(nextPageSize) })
           }}
         />
+  </>);
+
+  return (
+    <Page>
+      <PageHeader title="Records" description="0.2 Data Capability：URL state + Query + ApiTransport + 受控 DataTable。"
+        extra={pilotAllowed ? <Space wrap>
+          {activePilot ? <Tag color="green">试点开启：{activePilot.label}</Tag> : <Tag>原版模式</Tag>}
+          <Link to="/records/pilot"><Button>试点对照与版本管理</Button></Link>
+          {activePilot ? <Button onClick={() => saveRecordsPilot(disablePilot(pilot))}>恢复原版</Button> : null}
+        </Space> : null}
+      />
+      <PageContent>
+        {activePilot ? <ScopedRecordsTheme design={activePilot.design}>
+          <div className="pa-pilot-live-marker"><b>试点版本：{activePilot.label}</b><small>局部主题仅作用于 Records 列表；查询和编辑逻辑没有变化</small></div>
+          {recordsContent}
+        </ScopedRecordsTheme> : recordsContent}
       </PageContent>
     </Page>
   );

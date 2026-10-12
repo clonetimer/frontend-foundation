@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Foundation Showcase",
+    "name": "前端工作台",
     "environment": "development"
   },
   "api": {
@@ -17,6 +17,7 @@
   "features": {
     "examples": true,
     "records": true,
-    "capabilities": true
+    "capabilities": true,
+    "patternAtlasPilot": true
   }
 }
