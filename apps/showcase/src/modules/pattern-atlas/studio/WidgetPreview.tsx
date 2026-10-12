@@ -126,7 +126,7 @@ function RemoteLineWidget({ props, live }: { props: Record<string, unknown>; liv
     const load = async () => {
       setBusy(true);
       try {
-        const response = await fetch(dataUrl, { method: 'GET', credentials: 'same-origin', signal: controller.signal });
+        const response = await fetch(dataUrl, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
         if (!response.ok) throw new Error('HTTP ' + response.status);
         if (Number(response.headers.get('content-length') || 0) > 131072) throw new Error('数据超过 128 KB');
         const body = await response.text();
