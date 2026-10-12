@@ -116,5 +116,6 @@ finally {
   browser.kill('SIGTERM');
   await sleep(500);
   if (browser.exitCode === null) browser.kill('SIGKILL');
-  rmSync(profile, { recursive: true, force: true, maxRetries: 4, retryDelay: 100 });
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
+  catch (error) { console.warn('Disposable browser profile cleanup:', String(error)); }
 }
