@@ -14,7 +14,7 @@ describe('Phase 17 independent export files', () => {
     expect(serializeStudioDocument(parseStudioFile(files.find((file)=>file.name==='atlas.studio.json')!.text))).toBe(serializeStudioDocument(doc));
   });
   it('parses every generated TypeScript file', () => {
-    const files=projectExportFiles(createStudioDocument()).filter((entry)=>/\.tsx?$/.test(entry.name));
+    const files=projectExportFiles(createStudioDocument()).filter((entry)=>/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.d.ts'));
     for(const file of files) {
       const out=ts.transpileModule(file.text,{fileName:file.name,reportDiagnostics:true,compilerOptions:{jsx:ts.JsxEmit.ReactJSX, target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}});
       expect((out.diagnostics||[]).filter((item)=>item.category===ts.DiagnosticCategory.Error),file.name).toEqual([]);

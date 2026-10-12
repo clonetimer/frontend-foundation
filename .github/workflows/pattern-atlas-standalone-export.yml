@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - 'apps/showcase/src/modules/pattern-atlas/**'
-      - 'tooling/scripts/pattern-atlas-export-build-smoke.cjs'
+      - 'tooling/scripts/pattern-atlas-export-build-smoke.mjs'
       - '.github/workflows/pattern-atlas-standalone-export.yml'
   workflow_dispatch:
 permissions:
@@ -25,4 +25,4 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: node tooling/scripts/pattern-atlas-export-build-smoke.cjs
+      - run: node tooling/scripts/pattern-atlas-export-build-smoke.mjs

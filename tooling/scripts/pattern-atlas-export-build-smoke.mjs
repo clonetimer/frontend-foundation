@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /** Build the actual Studio ZIP in a new temp project outside this workspace. */
-const assert = require('node:assert/strict');
-const { spawnSync } = require('node:child_process');
-const { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync } = require('node:fs');
-const { resolve, dirname, join } = require('node:path');
-const { tmpdir } = require('node:os');
-const Module = require('node:module');
-const ts = require('typescript');
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import Module from 'node:module';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const loadCompiled = Module.createRequire(import.meta.url);
 for (const extension of ['.ts', '.tsx']) {
   Module._extensions[extension] = (module, path) => {
     const result = ts.transpileModule(readFileSync(path, 'utf8'), {
@@ -19,8 +22,8 @@ for (const extension of ['.ts', '.tsx']) {
   };
 }
 const studio = resolve(__dirname, '../../apps/showcase/src/modules/pattern-atlas/studio');
-const { createStudioDocument } = require(join(studio, 'model.ts'));
-const { projectExportFiles, zipTextFiles } = require(join(studio, 'exporter.ts'));
+const { createStudioDocument } = loadCompiled(join(studio, 'model.ts'));
+const { projectExportFiles, zipTextFiles } = loadCompiled(join(studio, 'exporter.ts'));
 function exec(program, args, cwd) {
   const result = spawnSync(program, args, { cwd, stdio:'inherit', timeout: 600000, env: { ...process.env, CI:'true' } });
   if (result.error) throw result.error;
