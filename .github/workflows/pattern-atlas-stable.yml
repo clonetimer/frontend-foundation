@@ -49,6 +49,8 @@ jobs:
             test -n "$CHROME" || { echo 'No Chrome/Chromium binary on runner' >&2; exit 1; }
             echo "CHROMIUM_BIN=$CHROME" >> "$GITHUB_ENV"
           fi
+      - name: Prepare frozen workspace dependencies
+        run: pnpm install --frozen-lockfile
       - name: Full admission (no automatic Stable promotion)
         run: pnpm patterns:stable:check --full
       - name: Preserve evidence including failed reports
