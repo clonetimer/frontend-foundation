@@ -6,6 +6,7 @@ import { mayContain, nodeLabel, type StudioDecoration } from './model';
 import { displayApiValue, requestStudioApi, validApiUrl } from './api';
 import { recordId, recordText } from './record-bindings';
 import type { StudioRecordFlow } from './StudioRecords';
+import type { StudioDataSource } from './data-sources';
 import { WidgetPreview } from './WidgetPreview';
 import { dispatchWorkflowComponentEvent, runStudioWorkflow, type WorkflowTrace } from './studio-workflows';
 
@@ -21,6 +22,7 @@ export interface CanvasProps {
   onNavigate?: ((pageId: string) => void) | undefined;
   depth?: number;
   recordFlow?: StudioRecordFlow | undefined;
+  dataSources?: readonly StudioDataSource[] | undefined;
   absoluteLayer?: HTMLDivElement | null | undefined;
   onWorkflowTrace?: ((entry: WorkflowTrace) => void) | undefined;
 }
@@ -36,7 +38,7 @@ function confirmAction(content: string): Promise<boolean> {
   });
 }
 
-export function StudioCanvas({ node, selectedId, decorations, pageId = '', live = false, readOnly = false, onSelect, onDropItem, onNavigate, depth = 0, recordFlow, absoluteLayer, onWorkflowTrace }: CanvasProps) {
+export function StudioCanvas({ node, selectedId, decorations, pageId = '', live = false, readOnly = false, onSelect, onDropItem, onNavigate, depth = 0, recordFlow, dataSources, absoluteLayer, onWorkflowTrace }: CanvasProps) {
   const [active, setActive] = useState(false);
   const [tab, setTab] = useState(0);
   const decoration = decorations[`${pageId}:${node.id}`] ?? decorations[node.id] ?? {};
@@ -64,7 +66,7 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
   const canDropInto = mayContain(node);
   const selected = editable && node.id === selectedId;
   const pattern = decoration.pattern ?? 'default';
-  const childProps = { decorations, selectedId, pageId, live, readOnly, onSelect, onDropItem, onNavigate, recordFlow, absoluteLayer, onWorkflowTrace, depth: depth + 1 };
+  const childProps = { decorations, selectedId, pageId, live, readOnly, onSelect, onDropItem, onNavigate, recordFlow, dataSources, absoluteLayer, onWorkflowTrace, depth: depth + 1 };
   const childElements = (list: CompositionNode[]) => list.map((item) => <StudioCanvas key={item.id} node={item} {...childProps}/>);
   const report = (event: DragEvent<HTMLElement>, where: 'inside' | 'before' | 'after') => {
     if (!editable || !onDropItem) return;
@@ -190,7 +192,12 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
       {live && recordFlow && recordFlow.totalPages > 1 ? <div className="pa-studio-record-pager"><Button size="small" disabled={recordFlow.page === 1} onClick={(event) => { event.stopPropagation(); recordFlow.changePage(recordFlow.page - 1); }}>上一页</Button><span>{recordFlow.page} / {recordFlow.totalPages} · 共 {recordFlow.totalRows} 条</span><Button size="small" disabled={recordFlow.page >= recordFlow.totalPages} onClick={(event) => { event.stopPropagation(); recordFlow.changePage(recordFlow.page + 1); }}>下一页</Button></div> : null}
     </div>;
   } else if (node.type === 'placeholder' && decoration.widgetKind) {
-    visual = <WidgetPreview kind={decoration.widgetKind} props={decoration.widgetProps ?? {}} live={live}/>;
+    const widgetProps = decoration.widgetProps ?? {};
+    const sourceKey = typeof widgetProps.sourceId === 'string' ? widgetProps.sourceId : '';
+    const linkedSource = sourceKey ? dataSources?.find((entry) => entry.id === sourceKey) : undefined;
+    const resolvedProps = sourceKey ? { ...widgetProps, submitUrl: linkedSource?.saveUrl ?? '' } : widgetProps;
+    visual = <WidgetPreview kind={decoration.widgetKind} props={resolvedProps} live={live}
+      recordSelection={recordFlow ? { selectedId: recordFlow.selectedId, selected: recordFlow.selected, detailStatus: recordFlow.detailStatus } : undefined}/>;
   } else {
     visual = <div className="pa-studio-placeholder"><strong>{text(props.title, '内容区域')}</strong><small>{text(props.description, '可以继续完善内容')}</small></div>;
   }
