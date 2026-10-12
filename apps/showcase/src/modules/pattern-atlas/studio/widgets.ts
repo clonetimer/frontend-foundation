@@ -26,8 +26,8 @@ export const studioWidgetDefinitions = [
   { kind: 'slider', label: '滑块', icon: '━', group: '表单', defaults: { title: '进度调整', percent: 45 } },
   { kind: 'rate', label: '评分', icon: '★', group: '表单', defaults: { title: '满意度' } },
 
-  { kind: 'modal', label: '模态弹窗', icon: '▣', group: '反馈', defaults: { title: '操作确认', triggerText: '打开弹窗', description: '请确认后继续操作。', okText: '确认', cancelText: '取消', formFields: '', submitUrl: '' } },
-  { kind: 'drawer', label: '侧边抽屉', icon: '◩', group: '反馈', defaults: { title: '详情面板', triggerText: '查看详情', description: '这里展示当前记录详情。', placement: 'right', width: 420, formFields: '', submitUrl: '', okText: '保存', cancelText: '取消' } },
+  { kind: 'modal', label: '模态弹窗', icon: '▣', group: '反馈', defaults: { title: '操作确认', triggerText: '打开弹窗', description: '请确认后继续操作。', okText: '确认', cancelText: '取消', formFields: '', submitUrl: '', formMode: 'create', submitMethod: 'POST', sourceId: '' } },
+  { kind: 'drawer', label: '侧边抽屉', icon: '◩', group: '反馈', defaults: { title: '详情面板', triggerText: '查看详情', description: '这里展示当前记录详情。', placement: 'right', width: 420, formFields: '', submitUrl: '', formMode: 'create', submitMethod: 'POST', sourceId: '', okText: '保存', cancelText: '取消' } },
   { kind: 'popconfirm', label: '气泡确认', icon: '☷', group: '反馈', defaults: { title: '确认操作？', triggerText: '执行操作', description: '操作前请确认。', okText: '确认', cancelText: '取消' } },
   { kind: 'skeleton', label: '骨架屏', icon: '▒', group: '反馈', defaults: { title: '加载占位' } },
   { kind: 'empty', label: '空状态', icon: '□', group: '反馈', defaults: { title: '暂无内容', description: '创建数据后会显示在这里' } },
@@ -69,6 +69,14 @@ export function parseChartSeries(series: unknown, legacyValues: unknown): ChartS
 }
 
 /** Form declarations are bounded and declarative: key|label|text/email/number|required/optional. */
+export interface OverlayRecordSelection { selectedId: string; selected: Record<string, unknown> | null; detailStatus?: 'idle' | 'loading' | 'ready' | 'error' }
+export function overlaySubmitUrl(template: unknown, mode: 'create' | 'edit-selected', selectedId = ''): string | undefined {
+  if (typeof template !== 'string' || template.length > 500) return undefined;
+  if (mode === 'create') return !/[{}]/.test(template) ? safeWidgetImageUrl(template) : undefined;
+  if (!selectedId || selectedId.length > 120 || template.split('{id}').length !== 2) return undefined;
+  if (/[{}]/.test(template.replace('{id}', ''))) return undefined;
+  return safeWidgetImageUrl(template.replace('{id}', encodeURIComponent(selectedId)));
+}
 export interface OverlayFormField { key: string; label: string; type: 'text' | 'email' | 'number'; required: boolean }
 export function parseOverlayFormFields(value: unknown): OverlayFormField[] {
   if (typeof value !== 'string' || value.length > 1600 || !value.trim()) return [];
@@ -129,6 +137,13 @@ export function safeWidgetImageUrl(url: unknown): string | undefined {
 }
 
 /** Normalize only declarative presentation values. Never put these in Foundation Blueprint props. */
+function normalizedOverlayOption(kind: StudioWidgetKind, key: string, value: unknown): string | undefined {
+  if (kind !== 'modal' && kind !== 'drawer') return undefined;
+  if (key === 'formMode') return value === 'edit-selected' ? 'edit-selected' : 'create';
+  if (key === 'submitMethod') return value === 'PATCH' ? 'PATCH' : 'POST';
+  if (key === 'sourceId') return typeof value === 'string' && /^[a-z][a-z0-9-]{0,35}$/.test(value) ? value : '';
+  return undefined;
+}
 export function normalizeWidgetProps(kind: StudioWidgetKind, value: unknown): Record<string, unknown> {
   const definition = widgetDefinition(kind);
   const defaults: Record<string, unknown> = { ...definition.defaults };
@@ -136,7 +151,10 @@ export function normalizeWidgetProps(kind: StudioWidgetKind, value: unknown): Re
   const source = value as Record<string, unknown>;
   for (const [key, initial] of Object.entries(defaults)) {
     const candidate = Object.prototype.hasOwnProperty.call(source, key) ? source[key] : undefined;
-    if (typeof initial === 'string' && typeof candidate === 'string') defaults[key] = candidate.slice(0, ['src', 'statusUrl', 'uploadUrl', 'dataUrl', 'submitUrl'].includes(key) ? 500 : key === 'formFields' ? 1600 : key === 'series' ? 1200 : 240);
+    if (typeof initial === 'string' && typeof candidate === 'string') {
+      const overlayOption = normalizedOverlayOption(kind, key, candidate);
+      defaults[key] = overlayOption ?? candidate.slice(0, ['src', 'statusUrl', 'uploadUrl', 'dataUrl', 'submitUrl'].includes(key) ? 500 : key === 'formFields' ? 1600 : key === 'series' ? 1200 : 240);
+    }
     if (typeof initial === 'number' && typeof candidate === 'number' && Number.isFinite(candidate)) defaults[key] = Math.round(Math.max(key === 'pollMs' ? 1500 : key === 'maxSizeMb' ? 1 : key === 'width' ? 280 : key === 'refreshMs' ? (candidate > 0 ? 5000 : 0) : 0, Math.min(key === 'pollMs' ? 30000 : key === 'refreshMs' ? 60000 : key === 'pageSize' ? 20 : key === 'maxSizeMb' ? 30 : key === 'width' ? 800 : 100, candidate)));
     if (Array.isArray(initial) && Array.isArray(candidate)) defaults[key] = candidate.filter((item): item is string => typeof item === 'string').slice(0,30).map((item) => item.slice(0,160));
   }
