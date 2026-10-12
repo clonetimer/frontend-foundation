@@ -31,12 +31,15 @@ export async function runExportedBrowserSmoke(directory) {
   let chrome;
   let socket;
   const posts = [];
+  const savedRecords = [];
+  let listReads = 0;
   const api = createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:4189');
     response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
     if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
+    if (request.method === 'GET' && request.url === '/api/list') { listReads += 1; response.writeHead(200); response.end(JSON.stringify({data:{items:savedRecords}})); return; }
     if (request.method !== 'POST') { response.writeHead(405); response.end('{}'); return; }
     let body = '';
     for await (const chunk of request) {
@@ -45,7 +48,9 @@ export async function runExportedBrowserSmoke(directory) {
     }
     if (request.url === '/api/fail') { response.writeHead(500); response.end('{"error":"intentional test failure"}'); return; }
     if (request.url !== '/api/save') { response.writeHead(404); response.end('{}'); return; }
-    posts.push(JSON.parse(body));
+    const posted = JSON.parse(body);
+    posts.push(posted);
+    savedRecords.push({ id:'R-' + (savedRecords.length + 1), name: posted.name, email: posted.email, amount: posted.amount });
     response.writeHead(201); response.end('{"saved":true}');
   });
   const errors = [];
@@ -146,6 +151,8 @@ export async function runExportedBrowserSmoke(directory) {
     assert(await evaluate("(() => { const button = document.querySelector('.ant-modal-footer button.ant-btn-primary'); if (!button) return false; button.click(); return true; })()"), 'Business modal submit missing');
     await until(() => posts.length === 1, 'Actual form POST');
     assert.deepEqual(posts[0], { name: '张三', email: 'valid@example.org', amount: 12.5 }, 'Incorrect JSON POST payload');
+    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('张三')"), 'Actual record-list GET after business POST');
+    assert(listReads >= 2, 'POST success did not cause a real list GET refresh');
     await until(() => evaluate("document.documentElement.dataset.recordRefresh === 'done'"), 'Record refresh notification');
     await until(() => evaluate("document.body.textContent.includes('保存成功，记录已刷新')"), 'Business form success feedback');
 
@@ -164,7 +171,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
