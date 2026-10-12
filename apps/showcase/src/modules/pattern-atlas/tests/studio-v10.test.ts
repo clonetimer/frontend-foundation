@@ -44,7 +44,7 @@ describe('phase 10 designer usability and scalable widget library', () => {
   });
   it('catalog has working Studio-backed defaults for every enhanced widget', () => {
     const kinds = new Set(paletteGroups.flatMap((group) => group.nodes.map((item) => item.type)));
-    expect(kinds.size).toBe(38);
+    expect(kinds).toEqual(new Set(['records', 'stack', 'grid', 'split', 'tabs', 'panel', 'text', 'metric', 'button', 'input', 'select', 'placeholder', ...studioWidgetDefinitions.map((entry) => entry.kind)]));
     for (const entry of studioWidgetDefinitions) {
       expect(kinds.has(entry.kind)).toBe(true);
       expect(createNode(entry.kind, 'widget1').type).toBe('placeholder');
