@@ -57,6 +57,12 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
   const [direction, setDirection] = useState<'' | 'asc' | 'desc'>('');
   const serverPaging = source?.paginationMode === 'server';
   const pageSize = source?.pageSize ?? 8;
+  useEffect(() => {
+    if (!live || !source?.url) return;
+    const refresh = () => setRevision((value) => value + 1);
+    window.addEventListener('atlas:records-refresh', refresh);
+    return () => window.removeEventListener('atlas:records-refresh', refresh);
+  }, [live, source?.url]);
   // Switching to another page or endpoint starts a fresh query, without retaining the prior record.
   useEffect(() => { setPage(1); setSearch(''); setSearchInput(''); setFilter(''); setDirection(''); setSelectedId(''); setSaveStatus('idle'); }, [pageId, source?.url]);
   useEffect(() => {
