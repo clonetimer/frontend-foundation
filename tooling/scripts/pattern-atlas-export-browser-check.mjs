@@ -6,6 +6,7 @@
  * Uses Node's built-in WebSocket client and a disposable Chrome profile.
  */
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -29,8 +30,27 @@ export async function runExportedBrowserSmoke(directory) {
   const vite = spawn(process.execPath, [join(directory, 'node_modules', 'vite', 'bin', 'vite.js'), 'preview', '--host', '127.0.0.1', '--port', '4189', '--strictPort'], { cwd: directory, stdio: 'ignore' });
   let chrome;
   let socket;
+  const posts = [];
+  const api = createServer(async (request, response) => {
+    response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:4189');
+    response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
+    if (request.method !== 'POST') { response.writeHead(405); response.end('{}'); return; }
+    let body = '';
+    for await (const chunk of request) {
+      body += String(chunk);
+      if (body.length > 4096) { response.writeHead(413); response.end('{}'); return; }
+    }
+    if (request.url === '/api/fail') { response.writeHead(500); response.end('{"error":"intentional test failure"}'); return; }
+    if (request.url !== '/api/save') { response.writeHead(404); response.end('{}'); return; }
+    posts.push(JSON.parse(body));
+    response.writeHead(201); response.end('{"saved":true}');
+  });
   const errors = [];
   try {
+    await new Promise((resolve, reject) => { api.once('error', reject); api.listen(4198, '127.0.0.1', resolve); });
     await until(async () => (await fetch(root)).ok, 'Exported Vite preview');
     chrome = spawn(process.env.CHROMIUM_BIN || 'google-chrome', [
       '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
@@ -107,6 +127,36 @@ export async function runExportedBrowserSmoke(directory) {
     assert(popConfirmed, 'Popconfirm confirmation missing');
     await until(() => evaluate("document.body.textContent.includes('操作已确认（未关联后端）')"), 'Popconfirm feedback');
 
+
+    // Exercise the real POST operation and schema validation in the exported React app.
+    await evaluate("window.addEventListener('atlas:records-refresh', () => { document.documentElement.dataset.recordRefresh = 'done'; })");
+    const fill = async (scope, name, value) => {
+      const focus = await evaluate("(() => { const field = [...document.querySelectorAll(" + JSON.stringify(scope + ' input') + ")].find(el => el.getAttribute('aria-label') === " + JSON.stringify(name) + "); if (!field) return false; field.focus(); return true; })()");
+      assert(focus, 'Missing form input: ' + name);
+      await call('Input.insertText', { text: value });
+    };
+    assert(await click('填写新增记录'), 'Business modal trigger missing');
+    await until(() => evaluate("document.querySelector('.ant-modal')?.textContent?.includes('新增记录表单')"), 'Business modal open');
+    assert(await evaluate("(() => { const button = document.querySelector('.ant-modal-footer button.ant-btn-primary'); if (!button) return false; button.click(); return true; })()"), 'Business modal save button missing');
+    await until(() => evaluate("document.querySelector('.ant-modal [role=alert]')?.textContent?.includes('此项必填')"), 'Business modal required validation');
+    assert.equal(posts.length, 0, 'Invalid form unexpectedly sent a POST');
+    await fill('.ant-modal', '姓名', '张三');
+    await fill('.ant-modal', '邮箱', 'valid@example.org');
+    await fill('.ant-modal', '金额', '12.5');
+    assert(await evaluate("(() => { const button = document.querySelector('.ant-modal-footer button.ant-btn-primary'); if (!button) return false; button.click(); return true; })()"), 'Business modal submit missing');
+    await until(() => posts.length === 1, 'Actual form POST');
+    assert.deepEqual(posts[0], { name: '张三', email: 'valid@example.org', amount: 12.5 }, 'Incorrect JSON POST payload');
+    await until(() => evaluate("document.documentElement.dataset.recordRefresh === 'done'"), 'Record refresh notification');
+    await until(() => evaluate("document.body.textContent.includes('保存成功，记录已刷新')"), 'Business form success feedback');
+
+    assert(await click('打开错误示例'), 'Business drawer trigger missing');
+    await until(() => evaluate("document.querySelector('.ant-drawer-body')?.textContent?.includes('失败反馈表单') || document.querySelector('.ant-drawer-body')?.textContent?.includes('模拟服务端失败')"), 'Business drawer open');
+    await fill('.ant-drawer-body', '姓名', '测试失败');
+    assert(await evaluate("(() => { const button = document.querySelector('.ant-drawer-footer button.ant-btn-primary'); if (!button) return false; button.click(); return true; })()"), 'Business drawer submit missing');
+    await until(() => evaluate("document.querySelector('.ant-drawer-body [role=alert]')?.textContent?.includes('HTTP 500')"), 'Business drawer HTTP error');
+    assert(await evaluate("Boolean(document.querySelector('.ant-drawer-body input[aria-label=姓名]'))"), 'Failed form unexpectedly closed or lost draft');
+    await evaluate("document.querySelector('.ant-drawer-footer button.ant-btn-default')?.click()");
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -114,11 +164,12 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
     vite.kill();
+    await new Promise((resolve) => api.close(resolve));
     await pause(450);
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 200 }); }
     catch (error) { console.warn('Could not fully delete disposable Chrome profile:', String(error)); }
