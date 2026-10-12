@@ -25,6 +25,10 @@ export const studioWidgetDefinitions = [
   { kind: 'date', label: '日期选择', icon: '▦', group: '表单', defaults: { title: '截止日期' } },
   { kind: 'slider', label: '滑块', icon: '━', group: '表单', defaults: { title: '进度调整', percent: 45 } },
   { kind: 'rate', label: '评分', icon: '★', group: '表单', defaults: { title: '满意度' } },
+
+  { kind: 'modal', label: '模态弹窗', icon: '▣', group: '反馈', defaults: { title: '操作确认', triggerText: '打开弹窗', description: '请确认后继续操作。', okText: '确认', cancelText: '取消' } },
+  { kind: 'drawer', label: '侧边抽屉', icon: '◩', group: '反馈', defaults: { title: '详情面板', triggerText: '查看详情', description: '这里展示当前记录详情。', placement: 'right', width: 420 } },
+  { kind: 'popconfirm', label: '气泡确认', icon: '☷', group: '反馈', defaults: { title: '确认操作？', triggerText: '执行操作', description: '操作前请确认。', okText: '确认', cancelText: '取消' } },
   { kind: 'skeleton', label: '骨架屏', icon: '▒', group: '反馈', defaults: { title: '加载占位' } },
   { kind: 'empty', label: '空状态', icon: '□', group: '反馈', defaults: { title: '暂无内容', description: '创建数据后会显示在这里' } },
   { kind: 'collapse', label: '折叠面板', icon: '▤', group: '反馈', defaults: { title: '更多信息', text: '展开后显示的内容' } },
@@ -33,7 +37,7 @@ export const studioWidgetDefinitions = [
   { kind: 'file-list', label: '文件列表', icon: '▤', group: '文件', defaults: { title: '附件清单', items: ['设计方案.pdf|1.2 MB', '界面截图.png|386 KB'] } },
   { kind: 'async-task', label: '异步任务', icon: '◷', group: '任务', defaults: { title: '任务进度', statusUrl: '', statusPath: 'data.status', percentPath: 'data.progress', pollMs: 3000 } },
   { kind: 'async-log', label: '执行日志', icon: '≡', group: '任务', defaults: { title: '执行记录', items: ['提交任务|已完成', '读取数据|进行中', '生成结果|等待'] } },
-  { kind: 'line-chart', label: '折线趋势', icon: '⌁', group: '可视化', defaults: { title: '近期趋势', items: ['周一', '周二', '周三', '周四', '周五'], values: '24,42,37,69,53' } },
+  { kind: 'line-chart', label: '多序列折线', icon: '⌁', group: '可视化', defaults: { title: '近期趋势', items: ['周一', '周二', '周三', '周四', '周五'], values: '24,42,37,69,53', series: '业务量:24,42,37,69,53;参考值:31,35,40,45,50', unit: '' } },
   { kind: 'donut-chart', label: '环形占比', icon: '◕', group: '可视化', defaults: { title: '任务完成率', value: '64', suffix: '%' } },
   { kind: 'heatmap', label: '热力矩阵', icon: '▦', group: '可视化', defaults: { title: '活跃度热力图', values: '12,36,75,20,45,89,55,73,21,66,34,87,45,62,29,94' } }
 ] as const;
@@ -46,6 +50,24 @@ export function widgetItems(value: unknown): string[] {
 export function widgetValues(value: unknown): number[] {
   return typeof value === 'string' ? value.split(',').slice(0, 16).map((item) => Number(item.trim())).map((value) => Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0) : [];
 }
+/** Measurements are not percentages: signed values and numbers >100 are preserved. */
+export interface ChartSeries { name: string; values: number[] }
+export function parseChartSeries(series: unknown, legacyValues: unknown): ChartSeries[] {
+  const parseNumbers = (source: string): number[] => source.split(',').slice(0, 32)
+    .map((part) => Number(part.trim())).filter((num) => Number.isFinite(num) && Math.abs(num) <= 1e12);
+  if (typeof series === 'string' && series.trim()) {
+    return series.split(';').slice(0, 6).flatMap((segment, index) => {
+      const separator = segment.indexOf(':');
+      if (separator < 1) return [];
+      const name = segment.slice(0, separator).trim().slice(0, 50) || '序列 ' + (index + 1);
+      const values = parseNumbers(segment.slice(separator + 1));
+      return values.length ? [{ name, values }] : [];
+    });
+  }
+  const values = typeof legacyValues === 'string' ? parseNumbers(legacyValues) : [];
+  return values.length ? [{ name: '数值', values }] : [];
+}
+
 export function safeWidgetImageUrl(url: unknown): string | undefined {
   if (typeof url !== 'string' || url.length > 500 || (/[\\\s]/.test(url) || Array.from(url).some((char) => char.charCodeAt(0) < 32)) || url.startsWith('//')) return undefined;
   if (url.startsWith('/') && !url.startsWith('//')) return url;
@@ -60,8 +82,8 @@ export function normalizeWidgetProps(kind: StudioWidgetKind, value: unknown): Re
   const source = value as Record<string, unknown>;
   for (const [key, initial] of Object.entries(defaults)) {
     const candidate = Object.prototype.hasOwnProperty.call(source, key) ? source[key] : undefined;
-    if (typeof initial === 'string' && typeof candidate === 'string') defaults[key] = candidate.slice(0, ['src', 'statusUrl', 'uploadUrl'].includes(key) ? 500 : 240);
-    if (typeof initial === 'number' && typeof candidate === 'number' && Number.isFinite(candidate)) defaults[key] = Math.round(Math.max(key === 'pollMs' ? 1500 : key === 'maxSizeMb' ? 1 : 0, Math.min(key === 'pollMs' ? 30000 : key === 'pageSize' ? 20 : key === 'maxSizeMb' ? 30 : 100, candidate)));
+    if (typeof initial === 'string' && typeof candidate === 'string') defaults[key] = candidate.slice(0, ['src', 'statusUrl', 'uploadUrl'].includes(key) ? 500 : key === 'series' ? 1200 : 240);
+    if (typeof initial === 'number' && typeof candidate === 'number' && Number.isFinite(candidate)) defaults[key] = Math.round(Math.max(key === 'pollMs' ? 1500 : key === 'maxSizeMb' ? 1 : key === 'width' ? 280 : 0, Math.min(key === 'pollMs' ? 30000 : key === 'pageSize' ? 20 : key === 'maxSizeMb' ? 30 : key === 'width' ? 800 : 100, candidate)));
     if (Array.isArray(initial) && Array.isArray(candidate)) defaults[key] = candidate.filter((item): item is string => typeof item === 'string').slice(0,30).map((item) => item.slice(0,160));
   }
   return defaults;

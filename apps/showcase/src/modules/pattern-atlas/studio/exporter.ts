@@ -10,7 +10,10 @@ import { exportedWorkflowRuntime } from './exported-workflows';
 import { studioWidgetStyles } from './widget-styles';
 import { findRecordRules } from './record-bindings';
 
-function json(value: unknown): string { return JSON.stringify(value); }
+function json(value: unknown): string {
+  // Preserve generated JSX expression boundaries for untrusted user-authored text.
+  return JSON.stringify(value ?? null).replace(/[<>&\u2028\u2029]/g, (char) => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0'));
+}
 function stringValue(value: unknown, fallback = ''): string { return typeof value === 'string' || typeof value === 'number' ? String(value) : fallback; }
 function num(value: unknown, fallback: number): number { return typeof value === 'number' && Number.isFinite(value) ? value : fallback; }
 const buttonTypes = new Set(['primary', 'default', 'dashed', 'text', 'link']);
@@ -94,7 +97,7 @@ function renderNode(node: CompositionNode, decoration: Record<string, StudioDeco
   const geometry = meta.geometry;
   const geometryStyle: Record<string, unknown> = { ...(geometry?.width ? { width: geometry.width, ...(geometry.mode === 'absolute' ? {} : { maxWidth: '100%' }) } : {}), ...(geometry?.height ? { height: geometry.height, minHeight: geometry.height } : {}), ...(geometry?.mode === 'absolute' ? { position: 'absolute', left: geometry.x ?? 0, top: geometry.y ?? 0 } : geometry?.x || geometry?.y ? { translate: `${geometry.x ?? 0}px ${geometry.y ?? 0}px` } : {}) };
   const geometryAttr = Object.keys(geometryStyle).length ? ` style={${json(geometryStyle)}}` : '';
-  const currentPattern = meta.pattern ?? 'default';
+  const currentPattern = ['default', 'bento', 'kanban', 'timeline', 'accordion'].includes(meta.pattern ?? '') ? meta.pattern : 'default';
   const clickAction = `handlePress(${json(node.id)},'toggle','','',${json(currentEffect)})`;
   const clickAttributes = node.kind === 'widget' && node.type !== 'button' && clickableEffects.has(currentEffect)
     ? ` role="button" tabIndex={0} aria-label={${json(nodeLabel(node))}} aria-pressed={Boolean(pressed[${json(node.id)}])} onClick={(event) => { if ((event.target as HTMLElement).closest('button,input,textarea,select,[role=combobox]')) return; ${clickAction}; }} onKeyDown={(event) => { if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) { event.preventDefault(); ${clickAction}; } }}`

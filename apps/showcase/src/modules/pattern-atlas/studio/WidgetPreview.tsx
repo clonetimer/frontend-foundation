@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button } from 'antd';
-import { safeWidgetImageUrl, widgetItems, widgetValues, type StudioWidgetKind } from './widgets';
+import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
+import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, type ChartSeries, type StudioWidgetKind } from './widgets';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
 const rows = (value: unknown) => widgetItems(value).map((item, index) => { const [name, status = '—'] = item.split('|'); return { key: index, name, status }; });
@@ -80,10 +80,48 @@ function AsyncTaskWidget({ props, live }: { props: Record<string, unknown>; live
     {url ? <Button size="small" disabled={!live} onClick={() => running ? pause() : begin()}>{running ? '停止查询' : '查询任务状态'}</Button> : <small>设置状态 GET 地址后，可在体验模式查询后台任务</small>}
   </div>;
 }
-function LineWidget({ items, values, title }: { items: string[]; values: number[]; title: string }) {
-  const sample = values.length ? values : [0];
-  const points = sample.map((v, i) => `${12 + (i * 276) / Math.max(1, sample.length - 1)},${104 - v * .9}`).join(' ');
-  return <div className="pa-studio-rich"><strong>{title}</strong><svg role="img" aria-label={`${title}：${sample.join('、')}`} viewBox="0 0 300 132" className="pa-studio-line-visual"><line x1="12" y1="112" x2="288" y2="112" stroke="currentColor" strokeOpacity=".18"/><polyline points={points} fill="none" stroke="#168765" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>{sample.map((v,i) => <circle key={i} cx={12+(i*276)/Math.max(1,sample.length-1)} cy={104-v*.9} r="3.5" fill="#168765"/>)}<text x="12" y="130" fontSize="9" fill="currentColor">{items[0] ?? ''}</text><text x="288" y="130" textAnchor="end" fontSize="9" fill="currentColor">{items[sample.length-1] ?? ''}</text></svg></div>;
+
+/** Signed number axis, multiple series, legend and native SVG point tooltips. */
+function LineWidget({ items, series, title, unit }: { items: string[]; series: ChartSeries[]; title: string; unit: string }) {
+  const colors = ['#168765', '#5277d2', '#d4773d', '#a261b5', '#be5365', '#4d9fa0'];
+  const all = series.flatMap((entry) => entry.values);
+  if (!all.length) return <div className="pa-studio-rich"><strong>{title}</strong><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无曲线数据"/></div>;
+  const low = Math.min(...all), high = Math.max(...all);
+  const margin = (high - low || Math.max(1, Math.abs(high) * .2)) * .1;
+  const minimum = low - margin, maximum = high + margin;
+  const count = Math.max(...series.map((entry) => entry.values.length));
+  const x = (index: number) => 52 + 316 * index / Math.max(1, count - 1);
+  const y = (value: number) => 18 + (maximum - value) / (maximum - minimum) * 144;
+  const ticks = Array.from({ length: 5 }, (_, index) => minimum + (maximum - minimum) * index / 4);
+  const fmt = (value: number) => Number(value.toPrecision(5)).toLocaleString();
+  const xIndices = Array.from({ length: Math.min(count, 7) }, (_, i) => Math.round(i * (count - 1) / Math.max(1, Math.min(count, 7) - 1)));
+  return <div className="pa-studio-rich pa-studio-plot"><strong>{title}</strong>
+    <svg role="img" aria-label={title + '：' + series.length + ' 组曲线，数值 ' + fmt(low) + ' 至 ' + fmt(high) + unit} viewBox="0 0 396 200" className="pa-studio-line-visual">
+      {ticks.map((tick, i) => <g key={i}><line x1="52" x2="368" y1={y(tick)} y2={y(tick)} stroke="currentColor" strokeOpacity=".12"/><text x="45" y={y(tick)+4} textAnchor="end" fontSize="10" fill="currentColor">{fmt(tick)}</text></g>)}
+      {series.map((entry, i) => <g key={i}>
+        <polyline points={entry.values.map((value, j) => String(x(j)) + ',' + String(y(value))).join(' ')} fill="none" stroke={colors[i % colors.length]} strokeWidth="2.5" strokeLinecap="round"/>
+        {entry.values.map((value, j) => <circle key={j} cx={x(j)} cy={y(value)} r="3.5" fill={colors[i % colors.length]}><title>{entry.name + ' · ' + (items[j] ?? String(j+1)) + ': ' + fmt(value) + unit}</title></circle>)}
+      </g>)}
+      <line x1="52" x2="368" y1="162" y2="162" stroke="currentColor" strokeOpacity=".5"/>
+      {xIndices.map((index) => <text key={index} x={x(index)} y="183" textAnchor="middle" fontSize="10" fill="currentColor">{(items[index] ?? String(index+1)).slice(0,8)}</text>)}
+    </svg>
+    <div className="pa-studio-plot-legend">{series.map((entry,i) => <span key={i}><i style={{backgroundColor:colors[i%colors.length]}}/>{entry.name}</span>)}</div>
+  </div>;
+}
+function OverlayWidget({ kind, props, live }: { kind: 'modal' | 'drawer' | 'popconfirm'; props: Record<string, unknown>; live: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [notify, context] = message.useMessage();
+  const title = label(props.title, '操作确认');
+  const description = label(props.description);
+  const ok = label(props.okText, '确认'), cancel = label(props.cancelText, '取消');
+  const trigger = <Button size="small" disabled={!live} onClick={() => setOpen(true)}>{label(props.triggerText, '打开')}</Button>;
+  const confirmed = () => { setOpen(false); void notify.success('操作已确认（未关联后端）'); };
+  return <div className="pa-studio-rich pa-studio-overlay"><strong>{title}</strong>{context}
+    {kind === 'popconfirm' ? <Popconfirm title={title} description={description} open={open} onConfirm={confirmed} onCancel={() => setOpen(false)} okText={ok} cancelText={cancel}>{trigger}</Popconfirm> : trigger}
+    {kind === 'modal' ? <Modal title={title} open={open} onOk={confirmed} onCancel={() => setOpen(false)} okText={ok} cancelText={cancel} destroyOnHidden>{description}</Modal> : null}
+    {kind === 'drawer' ? <Drawer title={title} open={open} onClose={() => setOpen(false)} placement={props.placement === 'left' ? 'left' : 'right'} width={Math.max(280, Math.min(800, Number(props.width) || 420))} destroyOnHidden>{description}</Drawer> : null}
+    <small>{live ? '可在体验模式操作；确认不会提交后端' : '切换到体验模式后可操作'}</small>
+  </div>;
 }
 /** Live Studio widgets are backed by the same source code as the standalone React export. */
 export function WidgetPreview({ kind, props, live }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean }) {
@@ -115,6 +153,9 @@ export function WidgetPreview({ kind, props, live }: { kind: StudioWidgetKind; p
     case 'date': return <label className="pa-studio-field"><small>{title}</small><DatePicker style={{ width: '100%' }} disabled={!live}/></label>;
     case 'slider': return <div className="pa-studio-rich"><strong>{title}</strong><Slider defaultValue={percent} disabled={!live}/></div>;
     case 'rate': return <Space><span>{title}</span><Rate disabled={!live}/></Space>;
+    case 'modal': return <OverlayWidget kind="modal" props={props} live={live}/>;
+    case 'drawer': return <OverlayWidget kind="drawer" props={props} live={live}/>;
+    case 'popconfirm': return <OverlayWidget kind="popconfirm" props={props} live={live}/>;
     case 'skeleton': return <div className="pa-studio-rich"><strong>{title}</strong><Skeleton active paragraph={{ rows: 2 }} title={{ width: '60%' }}/></div>;
     case 'empty': return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={label(props.description, title)}/>;
     case 'collapse': return <Collapse items={[{ key: 'one', label: title, children: <p>{label(props.text, '展开内容')}</p> }]}/>;
@@ -123,7 +164,7 @@ export function WidgetPreview({ kind, props, live }: { kind: StudioWidgetKind; p
     case 'file-list': return <div className="pa-studio-rich"><strong>{title}</strong><div className="pa-studio-file-list">{rows(props.items).map((item) => <div key={item.key}><span>▤ {item.name}</span><small>{item.status}</small></div>)}</div></div>;
     case 'async-task': return <AsyncTaskWidget props={props} live={live}/>;
     case 'async-log': return <div className="pa-studio-rich"><strong>{title}</strong><ol className="pa-studio-async-log">{rows(props.items).map((item) => <li key={item.key}><span>{item.name}</span><Tag>{item.status}</Tag></li>)}</ol></div>;
-    case 'line-chart': return <LineWidget items={items} values={values} title={title}/>;
+    case 'line-chart': return <LineWidget items={items} series={parseChartSeries(props.series, props.values)} title={title} unit={label(props.unit)}/>;
     case 'donut-chart': { const share = Math.min(100, Math.max(0, Number(props.value) || 0)); return <div className="pa-studio-rich"><strong>{title}</strong><div className="pa-studio-donut" role="img" aria-label={`${title} ${share}%`} style={{ background: `conic-gradient(#16936f ${share}%, #e4eee8 ${share}% 100%)` }}><div><strong>{share}{label(props.suffix, '%')}</strong><small>当前占比</small></div></div></div>; }
     case 'heatmap': return <div className="pa-studio-rich"><strong>{title}</strong><div className="pa-studio-heatmap" role="img" aria-label={`${title}，${values.length} 个值`}>{values.map((value, index) => <span key={index} title={`第 ${index+1} 格：${value}`} style={{ background: `rgba(18,133,94,${(.12 + value * .008).toFixed(2)})` }}/>)}</div></div>;
   }
