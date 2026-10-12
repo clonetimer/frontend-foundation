@@ -151,7 +151,7 @@ function renderNode(node: CompositionNode, decoration: Record<string, StudioDeco
       inner = meta.recordField ? `<StudioRecordSelect field={${json(meta.recordField.field)}} label={${json(stringValue(props.label, '选择'))}} options={${json(options)}} disabled={${Boolean(props.disabled)}}/>` : `<div className="atlas-export-field"><label>{${json(stringValue(props.label, '选择'))}}</label><Select style={{width:'100%'}} options={${json(options)}} placeholder={${json(stringValue(props.placeholder))}} disabled={${Boolean(props.disabled)}}/></div>`;
       break;
     }
-    case 'placeholder': inner = meta.widgetKind ? `<WidgetPreview kind={${json(meta.widgetKind)}} props={${json(meta.widgetProps ?? {})}} live/>` : meta.recordList ? `<StudioRecordList title={${json(stringValue(props.title, '记录列表'))}}/>` : `<div className="atlas-export-placeholder"><strong>{${json(stringValue(props.title, '待填充内容'))}}</strong><small>{${json(stringValue(props.description, '继续加入业务组件'))}}</small></div>`; break;
+    case 'placeholder': inner = meta.widgetKind ? (meta.widgetKind === 'modal' || meta.widgetKind === 'drawer' ? `<StudioRecordWidget kind={${json(meta.widgetKind)}} props={${json(meta.widgetProps ?? {})}}/>` : `<WidgetPreview kind={${json(meta.widgetKind)}} props={${json(meta.widgetProps ?? {})}} live/>`) : meta.recordList ? `<StudioRecordList title={${json(stringValue(props.title, '记录列表'))}}/>` : `<div className="atlas-export-placeholder"><strong>{${json(stringValue(props.title, '待填充内容'))}}</strong><small>{${json(stringValue(props.description, '继续加入业务组件'))}}</small></div>`; break;
     default: inner = `<div className="atlas-export-placeholder"><strong>{${json(stringValue(props.title, '待填充内容'))}}</strong><small>{${json(stringValue(props.description, '继续加入业务组件'))}}</small></div>`;
   }
   return wrapper(inner);
@@ -180,6 +180,15 @@ export function generateReactPage(document: StudioDocument, pageId: string): str
   // Resolve shared-source references when generating standalone code. The original
   // Studio file retains references so that editing one source updates every binding.
   const exportDecorations: Record<string, StudioDecoration> = Object.fromEntries(Object.entries(document.decorations).map(([key, value]) => {
+    if (value.widgetKind === 'modal' || value.widgetKind === 'drawer') {
+      const props = value.widgetProps ?? {};
+      const sourceId = typeof props.sourceId === 'string' ? props.sourceId : '';
+      if (!sourceId) return [key, value];
+      const source = document.dataSources.find((entry) => entry.id === sourceId);
+      const { sourceId: _linked, ...rest } = props;
+      void _linked;
+      return [key, { ...value, widgetProps: { ...rest, submitUrl: source?.saveUrl ?? '' } }];
+    }
     if (!value.recordSubmit) return [key, value];
     const resolved = resolveRecordSubmit(value.recordSubmit, document.dataSources);
     if (!resolved) return [key, value];
@@ -197,7 +206,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } fr
 import { createPortal } from 'react-dom';
 import { Button, Input, Select, Tabs, message } from 'antd';
 import { StudioRemoteValue, sendStudioPost, type StudioApiBinding } from ${json('../studio-api')};
-import { StudioRecordProvider, StudioRecordList, StudioRecordFieldText, StudioRecordInput, StudioRecordSelect, StudioRecordSave, StudioWorkflowButton } from ${json('../studio-records')};
+import { StudioRecordProvider, StudioRecordWidget, StudioRecordList, StudioRecordFieldText, StudioRecordInput, StudioRecordSelect, StudioRecordSave, StudioWorkflowButton } from ${json('../studio-records')};
 import { WidgetPreview } from ${json('../studio-widget-preview')};
 import '../studio-effects.css';
 
