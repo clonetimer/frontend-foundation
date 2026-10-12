@@ -2,7 +2,7 @@
 export const exportedRecordRuntime = String.raw`import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Button, Input, Modal, Popconfirm, Select, message } from 'antd';
 import { appendWorkflowTrace, dispatchWorkflowComponentEvent, runStudioWorkflow, type StudioWorkflow, type WorkflowTrace } from './studio-workflows';
-import { WidgetPreview } from './studio-widget-preview';
+import { WidgetPreview } from ${JSON.stringify('./studio-widget-preview')};
 import type { StudioWidgetKind } from './widgets';
 
 export interface FieldMap { field: string; responsePath: string; saveField: string }
