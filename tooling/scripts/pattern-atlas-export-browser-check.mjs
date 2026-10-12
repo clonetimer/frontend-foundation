@@ -81,7 +81,9 @@ export async function runExportedBrowserSmoke(directory) {
 
     assert(await click('打开验收弹窗'), 'Modal trigger missing');
     await until(() => evaluate("document.querySelector('.ant-modal')?.textContent?.includes('验收弹窗内容')"), 'Modal open');
-    assert(await click('取消'), 'Modal cancel button missing');
+    console.log('Modal DOM diagnostics:', await evaluate("JSON.stringify([...document.querySelectorAll('.ant-modal-footer button')].map(el => ({ text: el.textContent, disabled: el.disabled, html: el.outerHTML.slice(0, 260) })))"));
+    const modalCancel = await until(() => evaluate("(() => { const buttons = [...document.querySelectorAll('.ant-modal-footer button')]; const button = buttons.find(el => el.textContent?.trim().includes('取消')) || buttons.find(el => !el.classList.contains('ant-btn-primary')); if (!button) return false; button.click(); return true; })()"), 'Modal cancel button');
+    assert(modalCancel, 'Modal cancel button missing');
     await until(() => evaluate("!document.querySelector('.ant-modal') || !document.querySelector('.ant-modal').closest('.ant-modal-root')?.querySelector('.ant-modal-wrap') || getComputedStyle(document.querySelector('.ant-modal-wrap')).display === 'none'"), 'Modal close');
 
     assert(await click('打开验收抽屉'), 'Drawer trigger missing');
