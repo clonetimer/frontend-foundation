@@ -143,7 +143,7 @@ export function interpolateWorkflowText(input: string, context: Pick<WorkflowCon
   if (containsUnsafeTemplate(input)) throw new Error('变量写法无效，请使用 {{selectedId}}、{{draft.title}} 或 {{results.step-2.data.id}}。');
   return input.replace(variableReference, (_, source: string) => {
     const value = workflowVariable(source, context, results);
-    if (value === undefined || value === null) throw new Error('工作流变量尚无值。');
+    if (value === undefined || value === null) throw new Error(source === 'selectedId' ? '请先选择记录。' : '工作流变量尚无值。');
     if (forUrl && typeof value === 'object') throw new Error('URL 变量必须为文本或数字。');
     return forUrl ? encodeURIComponent(toText(value)) : toText(value);
   });
