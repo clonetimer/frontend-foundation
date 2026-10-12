@@ -81,7 +81,7 @@ export function parseOverlayFormFields(value: unknown): OverlayFormField[] {
     if (pieces.length !== 4) return [];
     const [key, label, type, required] = pieces;
     if (!key || !/^[a-zA-Z][a-zA-Z\d_]{0,39}$/.test(key) || ['__proto__', 'prototype', 'constructor'].includes(key) || seen.has(key)) return [];
-    if (!label || label.length > 48 || !['text', 'email', 'number'].includes(type) || !['required', 'optional'].includes(required)) return [];
+    if (!label || label.length > 48 || !['text', 'email', 'number'].includes(type ?? '') || !['required', 'optional'].includes(required ?? '')) return [];
     seen.add(key);
     fields.push({ key, label, type: type as OverlayFormField['type'], required: required === 'required' });
   }
