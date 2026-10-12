@@ -231,7 +231,7 @@ function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' |
     </label>)}
     {!fields.length ? <small role="alert">字段配置无效：格式为 key|标签|text/email/number|required/optional，每行一个</small> : null}
     {submitError ? <small role="alert">{submitError}</small> : null}
-    {!url ? <small>编辑模式请设置含 {id} 的保存地址；新增模式设置普通地址</small> : null}
+    {!url ? <small>编辑模式请设置含 {'{id}'} 的保存地址；新增模式设置普通地址</small> : null}
   </div> : description;
   const actions = hasForm ? <Space><Button disabled={busy} onClick={close}>{cancel}</Button><Button type="primary" loading={busy} disabled={!live || !fields.length} onClick={() => { void submit(); }}>{ok}</Button></Space> : undefined;
   return <div className="pa-studio-rich pa-studio-overlay"><strong>{title}</strong>{context}
