@@ -2,6 +2,8 @@
 export const exportedRecordRuntime = String.raw`import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Button, Input, Modal, Popconfirm, Select, message } from 'antd';
 import { appendWorkflowTrace, dispatchWorkflowComponentEvent, runStudioWorkflow, type StudioWorkflow, type WorkflowTrace } from './studio-workflows';
+import { WidgetPreview } from './studio-widget-preview';
+import type { StudioWidgetKind } from './widgets';
 
 export interface FieldMap { field: string; responsePath: string; saveField: string }
 export interface RecordSource { url: string; itemsPath: string; idField: string; labelField: string; pageSize?: number; detailUrl?: string; detailPath?: string; paginationMode?: 'client' | 'server'; pageParam?: string; sizeParam?: string; searchParam?: string; totalPath?: string; fieldMappings?: FieldMap[]; filterField?: string; filterParam?: string; filterValues?: string[]; sortField?: string; sortParam?: string; sortDirectionParam?: string; createUrl?: string; deleteUrl?: string }
@@ -247,6 +249,13 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
     edit: (field, value) => { setDraft((old) => ({ ...old, [field]: value })); setSaveStatus('idle'); setErrors((old) => { const next = { ...old }; delete next[field]; return next; }); }, save }}>{children}</Context.Provider>;
 }
 function useRecord(): RecordContextValue { const value = useContext<RecordContextValue | null>(Context); if (!value) throw new Error('缺少记录数据容器'); return value; }
+/** Mounts overlays below the record provider, not above its context boundary. */
+export function StudioRecordWidget({ kind, props }: { kind: StudioWidgetKind; props: Record<string, unknown> }) {
+  const state = useRecord();
+  return <WidgetPreview kind={kind} props={props} live
+    recordSelection={{ selectedId: state.selectedId, selected: state.selected, detailStatus: state.detailStatus }}/>;
+}
+
 export function StudioRecordList({ title }: { title: string }) {
   const state = useRecord();
   const [createOpen, setCreateOpen] = useState(false);
