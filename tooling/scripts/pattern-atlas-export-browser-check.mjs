@@ -73,11 +73,21 @@ export async function runExportedBrowserSmoke(directory) {
     await call('Runtime.enable');
     await call('Page.navigate', { url: root + '/#/overview' });
     await until(() => evaluate("document.querySelector('main')?.textContent?.includes('验收多序列曲线')"), 'Exported React mount');
+    await until(() => evaluate("!!document.querySelector('[data-atlas-chart-source=remote]')"), 'Remote chart initial GET');
     const chart = await evaluate("(() => { const svg = [...document.querySelectorAll('svg[role=img]')].find(el => el.getAttribute('aria-label')?.includes('验收多序列曲线')); return svg ? { label: svg.getAttribute('aria-label'), paths: svg.querySelectorAll('polyline').length, points: svg.querySelectorAll('circle').length } : null; })()");
     assert(chart, 'Exported chart was not rendered');
-    assert(chart.label.includes('-20') && chart.label.includes('120'), 'Signed chart values lost');
+    assert(chart.label.includes('-35') && chart.label.includes('280'), 'Signed remote chart values lost');
     assert.equal(chart.paths, 2, 'Multi-series chart paths missing');
     assert(chart.points >= 6, 'Data point hover markers missing');
+    writeFileSync(join(directory, 'dist', 'chart-feed.json'), JSON.stringify({
+      data: { items: ['A', 'B', 'C'], series: [
+        { name:'温度', values:[-70, 30, 360] }, { name:'参考', values:[0, 15, 40] }
+      ] }
+    }), 'utf8');
+    const refresh = await evaluate("(() => { const root = document.querySelector('.pa-studio-chart-remote'); const button = [...(root?.querySelectorAll('button') || [])].find(el => el.textContent?.includes('刷新数据')); if (!button) return false; button.click(); return true; })()");
+    assert(refresh, 'Chart refresh control not available in standalone export');
+    await until(() => evaluate("(() => { const svg = document.querySelector('.pa-studio-chart-remote svg[role=img]'); const label = svg?.getAttribute('aria-label') || ''; return label.includes('-70') && label.includes('360'); })()"), 'Remote chart refresh GET');
+
 
     assert(await click('打开验收弹窗'), 'Modal trigger missing');
     await until(() => evaluate("document.querySelector('.ant-modal')?.textContent?.includes('验收弹窗内容')"), 'Modal open');
@@ -104,7 +114,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'modal cancel', 'drawer close', 'popconfirm confirm', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
