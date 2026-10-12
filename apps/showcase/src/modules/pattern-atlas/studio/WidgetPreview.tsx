@@ -156,7 +156,7 @@ function RemoteLineWidget({ props, live }: { props: Record<string, unknown>; liv
     </div> : null}
   </div>;
 }
-function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' | 'drawer' | 'popconfirm'; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection }) {
+function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' | 'drawer' | 'popconfirm'; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState('');
   const editMode = props.formMode === 'edit-selected' && kind !== 'popconfirm';
@@ -242,7 +242,7 @@ function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' |
   </div>;
 }
 /** Live Studio widgets are backed by the same source code as the standalone React export. */
-export function WidgetPreview({ kind, props, live, recordSelection }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection }) {
+export function WidgetPreview({ kind, props, live, recordSelection }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined }) {
   const title = label(props.title, '组件');
   const items = widgetItems(props.items);
   const values = widgetValues(props.values);
