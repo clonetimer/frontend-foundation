@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { addLinkedRecordExample } from '../studio/record-template';
-import { createNode, createStudioDocument, insertNode, parseStudioFile, removeStudioPage, serializeStudioDocument, setDecoration, insertKinds } from '../studio/model';
+import { createNode, createStudioDocument, insertNode, parseStudioFile, serializeStudioDocument, setDecoration, insertKinds } from '../studio/model';
 import { defaultWorkflowStep, isWorkflowUrl, normalizeStudioWorkflow, runStudioWorkflow, studioWorkflowRequest, type StudioWorkflow } from '../studio/studio-workflows';
 import { normalizeWidgetProps, studioWidgetKinds } from '../studio/widgets';
 import { exportedWidgetCatalog, exportedWidgetPreview } from '../studio/exported-widgets';

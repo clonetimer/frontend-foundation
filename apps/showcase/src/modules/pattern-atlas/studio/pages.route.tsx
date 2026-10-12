@@ -444,7 +444,7 @@ export function Component() {
       <SettingSelect title="动作" value={item.type} options={actionTypes} onChange={(type) => update(entries.map((old,i)=>i===childIndex ? defaultWorkflowStep(type as WorkflowStepType,item.id) as WorkflowActionStep : old))}/>
       {actionFields(item,(next) => update(entries.map((old,i)=>i===childIndex?next:old)))}
     </div>)}
-    <label className="pa-studio-setting"><span>追加{label}的动作（最多 6 步）</span><Select value={null} placeholder="选择动作" options={actionTypes} style={{width:'100%'}} disabled={entries.length>=6} onChange={(type) => {
+    <label className="pa-studio-setting"><span>追加{label}的动作（最多 6 步）</span><Select<WorkflowStepType> value={undefined} placeholder="选择动作" options={actionTypes} style={{width:'100%'}} disabled={entries.length>=6} onChange={(type) => {
       let counter = entries.length+1; while(entries.some((item)=>item.id===`${step.id}-${side}-${counter}`)) counter++;
       update([...entries,defaultWorkflowStep(type as WorkflowStepType,`${step.id}-${side}-${counter}`) as WorkflowActionStep]);
     }}/></label></div>;
@@ -472,7 +472,7 @@ export function Component() {
       </> : actionFields(step,(next)=>changeWorkflowStep(index,next))}
       </div>
     </div>)}
-    <label className="pa-studio-setting"><span>追加步骤（每个按钮最多 12 步）</span><Select placeholder="选择动作" value={null} options={workflowTypes} disabled={workflowSteps.length>=12} onChange={(type)=>addWorkflowStep(type)} style={{width:'100%'}}/></label>
+    <label className="pa-studio-setting"><span>追加步骤（每个按钮最多 12 步）</span><Select<WorkflowStepType> placeholder="选择动作" value={undefined} options={workflowTypes} disabled={workflowSteps.length>=12} onChange={(type)=>addWorkflowStep(type)} style={{width:'100%'}}/></label>
     {workflowSteps.length ? <Button block danger onClick={()=>updateMeta({workflow:undefined})}>清空工作流</Button> : null}
     <div className="pa-studio-workflow-foot">可使用 selectedId、draft.title、results.step-1.data.id 等变量。流程中的请求结果仅在本次执行期间存在。</div>
     <div className="pa-studio-workflow-log-title"><strong>最近执行记录</strong><Button size="small" onClick={()=>setWorkflowTraces([])}>清空</Button></div>
@@ -509,7 +509,7 @@ export function Component() {
       <label className="pa-studio-switch-row"><span>绑定列表数据源</span><Switch checked={Boolean(meta.recordList)} disabled={Boolean(existingListId && existingListId !== chosen.id)} onChange={(checked) => updateMeta({ recordList: checked ? { url: '/api/studio-records', itemsPath: 'data.items', idField: 'id', labelField: 'title' } : undefined })}/></label>
       {meta.recordList ? <>
         <SettingSelect title="连接到项目数据源" value={meta.recordList.sourceId ?? '__direct__'} options={sourceOptions} onChange={(value) => {
-          const { sourceId: _old, ...rest } = meta.recordList!;
+          const { sourceId: _old, ...rest } = meta.recordList!; void _old;
           updateMeta({ recordList: value === '__direct__' ? rest : { ...rest, sourceId: value } });
         }}/>
         {meta.recordList.sourceId ? <div className="pa-studio-note">{doc.dataSources.find((item) => item.id === meta.recordList?.sourceId)?.name ?? '数据源已不存在'} · 由「接口管理」统一管理列表和详情接口。<Button type="link" size="small" onClick={() => { setSourceId(meta.recordList?.sourceId ?? ''); setInspector('接口管理'); }}>编辑数据源</Button></div> : <>
@@ -531,9 +531,9 @@ export function Component() {
         {(chosen.type === 'input' || chosen.type === 'select') ? <>
           <label className="pa-studio-switch-row"><span>必填</span><Switch checked={Boolean(meta.recordField.required)} onChange={(required) => updateRecordField({ required })}/></label>
           {chosen.type === 'input' ? <>
-            <label className="pa-studio-setting"><span>最少字符数</span><InputNumber min={0} max={200} value={meta.recordField.minLength ?? null} placeholder="不限制" onChange={(minLength) => { const { minLength: _old, ...rest } = meta.recordField!; updateMeta({ recordField: minLength === null ? rest : { ...rest, minLength } }); }} style={{ width: '100%' }}/></label>
-            <label className="pa-studio-setting"><span>最多字符数</span><InputNumber min={1} max={500} value={meta.recordField.maxLength ?? null} placeholder="不限制" onChange={(maxLength) => { const { maxLength: _old, ...rest } = meta.recordField!; updateMeta({ recordField: maxLength === null ? rest : { ...rest, maxLength } }); }} style={{ width: '100%' }}/></label>
-            <SettingSelect title="数据格式" value={meta.recordField.format ?? 'none'} options={[{ value: 'none', label: '不限' }, { value: 'email', label: '邮箱' }, { value: 'number', label: '数字' }]} onChange={(value) => { const { format: _old, ...rest } = meta.recordField!; updateMeta({ recordField: value === 'none' ? rest : { ...rest, format: value as 'email' | 'number' } }); }}/>
+            <label className="pa-studio-setting"><span>最少字符数</span><InputNumber min={0} max={200} value={meta.recordField.minLength ?? null} placeholder="不限制" onChange={(minLength) => { const { minLength: _old, ...rest } = meta.recordField!; void _old; updateMeta({ recordField: minLength === null ? rest : { ...rest, minLength } }); }} style={{ width: '100%' }}/></label>
+            <label className="pa-studio-setting"><span>最多字符数</span><InputNumber min={1} max={500} value={meta.recordField.maxLength ?? null} placeholder="不限制" onChange={(maxLength) => { const { maxLength: _old, ...rest } = meta.recordField!; void _old; updateMeta({ recordField: maxLength === null ? rest : { ...rest, maxLength } }); }} style={{ width: '100%' }}/></label>
+            <SettingSelect title="数据格式" value={meta.recordField.format ?? 'none'} options={[{ value: 'none', label: '不限' }, { value: 'email', label: '邮箱' }, { value: 'number', label: '数字' }]} onChange={(value) => { const { format: _old, ...rest } = meta.recordField!; void _old; updateMeta({ recordField: value === 'none' ? rest : { ...rest, format: value as 'email' | 'number' } }); }}/>
           </> : null}
         </> : null}
         {!validRecordField(meta.recordField.field) ? <div role="alert" className="pa-studio-record-error">字段名仅支持安全的英文标识符。</div> : null}
@@ -545,7 +545,7 @@ export function Component() {
       <label className="pa-studio-switch-row"><span>提交已绑定的表单字段</span><Switch checked={Boolean(meta.recordSubmit)} onChange={(checked) => updateMeta({ recordSubmit: checked ? { url: '/api/studio-records', includeId: true } : undefined })}/></label>
       {meta.recordSubmit ? <>
         <SettingSelect title="连接到项目数据源" value={meta.recordSubmit.sourceId ?? '__direct__'} options={sourceOptions} onChange={(value) => {
-          const { sourceId: _old, ...rest } = meta.recordSubmit!;
+          const { sourceId: _old, ...rest } = meta.recordSubmit!; void _old;
           updateMeta({ recordSubmit: value === '__direct__' ? rest : { ...rest, sourceId: value } });
         }}/>
         {meta.recordSubmit.sourceId ? <div className="pa-studio-note">保存地址由项目数据源统一管理。<Button type="link" size="small" onClick={() => { setSourceId(meta.recordSubmit?.sourceId ?? ''); setInspector('接口管理'); }}>编辑数据源</Button></div> : <>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Select, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button } from 'antd';
+import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button } from 'antd';
 import { safeWidgetImageUrl, widgetItems, widgetValues, type StudioWidgetKind } from './widgets';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
@@ -8,6 +8,11 @@ function apiUrl(value: unknown): string | undefined { const url = safeWidgetImag
 function pathValue(data: unknown, path: string): unknown {
   if (!path || !path.split('.').every((part) => /^(?:[a-zA-Z_$][\w$]*|\d+)$/.test(part) && !['__proto__', 'constructor', 'prototype'].includes(part))) return undefined;
   return path.split('.').reduce<unknown>((obj, key) => obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key) ? (obj as Record<string, unknown>)[key] : undefined, data);
+}
+function confirmUpload(name: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    Modal.confirm({ title: '确认上传', content: `向配置的后端上传「${name}」？`, onOk: () => { resolve(true); }, onCancel: () => { resolve(false); } });
+  });
 }
 function FileUploadWidget({ props, live }: { props: Record<string, unknown>; live: boolean }) {
   const [file, setFile] = useState<File | null>(null);
@@ -18,7 +23,7 @@ function FileUploadWidget({ props, live }: { props: Record<string, unknown>; liv
   const accept = label(props.accept, '.pdf,.png,.jpg');
   const send = async () => {
     if (!file || !url || !live) return;
-    if (!window.confirm(`向配置的后端上传「${file.name}」？`)) return;
+    if (!(await confirmUpload(file.name))) return;
     const body = new FormData(); body.append('file', file);
     setBusy(true); setStatus('上传中…');
     try {

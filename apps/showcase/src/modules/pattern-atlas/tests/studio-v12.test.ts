@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createStudioDocument, parseStudioFile, serializeStudioDocument } from '../studio/model';
 import { addLinkedRecordExample } from '../studio/record-template';
-import { newServerDemoSource, normalizeDataSources, resolveRecordList, resolveRecordSubmit, mergeRecordDetail, type StudioDataSource } from '../studio/data-sources';
+import { newServerDemoSource, normalizeDataSources, resolveRecordList, resolveRecordSubmit, mergeRecordDetail } from '../studio/data-sources';
 import { buildStudioListUrl, filterStudioRows, mapIncomingRecord, mapOutgoingPayload, normalizeFieldMappings, readStudioListPayload } from '../studio/source-query';
-import { StudioRequestError, requestStudioApi } from '../studio/api';
+import { requestStudioApi } from '../studio/api';
 import { generateReactPage, projectExportFiles } from '../studio/exporter';
 import { exportedRecordRuntime } from '../studio/record-exporter';
 

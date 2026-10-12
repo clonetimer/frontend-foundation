@@ -35,7 +35,7 @@ export function ThemeBridgePreview({ preset, enabled }: { preset: FoundationThem
   const [value, setValue] = useState('Pattern Atlas 试点工作台');
   const [saved, setSaved] = useState(false);
   const theme = useMemo(() => antdPreviewTheme(preset), [preset]);
-  const { defaultMode, defaultDensity, brand } = preset.providerProps;
+  const { defaultDensity, brand } = preset.providerProps;
   const padding = enabled ? brand.layout?.contentPadding ?? 20 : 20;
 
   const liveContent: ReactNode = <ThemeSurface enabled={enabled} padding={padding}>

@@ -165,6 +165,7 @@ export function pageRecordSource(document: StudioDocument, pageId: string): Stud
   const resolved = resolveRecordList(found ?? undefined, document.dataSources);
   if (!resolved) return null;
   const { sourceId: _studioReference, ...standalone } = resolved;
+  void _studioReference;
   return standalone;
 }
 export function generateReactPage(document: StudioDocument, pageId: string): string {
@@ -180,6 +181,7 @@ export function generateReactPage(document: StudioDocument, pageId: string): str
     const resolved = resolveRecordSubmit(value.recordSubmit, document.dataSources);
     if (!resolved) return [key, value];
     const { sourceId: _studioReference, ...standalone } = resolved;
+  void _studioReference;
     return [key, { ...value, recordSubmit: standalone }];
   }));
   const node = renderNode(page.composition, exportDecorations, pageId, 0, routes);

@@ -44,7 +44,7 @@ export function normalizeApiBinding(raw: unknown, method?: StudioApiMethod): Stu
 }
 
 export function validApiUrl(url: string): boolean {
-  if (!url || url.length > 500 || /[\u0000-\u0020\\]/.test(url) || url.startsWith('//')) return false;
+  if (!url || url.length > 500 || Array.from(url).some((char) => char.charCodeAt(0) <= 32 || char === '\\') || url.startsWith('//')) return false;
   if (url.startsWith('/')) return !url.startsWith('//');
   try {
     const parsed = new URL(url);

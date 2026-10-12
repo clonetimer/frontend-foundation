@@ -153,5 +153,5 @@ export function PatternDemo({ id }: { id: string }) {
 }
 
 function FragmentRow({ item, expanded, onClick }: { item: SampleTask; expanded: boolean; onClick: () => void }) {
-  return <><tr><td>{item.title}</td><td>{item.owner}</td><td><Button size="small" aria-expanded={expanded} onClick={onClick}>{expanded ? '收起 −' : '展开 +'}</Button></td></tr>{expanded ? <tr className="pa-expanded-row"><td colSpan={3}>编号：{item.id}　状态：{item.status}　预计日期：{item.date}。这是与当前行关联的补充信息。</td></tr> : null}</>;
+  return <><tr><td>{item.title}</td><td>{item.owner}</td><td><Button size="small" aria-expanded={expanded} onClick={onClick}>{expanded ? '收起 −' : '展开 +'}</Button></td></tr>{expanded ? <tr className="pa-expanded-row"><td colSpan={3}>编号：{item.id} 状态：{item.status} 预计日期：{item.date}。这是与当前行关联的补充信息。</td></tr> : null}</>;
 }

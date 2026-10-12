@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 // The caller deliberately passes only fixed pnpm subcommands/options. Restrict
 // the Windows cmd.exe fallback to shell-safe tokens instead of constructing a
 // command line from unchecked user input.
-const SAFE_WINDOWS_ARG = /^[a-zA-Z0-9@._/:=+\-]+$/;
+const SAFE_WINDOWS_ARG = /^[a-zA-Z0-9@._/:=+-]+$/;
 
 /**
  * Select an async, cross-platform pnpm invocation.

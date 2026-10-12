@@ -30,6 +30,11 @@ const BUTTON_TYPES = ['primary', 'default', 'dashed', 'link', 'text'] as const;
 const dropTypes = new Set(['application/x-atlas-palette', 'application/x-atlas-node']);
 const clickableEffects = new Set(['flip', 'morph-toggle', 'success-check', 'ripple']);
 function hasStudioDrag(event: DragEvent<HTMLElement>): boolean { return Array.from(event.dataTransfer.types).some((type) => dropTypes.has(type)); }
+function confirmAction(content: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    Modal.confirm({ title: '确认操作', content, onOk: () => { resolve(true); }, onCancel: () => { resolve(false); } });
+  });
+}
 
 export function StudioCanvas({ node, selectedId, decorations, pageId = '', live = false, readOnly = false, onSelect, onDropItem, onNavigate, depth = 0, recordFlow, absoluteLayer, onWorkflowTrace }: CanvasProps) {
   const [active, setActive] = useState(false);
@@ -81,7 +86,7 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
       setSubmitting(true);
       try {
         await runStudioWorkflow(decoration.workflow, {
-          confirm: (prompt) => window.confirm(prompt),
+          confirm: confirmAction,
           notify: (text) => { void message.info(text || '操作完成'); },
           navigate: (target) => onNavigate?.(target),
           saveRecord: async () => { if (!decoration.recordSubmit || !recordFlow) throw new Error('此按钮还没有可用的记录保存绑定。'); await recordFlow.save(decoration.recordSubmit); },
@@ -101,7 +106,7 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
     if (decoration.interaction === 'toggle' || ['flip', 'morph-toggle', 'success-check'].includes(effect)) setActive((old) => !old);
     if (decoration.interaction === 'navigate' && decoration.targetPage) onNavigate?.(decoration.targetPage);
     if (decoration.recordSubmit) {
-      if (!window.confirm('将提交当前记录修改，是否继续？')) return;
+      if (!(await confirmAction('将提交当前记录修改，是否继续？'))) return;
       setSubmitting(true);
       try { await recordFlow?.save(decoration.recordSubmit); void message.success('记录已保存，列表正在刷新'); }
       catch (error) { void message.error(error instanceof Error ? error.message : '保存失败'); }
@@ -109,7 +114,7 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
       return;
     }
     if (api?.method === 'POST') {
-      if (!window.confirm('将向真实后端发送 POST 请求，确定继续？')) return;
+      if (!(await confirmAction('将向真实后端发送 POST 请求，确定继续？'))) return;
       if (!validApiUrl(api.url)) { void message.warning('请先配置有效的接口地址'); return; }
       setSubmitting(true);
       try { await requestStudioApi(api); void message.success('接口请求成功'); }

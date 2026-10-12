@@ -47,7 +47,7 @@ export function widgetValues(value: unknown): number[] {
   return typeof value === 'string' ? value.split(',').slice(0, 16).map((item) => Number(item.trim())).map((value) => Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0) : [];
 }
 export function safeWidgetImageUrl(url: unknown): string | undefined {
-  if (typeof url !== 'string' || url.length > 500 || /[\\\s\u0000-\u001f]/.test(url) || url.startsWith('//')) return undefined;
+  if (typeof url !== 'string' || url.length > 500 || (/[\\\s]/.test(url) || Array.from(url).some((char) => char.charCodeAt(0) < 32)) || url.startsWith('//')) return undefined;
   if (url.startsWith('/') && !url.startsWith('//')) return url;
   try { const target = new URL(url); return ['http:', 'https:'].includes(target.protocol) && !target.username && !target.password ? url : undefined; } catch { return undefined; }
 }

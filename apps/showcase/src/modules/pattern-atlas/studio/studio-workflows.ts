@@ -30,7 +30,7 @@ function containsUnsafeTemplate(value: string): boolean {
   return /\{\{|\}\}/.test(value.replace(variableReference, ''));
 }
 export function isWorkflowUrl(url: string): boolean {
-  if (!url || url.length > 500 || /[\u0000-\u0020\\]/.test(url) || url.startsWith('//') || containsUnsafeTemplate(url)) return false;
+  if (!url || url.length > 500 || Array.from(url).some((char) => char.charCodeAt(0) <= 32 || char === '\\') || url.startsWith('//') || containsUnsafeTemplate(url)) return false;
   const example = url.replaceAll('{id}', 'example').replace(variableReference, 'example');
   if (/[{}]/.test(example)) return false;
   if (example.startsWith('/')) return !example.startsWith('//');

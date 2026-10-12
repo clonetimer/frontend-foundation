@@ -30,7 +30,7 @@ export function validRecordField(field: string): boolean {
   return field.length > 0 && field.length <= 64 && safeName.test(field) && !forbidden.has(field);
 }
 export function validRecordUrl(url: string): boolean {
-  if (!url || url.length > 500 || /[\s\\\u0000-\u001f]/.test(url) || url.startsWith('//')) return false;
+  if (!url || url.length > 500 || (/[\s\\]/.test(url) || Array.from(url).some((char) => char.charCodeAt(0) < 32)) || url.startsWith('//')) return false;
   if (url.startsWith('/')) return true;
   try {
     const parsed = new URL(url);
