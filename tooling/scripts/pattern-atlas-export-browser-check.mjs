@@ -93,7 +93,8 @@ export async function runExportedBrowserSmoke(directory) {
 
     assert(await click('执行验收确认'), 'Popconfirm trigger missing');
     await until(() => evaluate("document.querySelector('.ant-popconfirm-inner-content')?.textContent?.includes('验收提示')"), 'Popconfirm open');
-    assert(await click('确认'), 'Popconfirm confirmation missing');
+    const popConfirmed = await until(() => evaluate("(() => { const button = document.querySelector('.ant-popconfirm-buttons button.ant-btn-primary'); if (!button) return false; button.click(); return true; })()"), 'Popconfirm primary action');
+    assert(popConfirmed, 'Popconfirm confirmation missing');
     await until(() => evaluate("document.body.textContent.includes('操作已确认（未关联后端）')"), 'Popconfirm feedback');
 
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
