@@ -393,7 +393,7 @@ export function Component() {
         {meta.widgetKind === 'async-task' ? <Button block onClick={() => updateRich('statusUrl', '/api/studio-job-demo')}>填入本地任务状态演示地址</Button> : null}
         {meta.widgetKind === 'line-chart' ? <>
           <label className="pa-studio-setting"><span>自动刷新（毫秒，0 为手动）</span><InputNumber min={0} max={60000} step={5000} value={Number(richProps.refreshMs) || 0} onChange={(value) => updateRich('refreshMs', value ?? 0)} style={{width:'100%'}}/></label>
-          <div className="pa-studio-note">接口返回 JSON，指定路径内使用 {{"items":["一月","二月"],"series":[{"name":"销售额","values":[-2,120]}]}} 的结构；未配置接口时继续使用上面的静态序列。仅在体验模式及导出项目中发起 GET 请求，不存储密钥。</div>
+          <div className="pa-studio-note">接口返回 JSON，指定路径内使用 <code>{'{"items":["一月","二月"],"series":[{"name":"销售额","values":[-2,120]}]}'}</code> 的结构；未配置接口时继续使用上面的静态序列。仅在体验模式及导出项目中发起 GET 请求，不存储密钥。</div>
         </> : null}
         {meta.widgetKind === 'table' ? <label className="pa-studio-setting"><span>每页行数（本地分页）</span><InputNumber min={1} max={20} value={Number(richProps.pageSize) || 5} onChange={(value) => updateRich('pageSize', value ?? 5)} style={{ width: '100%' }}/></label> : null}
       </> : null}
