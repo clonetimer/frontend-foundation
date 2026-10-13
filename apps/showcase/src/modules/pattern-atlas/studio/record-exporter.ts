@@ -250,10 +250,10 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
 }
 function useRecord(): RecordContextValue { const value = useContext<RecordContextValue | null>(Context); if (!value) throw new Error('缺少记录数据容器'); return value; }
 /** Mounts overlays below the record provider, not above its context boundary. */
-export function StudioRecordWidget({ kind, props }: { kind: StudioWidgetKind; props: Record<string, unknown> }) {
+export function StudioRecordWidget({ kind, props, workflowPages }: { kind: StudioWidgetKind; props: Record<string, unknown>; workflowPages: string[] }) {
   const state = useRecord();
   return <WidgetPreview kind={kind} props={props} live
-    recordSelection={{ selectedId: state.selectedId, selected: state.selected, detailStatus: state.detailStatus }}/>;
+    recordSelection={{ selectedId: state.selectedId, selected: state.selected, detailStatus: state.detailStatus }} workflowPages={workflowPages}/>;
 }
 
 export function StudioRecordList({ title }: { title: string }) {
