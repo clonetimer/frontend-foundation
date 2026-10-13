@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
-import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
+import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, overlaySubmitUrl, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
 const rows = (value: unknown) => widgetItems(value).map((item, index) => { const [name, status = '—'] = item.split('|'); return { key: index, name, status }; });
@@ -156,8 +156,10 @@ function RemoteLineWidget({ props, live }: { props: Record<string, unknown>; liv
     </div> : null}
   </div>;
 }
-function OverlayWidget({ kind, props, live }: { kind: 'modal' | 'drawer' | 'popconfirm'; props: Record<string, unknown>; live: boolean }) {
+function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' | 'drawer' | 'popconfirm'; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined }) {
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState('');
+  const editMode = props.formMode === 'edit-selected' && kind !== 'popconfirm';
   const [notify, context] = message.useMessage();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -172,18 +174,30 @@ function OverlayWidget({ kind, props, live }: { kind: 'modal' | 'drawer' | 'popc
   const formConfig = label(props.formFields);
   const fields = parseOverlayFormFields(formConfig);
   const hasForm = kind !== 'popconfirm' && Boolean(formConfig.trim());
-  const url = apiUrl(props.submitUrl);
+  const selectedId = editMode ? recordSelection?.selectedId ?? '' : '';
+  const url = editMode ? overlaySubmitUrl(props.submitUrl, 'edit-selected', editingId) : overlaySubmitUrl(props.submitUrl, 'create');
+  useEffect(() => { if (open && editMode && recordSelection?.selectedId !== editingId) { setOpen(false); setSubmitError(''); } }, [open, editMode, editingId, recordSelection?.selectedId]);
   const close = () => { if (!pending.current) { setOpen(false); setErrors({}); setSubmitError(''); } };
-  const openDialog = () => { setDraft({}); setErrors({}); setSubmitError(''); setOpen(true); };
-  const trigger = <Button size="small" disabled={!live} onClick={openDialog}>{label(props.triggerText, '打开')}</Button>;
+  const openDialog = () => {
+    if (editMode && (!selectedId || !recordSelection?.selected || recordSelection.detailStatus === 'loading' || recordSelection.detailStatus === 'error')) return;
+    const defaults: Record<string, string> = {};
+    if (editMode && recordSelection?.selected) for (const field of fields) {
+      const current = recordSelection.selected[field.key];
+      defaults[field.key] = current === null || current === undefined ? '' : typeof current === 'string' || typeof current === 'number' ? String(current) : '';
+    }
+    setEditingId(selectedId);
+    setDraft(defaults); setErrors({}); setSubmitError(''); setOpen(true);
+  };
+  const trigger = <Button size="small" disabled={!live || (editMode && (!selectedId || !recordSelection?.selected || recordSelection.detailStatus === 'loading' || recordSelection.detailStatus === 'error'))} onClick={openDialog}>{label(props.triggerText, '打开')}</Button>;
   const confirmed = () => { setOpen(false); void notify.success('操作已确认（未关联后端）'); };
   const submit = async () => {
     if (!hasForm || !live || pending.current) return;
+    if (editMode && (!editingId || recordSelection?.selectedId !== editingId)) { setSubmitError('所选记录已变化，请重新打开表单'); return; }
     if (!fields.length) { setSubmitError('字段配置有误，请检查每一行的字段名、标签、类型和必填设置'); return; }
     const result = validateOverlayForm(fields, draft);
     setErrors(result.errors);
     if (Object.keys(result.errors).length) return;
-    if (!url) { setSubmitError('未配置有效的 POST 保存地址'); return; }
+    if (!url) { setSubmitError(editMode ? '编辑模式需要含单个 {id} 的有效保存地址和选中记录' : '未配置有效的保存地址'); return; }
     pending.current = true;
     setBusy(true); setSubmitError('');
     const request = new AbortController();
@@ -191,7 +205,7 @@ function OverlayWidget({ kind, props, live }: { kind: 'modal' | 'drawer' | 'popc
     const timeout = setTimeout(() => request.abort(), 15000);
     try {
       const response = await fetch(url, {
-        method: 'POST', credentials: 'same-origin', signal: request.signal,
+        method: props.submitMethod === 'PATCH' ? 'PATCH' : 'POST', credentials: 'same-origin', signal: request.signal,
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result.payload)
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -217,18 +231,18 @@ function OverlayWidget({ kind, props, live }: { kind: 'modal' | 'drawer' | 'popc
     </label>)}
     {!fields.length ? <small role="alert">字段配置无效：格式为 key|标签|text/email/number|required/optional，每行一个</small> : null}
     {submitError ? <small role="alert">{submitError}</small> : null}
-    {!url ? <small>填写保存接口地址后才能提交数据；不会自动请求演示后端</small> : null}
+    {!url ? <small>编辑模式请设置含 {'{id}'} 的保存地址；新增模式设置普通地址</small> : null}
   </div> : description;
   const actions = hasForm ? <Space><Button disabled={busy} onClick={close}>{cancel}</Button><Button type="primary" loading={busy} disabled={!live || !fields.length} onClick={() => { void submit(); }}>{ok}</Button></Space> : undefined;
   return <div className="pa-studio-rich pa-studio-overlay"><strong>{title}</strong>{context}
     {kind === 'popconfirm' ? <Popconfirm title={title} description={description} open={open} onConfirm={confirmed} onCancel={close} okText={ok} cancelText={cancel}>{trigger}</Popconfirm> : trigger}
     {kind === 'modal' ? <Modal title={title} open={open} onOk={hasForm ? () => { void submit(); } : confirmed} onCancel={close} okText={ok} cancelText={cancel} okButtonProps={{ disabled: hasForm && (!live || !fields.length) }} confirmLoading={busy} closable={!busy} maskClosable={!busy} destroyOnHidden>{form}</Modal> : null}
     {kind === 'drawer' ? <Drawer title={title} open={open} onClose={close} placement={props.placement === 'left' ? 'left' : 'right'} width={Math.max(280, Math.min(800, Number(props.width) || 420))} closable={!busy} maskClosable={!busy} footer={actions} destroyOnHidden>{form}</Drawer> : null}
-    <small>{hasForm ? (live ? '按配置校验字段，确认后 POST 保存；成功后刷新记录' : '切换到体验模式后可编辑和提交') : (live ? '可在体验模式操作；确认不会提交后端' : '切换到体验模式后可操作')}</small>
+    <small>{hasForm ? (live ? (editMode ? '编辑选中记录；提交成功后刷新列表' : '新增表单；提交成功后刷新列表') : '切换到体验模式后可编辑和提交') : (live ? '可在体验模式操作；确认不会提交后端' : '切换到体验模式后可操作')}</small>
   </div>;
 }
 /** Live Studio widgets are backed by the same source code as the standalone React export. */
-export function WidgetPreview({ kind, props, live }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean }) {
+export function WidgetPreview({ kind, props, live, recordSelection }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined }) {
   const title = label(props.title, '组件');
   const items = widgetItems(props.items);
   const values = widgetValues(props.values);
@@ -257,8 +271,8 @@ export function WidgetPreview({ kind, props, live }: { kind: StudioWidgetKind; p
     case 'date': return <label className="pa-studio-field"><small>{title}</small><DatePicker style={{ width: '100%' }} disabled={!live}/></label>;
     case 'slider': return <div className="pa-studio-rich"><strong>{title}</strong><Slider defaultValue={percent} disabled={!live}/></div>;
     case 'rate': return <Space><span>{title}</span><Rate disabled={!live}/></Space>;
-    case 'modal': return <OverlayWidget kind="modal" props={props} live={live}/>;
-    case 'drawer': return <OverlayWidget kind="drawer" props={props} live={live}/>;
+    case 'modal': return <OverlayWidget kind="modal" props={props} live={live} recordSelection={recordSelection}/>;
+    case 'drawer': return <OverlayWidget kind="drawer" props={props} live={live} recordSelection={recordSelection}/>;
     case 'popconfirm': return <OverlayWidget kind="popconfirm" props={props} live={live}/>;
     case 'skeleton': return <div className="pa-studio-rich"><strong>{title}</strong><Skeleton active paragraph={{ rows: 2 }} title={{ width: '60%' }}/></div>;
     case 'empty': return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={label(props.description, title)}/>;

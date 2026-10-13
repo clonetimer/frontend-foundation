@@ -26,6 +26,7 @@ const studio = resolve(__dirname, '../../apps/showcase/src/modules/pattern-atlas
 const { createStudioDocument, createNode, insertNode, setDecoration } = loadCompiled(join(studio, 'model.ts'));
 const { runExportedBrowserSmoke } = await import('./pattern-atlas-export-browser-check.mjs');
 const { projectExportFiles, zipTextFiles } = loadCompiled(join(studio, 'exporter.ts'));
+const { newDemoSource } = loadCompiled(join(studio, 'data-sources.ts'));
 function exec(program, args, cwd) {
   // npm is a .cmd wrapper on Windows, which must be launched via cmd.exe.
   // This helper is only called with fixed internal commands/flags, never user input.
@@ -43,11 +44,13 @@ function exec(program, args, cwd) {
     let document = createStudioDocument();
     if (browserAcceptance) {
       const pageId = document.blueprint.pages[0].id;
+      document.dataSources = [{ ...newDemoSource('overlay-edit'), saveUrl: 'http://127.0.0.1:4198/api/edit/{id}' }];
       const fixtures = [
         { id: 'browserModal', kind: 'modal', props: { title: '验收弹窗', triggerText: '打开验收弹窗', description: '验收弹窗内容', okText: '确认', cancelText: '取消' } },
         { id: 'browserDrawer', kind: 'drawer', props: { title: '验收抽屉', triggerText: '打开验收抽屉', description: '验收抽屉内容', placement: 'right', width: 420 } },
         { id: 'browserConfirm', kind: 'popconfirm', props: { title: '验收提示', triggerText: '执行验收确认', description: '请确认是否继续', okText: '确认', cancelText: '取消' } },
         { id: 'formModal21', kind: 'modal', props: { title: '新增记录表单', triggerText: '填写新增记录', description: '请输入记录字段', formFields: 'name|姓名|text|required\nemail|邮箱|email|required\namount|金额|number|optional', submitUrl: 'http://127.0.0.1:4198/api/save', okText: '提交保存', cancelText: '取消' } },
+        { id: 'editModal21b', kind: 'modal', props: { title: '编辑选中记录', triggerText: '编辑当前记录', description: '自动预填', formMode: 'edit-selected', submitMethod: 'PATCH', sourceId: 'overlay-edit', formFields: 'name|姓名|text|required', submitUrl: '', okText: '更新记录', cancelText: '取消' } },
         { id: 'formDrawer21', kind: 'drawer', props: { title: '失败反馈表单', triggerText: '打开错误示例', description: '模拟服务端失败', formFields: 'name|姓名|text|required', submitUrl: 'http://127.0.0.1:4198/api/fail', okText: '尝试保存', cancelText: '取消' } },
         { id: 'browserChart', kind: 'line-chart', props: { title: '验收多序列曲线', items: ['A', 'B', 'C'], series: '温度:-20,0,120;参考:0,10,30', values: '', unit: '℃', dataUrl: '/chart-feed.json', dataPath: 'data', refreshMs: 0 } }
       ];

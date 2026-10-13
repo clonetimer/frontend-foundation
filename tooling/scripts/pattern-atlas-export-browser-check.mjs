@@ -31,20 +31,27 @@ export async function runExportedBrowserSmoke(directory) {
   let chrome;
   let socket;
   const posts = [];
-  const savedRecords = [];
+  const savedRecords = [{ id:'R/1 ?', name:'旧姓名', email:'old@example.org', amount:3 }];
+  const patchCalls = [];
   let listReads = 0;
   const api = createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:4189');
-    response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Methods', 'POST, PATCH, OPTIONS');
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
     if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
     if (request.method === 'GET' && request.url === '/api/list') { listReads += 1; response.writeHead(200); response.end(JSON.stringify({data:{items:savedRecords}})); return; }
-    if (request.method !== 'POST') { response.writeHead(405); response.end('{}'); return; }
+    if (request.method !== 'POST' && request.method !== 'PATCH') { response.writeHead(405); response.end('{}'); return; }
     let body = '';
     for await (const chunk of request) {
       body += String(chunk);
       if (body.length > 4096) { response.writeHead(413); response.end('{}'); return; }
+    }
+    if (request.method === 'PATCH' && request.url === '/api/edit/R%2F1%20%3F') {
+      const submitted = JSON.parse(body);
+      patchCalls.push({ path:request.url, data:submitted });
+      Object.assign(savedRecords[0], submitted);
+      response.writeHead(200); response.end('{"saved":true}'); return;
     }
     if (request.url === '/api/fail') { response.writeHead(500); response.end('{"error":"intentional test failure"}'); return; }
     if (request.url !== '/api/save') { response.writeHead(404); response.end('{}'); return; }
@@ -164,6 +171,22 @@ export async function runExportedBrowserSmoke(directory) {
     assert(await evaluate("Boolean(document.querySelector('.ant-drawer-body input[aria-label=姓名]'))"), 'Failed form unexpectedly closed or lost draft');
     await evaluate("document.querySelector('.ant-drawer-footer button.ant-btn-default')?.click()");
 
+    // Phase 21-B: the exported overlay obtains current record context from
+    // StudioRecordProvider and freezes the shared source URL during export.
+    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('旧姓名')"), 'Existing selection rendered');
+    assert(await click('编辑当前记录'), 'Selected-record edit modal trigger missing');
+    await until(() => evaluate("document.querySelector('.ant-modal')?.textContent?.includes('编辑选中记录')"), 'Selected-record modal open');
+    const previous = await evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.value");
+    assert.equal(previous, '旧姓名', 'Edit modal did not prefill selected record');
+    assert(await evaluate("(() => { const field = document.querySelector('.ant-modal input[aria-label=姓名]'); if (!field) return false; field.focus(); field.select(); return true; })()"), 'Edit input not found');
+    await call('Input.insertText', { text: '更新姓名' });
+    await until(() => evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.value === '更新姓名'"), 'Edit field changed');
+    assert(await evaluate("(() => { const button = document.querySelector('.ant-modal-footer button.ant-btn-primary'); if (!button) return false; button.click(); return true; })()"), 'Edit save button missing');
+    await until(() => patchCalls.length === 1, 'Real PATCH with encoded selected ID');
+    assert.deepEqual(patchCalls[0], { path:'/api/edit/R%2F1%20%3F', data:{name:'更新姓名'} }, 'Selected record was not safely targeted');
+    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('更新姓名')"), 'Record list GET after edit PATCH');
+
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -171,7 +194,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
