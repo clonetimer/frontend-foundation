@@ -74,6 +74,23 @@ function exec(program, args, cwd) {
       document = setDecoration(document, pageId + ':formList21', {
         recordList: { url: 'http://127.0.0.1:4198/api/list', itemsPath: 'data.items', idField: 'id', labelField: 'name', pageSize: 8 }
       });
+      // A second page has no record-list binding at all. The table must own
+      // selection and optional detail retrieval without relying on list paging.
+      const isolated = { ...document.blueprint.pages[0], id: 'isolated', title: '无列表表格验证', index: false, composition: createNode('stack', 'isolatedRoot') };
+      isolated.composition = insertNode(isolated.composition, isolated.composition.id, createNode('table', 'isolatedTable22'), 'inside');
+      isolated.composition = insertNode(isolated.composition, isolated.composition.id, createNode('modal', 'isolatedEdit22'), 'inside');
+      document.blueprint.pages.push(isolated);
+      document = setDecoration(document, 'isolated:isolatedTable22', {
+        widgetKind: 'table',
+        widgetProps: { title: '无列表远程表格', dataUrl: 'http://127.0.0.1:4198/api/table', itemsPath: 'data.items', totalPath: 'data.total',
+          idField: 'id', detailUrl: 'http://127.0.0.1:4198/api/row/{id}', detailPath: 'data',
+          tableColumns: 'name|名称\\nstatus|状态', pageSize: 2, sortField: 'name', filterField: 'status', filterValues: '进行中,待开始,已完成' }
+      });
+      document = setDecoration(document, 'isolated:isolatedEdit22', {
+        widgetKind: 'modal',
+        widgetProps: { title: '跨页编辑表单', triggerText: '编辑跨页记录', formMode: 'edit-selected', submitMethod: 'PATCH',
+          sourceId: 'overlay-edit', formFields: 'name|姓名|text|required\\nemail|邮箱|email|optional', submitUrl: '' }
+      });
     }
     const files = projectExportFiles(document);
     const data = new Uint8Array(await zipTextFiles(files).arrayBuffer());
