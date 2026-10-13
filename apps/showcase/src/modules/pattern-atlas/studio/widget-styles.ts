@@ -26,6 +26,10 @@ export const studioWidgetStyles = `
 .pa-studio-async-log{margin:0;padding-left:25px;display:flex;flex-direction:column;gap:10px}
 .pa-studio-async-log li{font-size:12px;padding:5px 3px}
 .pa-studio-async-log li .ant-tag{margin-left:10px}
+.pa-studio-plot-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11px;color:var(--atlas-ink,#38594a)}
+.pa-studio-plot-legend span{display:flex;align-items:center;gap:5px}
+.pa-studio-plot-legend i{display:inline-block;width:12px;height:3px;border-radius:3px}
+.pa-studio-overlay small{color:#678678;font-size:11px}
 .pa-studio-line-visual{display:block;width:100%;height:auto;max-height:185px;color:#6e8377}
 .pa-studio-donut{height:150px;width:150px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center}
 .pa-studio-donut>div{background:var(--atlas-panel,#fff);height:114px;width:114px;border-radius:50%;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px}
