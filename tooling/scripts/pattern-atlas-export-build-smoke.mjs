@@ -61,6 +61,7 @@ function exec(program, args, cwd) {
             {id:'extra-notify',type:'notify',text:'后续操作成功'}]}) } },
         { id: 'editModal21b', kind: 'modal', props: { title: '编辑选中记录', triggerText: '编辑当前记录', description: '自动预填', formMode: 'edit-selected', submitMethod: 'PATCH', sourceId: 'overlay-edit', formFields: 'name|姓名|text|required', submitUrl: '', okText: '更新记录', cancelText: '取消' } },
         { id: 'formDrawer21', kind: 'drawer', props: { title: '失败反馈表单', triggerText: '打开错误示例', description: '模拟服务端失败', formFields: 'name|姓名|text|required', submitUrl: 'http://127.0.0.1:4198/api/fail', okText: '尝试保存', cancelText: '取消', failureWorkflow: JSON.stringify({steps:[{id:'fail-notify',type:'notify',text:'提交失败分支执行'}]}) } },
+        { id: 'remoteTable22', kind: 'table', props: { title: '远程业务表格', dataUrl: 'http://127.0.0.1:4198/api/table', itemsPath: 'data.items', totalPath: 'data.total', idField: 'id', tableColumns: 'name|名称\nstatus|状态', filterField: 'status', filterValues: '进行中,待开始,已完成', sortField: 'name', pageSize: 2 } },
         { id: 'browserChart', kind: 'line-chart', props: { title: '验收多序列曲线', items: ['A', 'B', 'C'], series: '温度:-20,0,120;参考:0,10,30', values: '', unit: '℃', dataUrl: '/chart-feed.json', dataPath: 'data', refreshMs: 0 } }
       ];
       for (const fixture of fixtures) {
