@@ -110,7 +110,7 @@ function LineWidget({ items, series, title, unit }: { items: string[]; series: C
   </div>;
 }
 /** Server-controlled table: pagination/filtering/sorting are never emulated locally. */
-function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<string, unknown>; live: boolean; onRecordSelect?: ((row: Record<string, unknown>) => void) | undefined }) {
+function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<string, unknown>; live: boolean; onRecordSelect?: ((selection: OverlayRecordSelection) => void) | undefined }) {
   const title = label(props.title, '数据表格');
   const sourceUrl = apiUrl(props.dataUrl);
   const columns = parseRemoteTableColumns(props.tableColumns);
@@ -130,6 +130,54 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   const [data, setData] = useState<RemoteTablePage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectionError, setSelectionError] = useState('');
+  const detailRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => detailRequest.current?.abort(), []);
+  const chooseRecord = async (row: RemoteTableRow) => {
+    if (!onRecordSelect || !live) return;
+    detailRequest.current?.abort();
+    setSelectionError('');
+    const selectedId = row.key;
+    const snapshot: Record<string, unknown> = { ...row };
+    const detailTemplate = props.detailUrl;
+    if (!detailTemplate) {
+      onRecordSelect({ selectedId, selected: snapshot, detailStatus: 'idle' });
+      return;
+    }
+    const endpoint = overlaySubmitUrl(detailTemplate, 'edit-selected', selectedId);
+    if (!endpoint) {
+      setSelectionError('详情接口需要包含一个有效的 {id} 占位符');
+      onRecordSelect({ selectedId, selected: null, detailStatus: 'error' });
+      return;
+    }
+    const controller = new AbortController();
+    detailRequest.current = controller;
+    onRecordSelect({ selectedId, selected: snapshot, detailStatus: 'loading' });
+    try {
+      const response = await fetch(endpoint, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (Number(response.headers.get('content-length') || 0) > 262144) throw new Error('详情超过 256 KB');
+      const body = await response.text();
+      if (body.length > 262144) throw new Error('详情超过 256 KB');
+      const parsed = pathValue(JSON.parse(body) as unknown, label(props.detailPath,'data'));
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('详情响应不是记录对象');
+      const detail = parsed as Record<string, unknown>;
+      const remoteId = detail[idField];
+      if (remoteId !== undefined && String(remoteId) !== selectedId) throw new Error('详情记录主键不匹配');
+      const result: Record<string, unknown> = { ...snapshot };
+      for (const [key, value] of Object.entries(detail)) {
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(key) || ['constructor','prototype','__proto__'].includes(key)) continue;
+        if (value === null || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e12 ||
+          typeof value === 'string' && value.length <= 240) result[key] = value;
+      }
+      if (!controller.signal.aborted) onRecordSelect({ selectedId, selected: result, detailStatus: 'ready' });
+    } catch (reason) {
+      if (!controller.signal.aborted) {
+        setSelectionError(reason instanceof Error ? reason.message : '详情读取失败');
+        onRecordSelect({ selectedId, selected: null, detailStatus: 'error' });
+      }
+    }
+  };
   useEffect(() => {
     if (!sourceUrl || !live) { setData(null); setLoading(false); setError(''); return; }
     const controller = new AbortController();
@@ -179,7 +227,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     render: (value: unknown) => value === null || value === undefined ? '—' : String(value)
   }));
   const selectionColumn = onRecordSelect ? [{ title: '操作', key: 'action', render: (_: unknown, row: RemoteTableRow) =>
-    <Button size="small" onClick={() => onRecordSelect(row)}>选择</Button> }] : [];
+    <Button size="small" onClick={() => { void chooseRecord(row); }}>选择</Button> }] : [];
   return <div className="pa-studio-rich pa-studio-remote-table" data-atlas-table-source="remote">
     <strong>{title}</strong>
     <form className="pa-studio-widget-actions" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(searchInput.trim().slice(0,120)); }}>
@@ -192,6 +240,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
       <Button size="small" onClick={()=>setRevision((value)=>value+1)} disabled={loading}>刷新</Button>
     </form>
     {error ? <small role="alert">表格加载失败：{error}</small> : null}
+    {selectionError ? <small role="alert">记录详情加载失败：{selectionError}</small> : null}
     <Table<RemoteTableRow> size="small" rowKey="key" loading={loading} dataSource={data?.items ?? []}
       columns={[...displayColumns, ...selectionColumn]}
       pagination={{ current: page, pageSize, total: data?.total ?? 0, showSizeChanger: false }}
@@ -403,7 +452,7 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
   </div>;
 }
 /** Live Studio widgets are backed by the same source code as the standalone React export. */
-export function WidgetPreview({ kind, props, live, recordSelection, workflowPages, onWorkflowNavigate, onRecordSelect }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined; workflowPages?: readonly string[] | undefined; onWorkflowNavigate?: ((pageId: string) => void) | undefined; onRecordSelect?: ((row: Record<string, unknown>) => void) | undefined }) {
+export function WidgetPreview({ kind, props, live, recordSelection, workflowPages, onWorkflowNavigate, onRecordSelect }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined; workflowPages?: readonly string[] | undefined; onWorkflowNavigate?: ((pageId: string) => void) | undefined; onRecordSelect?: ((selection: OverlayRecordSelection) => void) | undefined }) {
   const title = label(props.title, '组件');
   const items = widgetItems(props.items);
   const values = widgetValues(props.values);
