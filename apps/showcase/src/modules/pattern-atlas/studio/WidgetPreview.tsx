@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
 import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, overlaySubmitUrl, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
+import { normalizeStudioWorkflow, runStudioWorkflow, dispatchWorkflowComponentEvent, type StudioWorkflow } from './studio-workflows';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
 const rows = (value: unknown) => widgetItems(value).map((item, index) => { const [name, status = '—'] = item.split('|'); return { key: index, name, status }; });
@@ -156,7 +157,29 @@ function RemoteLineWidget({ props, live }: { props: Record<string, unknown>; liv
     </div> : null}
   </div>;
 }
-function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' | 'drawer' | 'popconfirm'; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined }) {
+/** Reuses the bounded button-workflow engine; prevents a second implicit form save. */
+export function parseOverlayFollowup(value: unknown, validPages: readonly string[]): StudioWorkflow | undefined {
+  if (value === '' || value === undefined || value === null) return undefined;
+  if (typeof value !== 'string' || value.length > 5000) throw new Error('工作流配置超出长度限制。');
+  let decoded: unknown;
+  try { decoded = JSON.parse(value); } catch { throw new Error('工作流不是有效 JSON。'); }
+  if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('工作流结构无效。');
+  const raw = decoded as { steps?: unknown };
+  if (!Array.isArray(raw.steps) || !raw.steps.length || raw.steps.length > 12) throw new Error('工作流需要 1–12 个步骤。');
+  const workflow = normalizeStudioWorkflow(decoded, validPages);
+  if (!workflow || workflow.steps.length !== raw.steps.length) throw new Error('工作流包含不支持的步骤。');
+  for (const step of workflow.steps) {
+    const actions = step.type === 'branch' ? [...step.onTrue, ...step.onFalse] : [step];
+    if (actions.some((action) => action.type === 'save-record')) throw new Error('表单已自动保存，不允许在后续工作流重复保存。');
+    if (step.type === 'branch') {
+      const original = (raw.steps as unknown[]).find((item): item is { id: string; onTrue?: unknown; onFalse?: unknown } => !!item && typeof item === 'object' && (item as { id?: string }).id === step.id);
+      if (!original || !Array.isArray(original.onTrue) || !Array.isArray(original.onFalse) || original.onTrue.length !== step.onTrue.length || original.onFalse.length !== step.onFalse.length) throw new Error('工作流条件分支包含无效步骤。');
+    }
+  }
+  return workflow;
+}
+
+function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [], onWorkflowNavigate }: { kind: 'modal' | 'drawer' | 'popconfirm'; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined; workflowPages?: readonly string[] | undefined; onWorkflowNavigate?: ((pageId: string) => void) | undefined }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState('');
   const editMode = props.formMode === 'edit-selected' && kind !== 'popconfirm';
@@ -164,6 +187,7 @@ function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' |
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState('');
+  const [workflowError, setWorkflowError] = useState('');
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const controller = useRef<AbortController | null>(null);
@@ -177,6 +201,39 @@ function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' |
   const selectedId = editMode ? recordSelection?.selectedId ?? '' : '';
   const url = editMode ? overlaySubmitUrl(props.submitUrl, 'edit-selected', editingId) : overlaySubmitUrl(props.submitUrl, 'create');
   useEffect(() => { if (open && editMode && recordSelection?.selectedId !== editingId) { setOpen(false); setSubmitError(''); } }, [open, editMode, editingId, recordSelection?.selectedId]);
+  const runFollowup = async (key: 'successWorkflow' | 'failureWorkflow', snapshot: Record<string,string>, id: string) => {
+    const raw = props[key];
+    if (!raw) return;
+    try {
+      const workflow = parseOverlayFollowup(raw, workflowPages);
+      if (!workflow) return;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      try {
+        await runStudioWorkflow(workflow, {
+          confirm: (question) => new Promise<boolean>((resolve) => {
+            Modal.confirm({ title: '确认后续操作', content: question, onOk: () => { resolve(true); }, onCancel: () => { resolve(false); } });
+          }),
+          notify: (text) => { void notify.info(text); },
+          navigate: (pageId) => {
+            if (!workflowPages.includes(pageId)) throw new Error('后续工作流的目标页面不存在。');
+            if (onWorkflowNavigate) onWorkflowNavigate(pageId);
+            else window.location.hash = '#/' + pageId;
+          },
+          saveRecord: async () => { throw new Error('后续工作流不能再次保存当前表单。'); },
+          refreshRecords: () => window.dispatchEvent(new Event('atlas:records-refresh')),
+          ...(id ? { selectedId: id } : {}),
+          draft: snapshot,
+          signal: controller.signal,
+          emit: (target, action) => dispatchWorkflowComponentEvent(target, action)
+        });
+      } finally { clearTimeout(timeout); controller.abort(); }
+    } catch (problem) {
+      const messageText = problem instanceof Error ? problem.message : '未知错误';
+      setWorkflowError('后续工作流失败：' + messageText);
+      void notify.error('后续动作失败：' + messageText);
+    }
+  };
   const close = () => { if (!pending.current) { setOpen(false); setErrors({}); setSubmitError(''); } };
   const openDialog = () => {
     if (editMode && (!selectedId || !recordSelection?.selected || recordSelection.detailStatus === 'loading' || recordSelection.detailStatus === 'error')) return;
@@ -186,7 +243,7 @@ function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' |
       defaults[field.key] = current === null || current === undefined ? '' : typeof current === 'string' || typeof current === 'number' ? String(current) : '';
     }
     setEditingId(selectedId);
-    setDraft(defaults); setErrors({}); setSubmitError(''); setOpen(true);
+    setDraft(defaults); setErrors({}); setSubmitError(''); setWorkflowError(''); setOpen(true);
   };
   const trigger = <Button size="small" disabled={!live || (editMode && (!selectedId || !recordSelection?.selected || recordSelection.detailStatus === 'loading' || recordSelection.detailStatus === 'error'))} onClick={openDialog}>{label(props.triggerText, '打开')}</Button>;
   const confirmed = () => { setOpen(false); void notify.success('操作已确认（未关联后端）'); };
@@ -199,7 +256,9 @@ function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' |
     if (Object.keys(result.errors).length) return;
     if (!url) { setSubmitError(editMode ? '编辑模式需要含单个 {id} 的有效保存地址和选中记录' : '未配置有效的保存地址'); return; }
     pending.current = true;
-    setBusy(true); setSubmitError('');
+    setBusy(true); setSubmitError(''); setWorkflowError('');
+    const snapshot = { ...draft };
+    const submittedId = editMode ? editingId : '';
     const request = new AbortController();
     controller.current = request;
     const timeout = setTimeout(() => request.abort(), 15000);
@@ -214,9 +273,11 @@ function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' |
       // The standalone RecordProvider and Studio record flow both subscribe to this event.
       window.dispatchEvent(new Event('atlas:records-refresh'));
       void notify.success('保存成功，记录已刷新');
+      await runFollowup('successWorkflow', snapshot, submittedId);
     } catch (reason) {
       if (!request.signal.aborted) setSubmitError(reason instanceof Error ? '保存失败：' + reason.message : '保存失败');
       else setSubmitError('请求超时或已取消');
+      await runFollowup('failureWorkflow', snapshot, submittedId);
     } finally {
       clearTimeout(timeout); pending.current = false; controller.current = null; setBusy(false);
     }
@@ -231,6 +292,7 @@ function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' |
     </label>)}
     {!fields.length ? <small role="alert">字段配置无效：格式为 key|标签|text/email/number|required/optional，每行一个</small> : null}
     {submitError ? <small role="alert">{submitError}</small> : null}
+    {workflowError ? <small role="alert">{workflowError}</small> : null}
     {!url ? <small>编辑模式请设置含 {'{id}'} 的保存地址；新增模式设置普通地址</small> : null}
   </div> : description;
   const actions = hasForm ? <Space><Button disabled={busy} onClick={close}>{cancel}</Button><Button type="primary" loading={busy} disabled={!live || !fields.length} onClick={() => { void submit(); }}>{ok}</Button></Space> : undefined;
@@ -242,7 +304,7 @@ function OverlayWidget({ kind, props, live, recordSelection }: { kind: 'modal' |
   </div>;
 }
 /** Live Studio widgets are backed by the same source code as the standalone React export. */
-export function WidgetPreview({ kind, props, live, recordSelection }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined }) {
+export function WidgetPreview({ kind, props, live, recordSelection, workflowPages, onWorkflowNavigate }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined; workflowPages?: readonly string[] | undefined; onWorkflowNavigate?: ((pageId: string) => void) | undefined }) {
   const title = label(props.title, '组件');
   const items = widgetItems(props.items);
   const values = widgetValues(props.values);
@@ -271,8 +333,8 @@ export function WidgetPreview({ kind, props, live, recordSelection }: { kind: St
     case 'date': return <label className="pa-studio-field"><small>{title}</small><DatePicker style={{ width: '100%' }} disabled={!live}/></label>;
     case 'slider': return <div className="pa-studio-rich"><strong>{title}</strong><Slider defaultValue={percent} disabled={!live}/></div>;
     case 'rate': return <Space><span>{title}</span><Rate disabled={!live}/></Space>;
-    case 'modal': return <OverlayWidget kind="modal" props={props} live={live} recordSelection={recordSelection}/>;
-    case 'drawer': return <OverlayWidget kind="drawer" props={props} live={live} recordSelection={recordSelection}/>;
+    case 'modal': return <OverlayWidget kind="modal" props={props} live={live} recordSelection={recordSelection} workflowPages={workflowPages} onWorkflowNavigate={onWorkflowNavigate}/>;
+    case 'drawer': return <OverlayWidget kind="drawer" props={props} live={live} recordSelection={recordSelection} workflowPages={workflowPages} onWorkflowNavigate={onWorkflowNavigate}/>;
     case 'popconfirm': return <OverlayWidget kind="popconfirm" props={props} live={live}/>;
     case 'skeleton': return <div className="pa-studio-rich"><strong>{title}</strong><Skeleton active paragraph={{ rows: 2 }} title={{ width: '60%' }}/></div>;
     case 'empty': return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={label(props.description, title)}/>;
