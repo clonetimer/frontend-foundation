@@ -253,7 +253,7 @@ function useRecord(): RecordContextValue { const value = useContext<RecordContex
 export function StudioRecordWidget({ kind, props, workflowPages }: { kind: StudioWidgetKind; props: Record<string, unknown>; workflowPages: string[] }) {
   const state = useRecord();
   return <WidgetPreview kind={kind} props={props} live
-    recordSelection={{ selectedId: state.selectedId, selected: state.selected, detailStatus: state.detailStatus }} workflowPages={workflowPages}/>;
+    recordSelection={{ selectedId: state.selectedId, selected: state.selected, detailStatus: state.detailStatus }} workflowPages={workflowPages} onRecordSelect={(row) => state.choose(row)}/>;
 }
 
 export function StudioRecordList({ title }: { title: string }) {
