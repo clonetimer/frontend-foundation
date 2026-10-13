@@ -3,7 +3,7 @@ export const exportedRecordRuntime = String.raw`import { createContext, useConte
 import { Button, Input, Modal, Popconfirm, Select, message } from 'antd';
 import { appendWorkflowTrace, dispatchWorkflowComponentEvent, runStudioWorkflow, type StudioWorkflow, type WorkflowTrace } from './studio-workflows';
 import { WidgetPreview } from ${JSON.stringify('./studio-widget-preview')};
-import type { StudioWidgetKind } from './widgets';
+import type { StudioWidgetKind, OverlayRecordSelection } from './widgets';
 
 export interface FieldMap { field: string; responsePath: string; saveField: string }
 export interface RecordSource { url: string; itemsPath: string; idField: string; labelField: string; pageSize?: number; detailUrl?: string; detailPath?: string; paginationMode?: 'client' | 'server'; pageParam?: string; sizeParam?: string; searchParam?: string; totalPath?: string; fieldMappings?: FieldMap[]; filterField?: string; filterParam?: string; filterValues?: string[]; sortField?: string; sortParam?: string; sortDirectionParam?: string; createUrl?: string; deleteUrl?: string }
@@ -13,6 +13,7 @@ type Row = Record<string, unknown>;
 interface RecordContextValue {
   source: RecordSource | null; visibleRows: Row[]; loading: boolean; error: string;
   selected: Row | null; selectedId: string; draft: Record<string, string>; errors: Record<string,string>;
+  tableSelection: OverlayRecordSelection | null; chooseTable: (selection: OverlayRecordSelection) => void;
   detailStatus: 'idle' | 'loading' | 'ready' | 'error'; detailError: string;
   saveStatus: 'idle' | 'loading' | 'success' | 'error'; saveError: string;
   page: number; pageSize: number; totalPages: number; totalRows: number;
@@ -125,6 +126,7 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState('');
+  const [tableSelection, setTableSelection] = useState<OverlayRecordSelection | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [saveError, setSaveError] = useState('');
@@ -241,11 +243,11 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
     try { await request(url, { method:'DELETE' }); setSelectedId(''); setDetail(null); setSaveStatus('success'); setRevision((n) => n + 1); }
     catch (reason) { setSaveStatus('error'); setSaveError(reason instanceof Error ? reason.message : '删除失败'); throw reason; }
   };
-  return <Context.Provider value={{ source, visibleRows, loading, error, selected, selectedId, draft, errors, detailStatus, detailError, saveStatus, saveError,
+  return <Context.Provider value={{ source, visibleRows, loading, error, selected, selectedId, draft, errors, detailStatus, detailError, tableSelection, chooseTable: setTableSelection, saveStatus, saveError,
     page: currentPage, pageSize, totalPages, totalRows: count, searchInput, setSearchInput, applySearch: () => { setPage(1); setSelectedId(''); setSearch(searchInput.trim().slice(0, 120)); }, retry: () => setRevision((value) => value + 1),
     filter, setFilter: (value) => { setFilter(value); setPage(1); setSelectedId(''); }, direction, setDirection: (value) => { setDirection(value); setPage(1); setSelectedId(''); }, create, remove,
     changePage: (value) => { setSelectedId(''); setPage(Math.max(1, Math.min(totalPages, value))); },
-    choose: (row) => { if (source) setSelectedId(idOf(row, source)); },
+    choose: (row) => { setTableSelection(null); if (source) setSelectedId(idOf(row, source)); },
     edit: (field, value) => { setDraft((old) => ({ ...old, [field]: value })); setSaveStatus('idle'); setErrors((old) => { const next = { ...old }; delete next[field]; return next; }); }, save }}>{children}</Context.Provider>;
 }
 function useRecord(): RecordContextValue { const value = useContext<RecordContextValue | null>(Context); if (!value) throw new Error('缺少记录数据容器'); return value; }
@@ -253,7 +255,7 @@ function useRecord(): RecordContextValue { const value = useContext<RecordContex
 export function StudioRecordWidget({ kind, props, workflowPages }: { kind: StudioWidgetKind; props: Record<string, unknown>; workflowPages: string[] }) {
   const state = useRecord();
   return <WidgetPreview kind={kind} props={props} live
-    recordSelection={{ selectedId: state.selectedId, selected: state.selected, detailStatus: state.detailStatus }} workflowPages={workflowPages} onRecordSelect={(row) => state.choose(row)}/>;
+    recordSelection={state.tableSelection ?? { selectedId: state.selectedId, selected: state.selected, detailStatus: state.detailStatus }} workflowPages={workflowPages} onRecordSelect={state.chooseTable}/>;
 }
 
 export function StudioRecordList({ title }: { title: string }) {
