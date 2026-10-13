@@ -47,7 +47,7 @@ function exec(program, args, cwd) {
         { id: 'browserModal', kind: 'modal', props: { title: '验收弹窗', triggerText: '打开验收弹窗', description: '验收弹窗内容', okText: '确认', cancelText: '取消' } },
         { id: 'browserDrawer', kind: 'drawer', props: { title: '验收抽屉', triggerText: '打开验收抽屉', description: '验收抽屉内容', placement: 'right', width: 420 } },
         { id: 'browserConfirm', kind: 'popconfirm', props: { title: '验收提示', triggerText: '执行验收确认', description: '请确认是否继续', okText: '确认', cancelText: '取消' } },
-        { id: 'browserChart', kind: 'line-chart', props: { title: '验收多序列曲线', items: ['A', 'B', 'C'], series: '温度:-20,0,120;参考:0,10,30', values: '', unit: '℃' } }
+        { id: 'browserChart', kind: 'line-chart', props: { title: '验收多序列曲线', items: ['A', 'B', 'C'], series: '温度:-20,0,120;参考:0,10,30', values: '', unit: '℃', dataUrl: '/chart-feed.json', dataPath: 'data', refreshMs: 0 } }
       ];
       for (const fixture of fixtures) {
         const page = document.blueprint.pages[0];
@@ -75,6 +75,14 @@ function exec(program, args, cwd) {
     }
     assert.equal(view.getUint32(cursor,true),0x02014b50,'Missing ZIP directory');
     assert.equal(extracted,files.length,'Entries missing');
+    if (browserAcceptance) {
+      mkdirSync(join(destination, 'public'), { recursive: true });
+      writeFileSync(join(destination, 'public', 'chart-feed.json'), JSON.stringify({
+        data: { items: ['A', 'B', 'C'], series: [
+          { name:'温度', values:[-35, 5, 280] }, { name:'参考', values:[0, 10, 30] }
+        ] }
+      }), 'utf8');
+    }
     const pkg = JSON.parse(readFileSync(join(destination,'package.json'),'utf8'));
     assert(!Object.keys(pkg.dependencies || {}).some((dep) => dep.startsWith('@foundation/')), 'Workspace dependency leaked');
     console.log('Extracted',extracted,'files into',destination);
