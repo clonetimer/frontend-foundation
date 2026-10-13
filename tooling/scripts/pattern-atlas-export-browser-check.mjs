@@ -32,6 +32,13 @@ export async function runExportedBrowserSmoke(directory) {
   let socket;
   const posts = [];
   const savedRecords = [{ id:'R/1 ?', name:'旧姓名', email:'old@example.org', amount:3 }];
+  const tableCalls = [];
+  const tableRows = [
+    {id:'R/1 ?',name:'旧姓名',status:'进行中'},
+    {id:'T-2',name:'第二对象',status:'待开始'},
+    {id:'T-3',name:'可查对象',status:'已完成'},
+    {id:'T-4',name:'另一对象',status:'进行中'}
+  ];
   const patchCalls = [];
   const followupCalls = [];
   let listReads = 0;
@@ -41,6 +48,25 @@ export async function runExportedBrowserSmoke(directory) {
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
     if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
+    if (request.method === 'GET' && request.url?.startsWith('/api/table')) {
+      const query = new URL(request.url, 'http://127.0.0.1:4198');
+      const values = Object.fromEntries(query.searchParams);
+      tableCalls.push(values);
+      let records = [...tableRows];
+      const search = (query.searchParams.get('search') ?? '').trim();
+      if (search) records = records.filter((item) => item.name.includes(search));
+      if (query.searchParams.get('filterField') === 'status' && query.searchParams.get('filter')) {
+        records = records.filter((item) => item.status === query.searchParams.get('filter'));
+      }
+      if (query.searchParams.get('sort') === 'name' && query.searchParams.get('order')) {
+        records.sort((a, b) => a.name.localeCompare(b.name) * (query.searchParams.get('order') === 'desc' ? -1 : 1));
+      }
+      const page = Math.max(1, Number(query.searchParams.get('page') || '1'));
+      const pageSize = Math.max(1, Math.min(20, Number(query.searchParams.get('pageSize') || '2')));
+      response.writeHead(200); response.end(JSON.stringify({data:{
+        items: records.slice((page - 1) * pageSize, page * pageSize), total: records.length
+      }})); return;
+    }
     if (request.method === 'GET' && request.url === '/api/list') { listReads += 1; response.writeHead(200); response.end(JSON.stringify({data:{items:savedRecords}})); return; }
     if (request.method !== 'POST' && request.method !== 'PATCH') { response.writeHead(405); response.end('{}'); return; }
     let body = '';
@@ -52,6 +78,7 @@ export async function runExportedBrowserSmoke(directory) {
       const submitted = JSON.parse(body);
       patchCalls.push({ path:request.url, data:submitted });
       Object.assign(savedRecords[0], submitted);
+      Object.assign(tableRows[0], submitted);
       response.writeHead(200); response.end('{"saved":true}'); return;
     }
     if (request.method === 'POST' && request.url === '/api/followup') {
@@ -209,6 +236,33 @@ export async function runExportedBrowserSmoke(directory) {
     assert.deepEqual(followupCalls[0], { name:'后续任务' }, 'Follow-up request did not interpolate form fields');
     await until(() => evaluate("document.body.textContent.includes('后续操作成功')"), 'Follow-up workflow notification');
 
+
+    // Phase 22: The standalone table must query the backend, never fake paging
+    // or sort only the two visible rows. Selecting its row reaches the edit modal.
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Remote table GET loaded');
+    assert(tableCalls.some((request) => request.page === '1' && request.pageSize === '2'), 'Initial server table page request missing');
+    assert(await evaluate("(() => { const row = [...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el => el.textContent?.includes('更新姓名')); const button = row?.querySelector('button'); if (!button) return false; button.click(); return true; })()"), 'Table selected row action missing');
+    assert(await click('编辑当前记录'), 'Edit trigger missing after table row selection');
+    await until(() => evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.value === '更新姓名'"), 'Selected table row not connected to edit modal');
+    await evaluate("document.querySelector('.ant-modal-footer button.ant-btn-default')?.click()");
+
+    assert(await evaluate("(() => { const button = document.querySelector('.pa-studio-remote-table .ant-pagination-next button'); if (!button) return false; button.click(); return true; })()"), 'Remote table next-page action missing');
+    await until(() => tableCalls.some((request) => request.page === '2'), 'Remote table did not request page 2');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('可查对象')"), 'Remote table page 2 rows');
+    assert(await evaluate("(() => { const button = document.querySelector('.pa-studio-remote-table .ant-pagination-prev button'); if (!button) return false; button.click(); return true; })()"), 'Remote table previous-page action missing');
+    await until(() => tableCalls.filter((request) => request.page === '1').length > 1, 'Remote table did not request page 1 after back');
+
+    assert(await evaluate("(() => { const header = document.querySelector('.pa-studio-remote-table th.ant-table-column-has-sorters'); if (!header) return false; header.click(); return true; })()"), 'Sortable table column missing');
+    await until(() => tableCalls.some((request) => request.sort === 'name' && request.order === 'asc'), 'Remote table did not submit sorting to backend');
+
+    assert(await evaluate("(() => { const field = document.querySelector('.pa-studio-remote-table select[aria-label=表格筛选]'); if (!field) return false; field.value = '已完成'; field.dispatchEvent(new Event('change',{bubbles:true})); return true; })()"), 'Table filter missing');
+    await until(() => tableCalls.some((request) => request.filterField === 'status' && request.filter === '已完成'), 'Remote table filter parameters missing');
+    assert(await evaluate("(() => { const field = document.querySelector('.pa-studio-remote-table input[aria-label=表格搜索]'); if (!field) return false; field.focus(); return true; })()"), 'Table search input missing');
+    await call('Input.insertText', { text:'可查' });
+    assert(await evaluate("(() => { const button = document.querySelector('.pa-studio-remote-table form button[type=submit]'); if (!button) return false; button.click(); return true; })()"), 'Table search submission missing');
+    await until(() => tableCalls.some((request) => request.search === '可查' && request.filter === '已完成'), 'Server search plus filter not requested');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 1 条记录')"), 'Server filtered result count');
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -216,7 +270,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
