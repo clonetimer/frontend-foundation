@@ -27,8 +27,32 @@ describe('Phase 22 · remote business tables', () => {
     expect(parseRemoteTablePage(input,'__proto__',columns)).toBeNull();
     expect(parseRemoteTablePage({items:Array.from({length:101},(_,n)=>({id:String(n)})),total:101},'id',columns)).toBeNull();
   });
+  it('can export a table-only page without a record-list source while retaining editable row context', () => {
+    let doc=createStudioDocument();
+    const page=doc.blueprint.pages[0]!;
+    page.composition=insertNode(page.composition!,page.composition!.id,createNode('table','tableOnly'),'inside');
+    page.composition=insertNode(page.composition!,page.composition!.id,createNode('modal','editOnly'),'inside');
+    doc=setDecoration(doc,page.id+':tableOnly',{widgetKind:'table',widgetProps:normalizeWidgetProps('table',{
+      dataUrl:'/api/table',detailUrl:'/api/records/{id}',detailPath:'data',idField:'id',
+      tableColumns:'name|姓名\nstatus|状态',pageSize:2
+    })});
+    doc=setDecoration(doc,page.id+':editOnly',{widgetKind:'modal',widgetProps:normalizeWidgetProps('modal',{
+      title:'编辑',formMode:'edit-selected',formFields:'name|姓名|text|required',submitUrl:'/api/save/{id}'
+    })});
+    const restored=parseStudioFile(serializeStudioDocument(doc));
+    const compiled=generateReactPage(restored,page.id);
+    expect(compiled).toContain('StudioRecordProvider source={null}');
+    expect(compiled).toContain('StudioRecordWidget kind={"table"}');
+    expect(compiled).toContain('StudioRecordWidget kind={"modal"}');
+    expect(compiled).toContain('/api/records/{id}');
+    const files=projectExportFiles(restored);
+    const runtime=files.find(f=>f.name==='studio-records.tsx')?.text ?? '';
+    expect(runtime).toContain('chooseTable: setTableSelection');
+    expect(runtime).toContain('state.tableSelection ??');
+    expect(runtime).toContain('setTableSelection(null)');
+  });
   it('roundtrips remote configuration, bounded page size and exact exported implementation', () => {
-    const remote={dataUrl:'/api/table',itemsPath:'data.items',totalPath:'data.total',idField:'id',tableColumns:'name|名称\nstatus|状态',filterField:'status',filterValues:'进行中,已完成',sortField:'name',pageSize:500};
+    const remote={dataUrl:'/api/table',itemsPath:'data.items',totalPath:'data.total',detailUrl:'/api/record/{id}',detailPath:'data',idField:'id',tableColumns:'name|名称\nstatus|状态',filterField:'status',filterValues:'进行中,已完成',sortField:'name',pageSize:500};
     let doc=createStudioDocument();
     const page=doc.blueprint.pages[0]!;
     page.composition=insertNode(page.composition!,page.composition!.id,createNode('table','remoteTable22'),'inside');
