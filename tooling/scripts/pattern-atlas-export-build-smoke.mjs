@@ -84,12 +84,12 @@ function exec(program, args, cwd) {
         widgetKind: 'table',
         widgetProps: { title: '无列表远程表格', dataUrl: 'http://127.0.0.1:4198/api/table', itemsPath: 'data.items', totalPath: 'data.total',
           idField: 'id', detailUrl: 'http://127.0.0.1:4198/api/row/{id}', detailPath: 'data',
-          tableColumns: 'name|名称\\nstatus|状态', pageSize: 2, sortField: 'name', filterField: 'status', filterValues: '进行中,待开始,已完成' }
+          tableColumns: 'name|名称\nstatus|状态', pageSize: 2, sortField: 'name', filterField: 'status', filterValues: '进行中,待开始,已完成' }
       });
       document = setDecoration(document, 'isolated:isolatedEdit22', {
         widgetKind: 'modal',
         widgetProps: { title: '跨页编辑表单', triggerText: '编辑跨页记录', formMode: 'edit-selected', submitMethod: 'PATCH',
-          sourceId: 'overlay-edit', formFields: 'name|姓名|text|required\\nemail|邮箱|email|optional', submitUrl: '' }
+          sourceId: 'overlay-edit', formFields: 'name|姓名|text|required\nemail|邮箱|email|optional', submitUrl: '' }
       });
     }
     const files = projectExportFiles(document);
