@@ -392,6 +392,18 @@ export function Component() {
           <SettingSelect title="复用共享数据源（保存地址）" value={String(richProps.sourceId ?? '')} options={[{value:'',label:'直接使用下方保存地址'}, ...doc.dataSources.map((entry) => ({value:entry.id,label:entry.name}))]} onChange={(value)=>updateRich('sourceId',value)}/>
           <div className="pa-studio-note">编辑模式从当前选中记录预填，保存地址需包含一个 {'{id}'} 占位符。可直接配置地址，或选用共享数据源中的保存地址。提交时对记录 ID 编码；所选记录变化后不继续提交旧表单。</div>
         </> : null}
+        {(meta.widgetKind === 'modal' || meta.widgetKind === 'drawer') ? <>
+          <div className="pa-studio-note">表单工作流：先完成真正的 POST/PATCH；可分别配置成功和失败时的后续动作。复用按钮工作流引擎，支持消息、条件分支、后续 API、页面跳转和组件高亮。后续动作失败不会改写已完成的保存结果。</div>
+          <Space wrap>
+            <Button size="small" onClick={() => updateRich('successWorkflow', JSON.stringify({steps:[{id:'success-message',type:'notify',text:'记录已保存'},{id:'update-list',type:'refresh-records'}]},null,2))}>成功：消息与刷新</Button>
+            <Button size="small" onClick={() => updateRich('successWorkflow', JSON.stringify({steps:[{id:'has-name',type:'branch',source:'draft.name',operator:'exists',expected:'',onTrue:[{id:'named',type:'notify',text:'保存 {{draft.name}} 成功'}],onFalse:[{id:'unnamed',type:'notify',text:'保存成功'}]}]},null,2))}>成功：条件分支</Button>
+            <Button size="small" onClick={() => updateRich('successWorkflow', JSON.stringify({steps:[{id:'confirm-followup',type:'confirm',text:'继续执行后续接口操作？'},{id:'call-followup',type:'request',method:'POST',url:'/api/followup',body:'{}'}]},null,2))}>成功：后续 API</Button>
+            <Button size="small" onClick={() => updateRich('failureWorkflow', JSON.stringify({steps:[{id:'failed',type:'notify',text:'请求失败，请检查接口或重试'}]},null,2))}>失败：提示</Button>
+          </Space>
+          <TextSetting title="保存成功后的步骤（JSON）" multiline value={String(richProps.successWorkflow ?? '')} change={(value)=>updateRich('successWorkflow',value)}/>
+          <TextSetting title="保存失败后的步骤（JSON）" multiline value={String(richProps.failureWorkflow ?? '')} change={(value)=>updateRich('failureWorkflow',value)}/>
+          <div className="pa-studio-note">每条最多 12 步；请求体和变量不会被记录在日志中。可通过 <code>{'{{draft.name}}'}</code> 引用表单值。写入型后续 API 必须先加入确认步骤。需要跳转或组件联动时，在 JSON 步骤中设置 navigate/pageId 或 emit/targetId/action。</div>
+        </> : null}
         {meta.widgetKind === 'modal' || meta.widgetKind === 'drawer' ? <>
           <Button block onClick={() => updateRich('formFields', 'title|标题|text|required\nemail|邮箱|email|required\namount|金额|number|optional')}>填入三字段表单模板</Button>
           <div className="pa-studio-note">弹窗表单仅在体验模式及导出项目提交：校验必填、邮箱和数字，POST JSON；成功后触发记录列表刷新。URL 未设置时禁止实际保存，不存储密钥。</div>
@@ -712,7 +724,7 @@ export function Component() {
           {doc.shell.navigation !== 'none' ? <nav aria-label="项目页面导航" className="pa-studio-preview-navigation"><div className="pa-studio-preview-brand">{doc.blueprint.project.title}</div><div className="pa-studio-preview-links">{orderedNavigation.map((entry) => <button type="button" key={entry.target} className={entry.target === page?.id ? 'active' : ''} onClick={() => selectPage(entry.target)}>{entry.label}</button>)}</div></nav> : null}
           <div className="pa-studio-screen" key={`${page?.id}-${replayKey}`} style={{ minHeight: Math.max(400, ...Object.entries(doc.decorations).filter(([key, meta]) => key.startsWith(`${page?.id}:`) && meta.geometry?.mode === 'absolute').map(([, meta]) => (meta.geometry?.y ?? 0) + (meta.geometry?.height ?? 150) + 52)) }}>
             <div ref={setAbsoluteLayer} className="pa-studio-absolute-layer" aria-label="页面绝对定位图层"/>
-            {root ? <StudioCanvas node={root} selectedId={chosen?.id} decorations={doc.decorations} pageId={page?.id} live={live} readOnly={live} onSelect={setSelectedId} onDropItem={drop} onNavigate={selectPage} recordFlow={recordFlow} dataSources={doc.dataSources} absoluteLayer={absoluteLayer} onWorkflowTrace={(trace) => setWorkflowTraces((before) => appendWorkflowTrace(before, trace))}/> : <div>暂不支持编辑这一页的内容</div>}
+            {root ? <StudioCanvas node={root} selectedId={chosen?.id} decorations={doc.decorations} pageId={page?.id} live={live} readOnly={live} onSelect={setSelectedId} onDropItem={drop} onNavigate={selectPage} recordFlow={recordFlow} dataSources={doc.dataSources} workflowPages={doc.blueprint.pages.map((entry) => entry.id)} absoluteLayer={absoluteLayer} onWorkflowTrace={(trace) => setWorkflowTraces((before) => appendWorkflowTrace(before, trace))}/> : <div>暂不支持编辑这一页的内容</div>}
           </div>
         </div>
       </div></div></main>
