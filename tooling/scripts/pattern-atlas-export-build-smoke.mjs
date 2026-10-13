@@ -49,7 +49,7 @@ function exec(program, args, cwd) {
         { id: 'browserModal', kind: 'modal', props: { title: '验收弹窗', triggerText: '打开验收弹窗', description: '验收弹窗内容', okText: '确认', cancelText: '取消' } },
         { id: 'browserDrawer', kind: 'drawer', props: { title: '验收抽屉', triggerText: '打开验收抽屉', description: '验收抽屉内容', placement: 'right', width: 420 } },
         { id: 'browserConfirm', kind: 'popconfirm', props: { title: '验收提示', triggerText: '执行验收确认', description: '请确认是否继续', okText: '确认', cancelText: '取消' } },
-        { id: 'formModal21', kind: 'modal', props: { title: '新增记录表单', triggerText: '填写新增记录', description: '请输入记录字段', formFields: 'name|姓名|text|required\\nemail|邮箱|email|required\\namount|金额|number|optional', submitUrl: 'http://127.0.0.1:4198/api/save', okText: '提交保存', cancelText: '取消',
+        { id: 'formModal21', kind: 'modal', props: { title: '新增记录表单', triggerText: '填写新增记录', description: '请输入记录字段', formFields: 'name|姓名|text|required\nemail|邮箱|email|required\namount|金额|number|optional', submitUrl: 'http://127.0.0.1:4198/api/save', okText: '提交保存', cancelText: '取消',
           successWorkflow: JSON.stringify({steps:[
             {id:'branch-name',type:'branch',source:'draft.name',operator:'equals',expected:'张三',
               onTrue:[{id:'named-success',type:'notify',text:'条件命中：{{draft.name}}'}],onFalse:[{id:'not-named',type:'notify',text:'未命中'}]},
