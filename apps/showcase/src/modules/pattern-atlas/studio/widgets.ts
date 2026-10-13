@@ -12,7 +12,7 @@ export const studioWidgetDefinitions = [
   { kind: 'image', label: '图片', icon: '▧', group: '内容', defaults: { title: '项目图片', src: '', description: '填写图片地址进行预览' } },
   { kind: 'steps', label: '步骤条', icon: '➀', group: '内容', defaults: { title: '业务流程', items: ['提交', '审核', '完成'], percent: 1 } },
   { kind: 'timeline', label: '时间轴', icon: '┆', group: '内容', defaults: { title: '进度记录', items: ['需求确认', '开发实现', '验收交付'] } },
-  { kind: 'table', label: '数据表格', icon: '▦', group: '数据', defaults: { title: '任务表格', items: ['方案设计|进行中', '接口联调|待开始', '发布验收|已完成'], pageSize: 5, dataUrl: '', itemsPath: 'data.items', totalPath: 'data.total', idField: 'id', tableColumns: 'name|名称\nstatus|状态', filterField: 'status', filterValues: '进行中,待开始,已完成', sortField: 'name' } },
+  { kind: 'table', label: '数据表格', icon: '▦', group: '数据', defaults: { title: '任务表格', items: ['方案设计|进行中', '接口联调|待开始', '发布验收|已完成'], pageSize: 5, dataUrl: '', itemsPath: 'data.items', totalPath: 'data.total', detailUrl: '', detailPath: 'data', idField: 'id', tableColumns: 'name|名称\nstatus|状态', filterField: 'status', filterValues: '进行中,待开始,已完成', sortField: 'name' } },
   { kind: 'chart', label: '柱状图', icon: '▥', group: '数据', defaults: { title: '趋势分析', items: ['一月', '二月', '三月', '四月'], values: '32,58,44,77' } },
   { kind: 'descriptions', label: '描述列表', icon: '☷', group: '数据', defaults: { title: '项目属性', items: ['负责人|张三', '状态|进行中', '版本|v1.0'] } },
   { kind: 'list', label: '普通列表', icon: '☰', group: '数据', defaults: { title: '待办事项', items: ['讨论界面结构', '确认接口', '提交验收'] } },
@@ -200,7 +200,7 @@ export function normalizeWidgetProps(kind: StudioWidgetKind, value: unknown): Re
     const candidate = Object.prototype.hasOwnProperty.call(source, key) ? source[key] : undefined;
     if (typeof initial === 'string' && typeof candidate === 'string') {
       const overlayOption = normalizedOverlayOption(kind, key, candidate);
-      defaults[key] = overlayOption ?? candidate.slice(0, ['src', 'statusUrl', 'uploadUrl', 'dataUrl', 'submitUrl'].includes(key) ? 500 : key === 'formFields' ? 1600 : key === 'tableColumns' ? 1000 : key === 'filterValues' ? 500 : key === 'successWorkflow' || key === 'failureWorkflow' ? 5000 : key === 'series' ? 1200 : 240);
+      defaults[key] = overlayOption ?? candidate.slice(0, ['src', 'statusUrl', 'uploadUrl', 'dataUrl', 'submitUrl', 'detailUrl'].includes(key) ? 500 : key === 'formFields' ? 1600 : key === 'tableColumns' ? 1000 : key === 'filterValues' ? 500 : key === 'successWorkflow' || key === 'failureWorkflow' ? 5000 : key === 'series' ? 1200 : 240);
     }
     if (typeof initial === 'number' && typeof candidate === 'number' && Number.isFinite(candidate)) defaults[key] = Math.round(Math.max(key === 'pollMs' ? 1500 : key === 'maxSizeMb' ? 1 : key === 'width' ? 280 : key === 'refreshMs' ? (candidate > 0 ? 5000 : 0) : 0, Math.min(key === 'pollMs' ? 30000 : key === 'refreshMs' ? 60000 : key === 'pageSize' ? 20 : key === 'maxSizeMb' ? 30 : key === 'width' ? 800 : 100, candidate)));
     if (Array.isArray(initial) && Array.isArray(candidate)) defaults[key] = candidate.filter((item): item is string => typeof item === 'string').slice(0,30).map((item) => item.slice(0,160));
