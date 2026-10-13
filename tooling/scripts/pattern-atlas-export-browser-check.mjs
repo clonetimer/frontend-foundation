@@ -33,6 +33,7 @@ export async function runExportedBrowserSmoke(directory) {
   const posts = [];
   const savedRecords = [{ id:'R/1 ?', name:'旧姓名', email:'old@example.org', amount:3 }];
   const patchCalls = [];
+  const followupCalls = [];
   let listReads = 0;
   const api = createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:4189');
@@ -52,6 +53,10 @@ export async function runExportedBrowserSmoke(directory) {
       patchCalls.push({ path:request.url, data:submitted });
       Object.assign(savedRecords[0], submitted);
       response.writeHead(200); response.end('{"saved":true}'); return;
+    }
+    if (request.method === 'POST' && request.url === '/api/followup') {
+      followupCalls.push(JSON.parse(body));
+      response.writeHead(200); response.end('{"ok":true}'); return;
     }
     if (request.url === '/api/fail') { response.writeHead(500); response.end('{"error":"intentional test failure"}'); return; }
     if (request.url !== '/api/save') { response.writeHead(404); response.end('{}'); return; }
@@ -162,12 +167,16 @@ export async function runExportedBrowserSmoke(directory) {
     assert(listReads >= 2, 'POST success did not cause a real list GET refresh');
     await until(() => evaluate("document.documentElement.dataset.recordRefresh === 'done'"), 'Record refresh notification');
     await until(() => evaluate("document.body.textContent.includes('保存成功，记录已刷新')"), 'Business form success feedback');
+    await until(() => evaluate("document.body.textContent.includes('条件命中：张三')"), 'Conditional success branch notification');
+    await until(() => evaluate("document.querySelector('[data-studio-component=formList21]')?.classList.contains('atlas-workflow-highlight')"), 'Success workflow component highlight');
+
 
     assert(await click('打开错误示例'), 'Business drawer trigger missing');
     await until(() => evaluate("document.querySelector('.ant-drawer-body')?.textContent?.includes('失败反馈表单') || document.querySelector('.ant-drawer-body')?.textContent?.includes('模拟服务端失败')"), 'Business drawer open');
     await fill('.ant-drawer-body', '姓名', '测试失败');
     assert(await evaluate("(() => { const button = document.querySelector('.ant-drawer-footer button.ant-btn-primary'); if (!button) return false; button.click(); return true; })()"), 'Business drawer submit missing');
     await until(() => evaluate("document.querySelector('.ant-drawer-body [role=alert]')?.textContent?.includes('HTTP 500')"), 'Business drawer HTTP error');
+    await until(() => evaluate("document.body.textContent.includes('提交失败分支执行')"), 'Failure workflow notification');
     assert(await evaluate("Boolean(document.querySelector('.ant-drawer-body input[aria-label=姓名]'))"), 'Failed form unexpectedly closed or lost draft');
     await evaluate("document.querySelector('.ant-drawer-footer button.ant-btn-default')?.click()");
 
@@ -187,6 +196,19 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('更新姓名')"), 'Record list GET after edit PATCH');
 
 
+    // Phase 21-C: a successful save can request explicit authorization before
+    // a second backend mutation. The second request may use the submitted draft.
+    assert(await click('提交并执行后续请求'), 'Follow-up workflow modal trigger missing');
+    await until(() => evaluate("document.querySelector('.ant-modal')?.textContent?.includes('接口联动表单')"), 'Follow-up form open');
+    await fill('.ant-modal', '姓名', '后续任务');
+    assert(await evaluate("(() => { const button = document.querySelector('.ant-modal-footer button.ant-btn-primary'); if (!button) return false; button.click(); return true; })()"), 'Follow-up form submit missing');
+    await until(() => evaluate("document.querySelector('.ant-modal-confirm')?.textContent?.includes('允许执行后续业务请求')"), 'Follow-up request confirmation');
+    assert.equal(followupCalls.length, 0, 'Follow-up mutation ran before explicit confirmation');
+    await evaluate("document.querySelector('.ant-modal-confirm-btns button.ant-btn-primary')?.click()");
+    await until(() => followupCalls.length === 1, 'Explicitly approved follow-up API POST');
+    assert.deepEqual(followupCalls[0], { name:'后续任务' }, 'Follow-up request did not interpolate form fields');
+    await until(() => evaluate("document.body.textContent.includes('后续操作成功')"), 'Follow-up workflow notification');
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -194,7 +216,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
