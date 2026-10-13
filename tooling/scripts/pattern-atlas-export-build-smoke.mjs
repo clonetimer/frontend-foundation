@@ -47,6 +47,8 @@ function exec(program, args, cwd) {
         { id: 'browserModal', kind: 'modal', props: { title: '验收弹窗', triggerText: '打开验收弹窗', description: '验收弹窗内容', okText: '确认', cancelText: '取消' } },
         { id: 'browserDrawer', kind: 'drawer', props: { title: '验收抽屉', triggerText: '打开验收抽屉', description: '验收抽屉内容', placement: 'right', width: 420 } },
         { id: 'browserConfirm', kind: 'popconfirm', props: { title: '验收提示', triggerText: '执行验收确认', description: '请确认是否继续', okText: '确认', cancelText: '取消' } },
+        { id: 'formModal21', kind: 'modal', props: { title: '新增记录表单', triggerText: '填写新增记录', description: '请输入记录字段', formFields: 'name|姓名|text|required\nemail|邮箱|email|required\namount|金额|number|optional', submitUrl: 'http://127.0.0.1:4198/api/save', okText: '提交保存', cancelText: '取消' } },
+        { id: 'formDrawer21', kind: 'drawer', props: { title: '失败反馈表单', triggerText: '打开错误示例', description: '模拟服务端失败', formFields: 'name|姓名|text|required', submitUrl: 'http://127.0.0.1:4198/api/fail', okText: '尝试保存', cancelText: '取消' } },
         { id: 'browserChart', kind: 'line-chart', props: { title: '验收多序列曲线', items: ['A', 'B', 'C'], series: '温度:-20,0,120;参考:0,10,30', values: '', unit: '℃', dataUrl: '/chart-feed.json', dataPath: 'data', refreshMs: 0 } }
       ];
       for (const fixture of fixtures) {
@@ -54,6 +56,11 @@ function exec(program, args, cwd) {
         page.composition = insertNode(page.composition, page.composition.id, createNode(fixture.kind, fixture.id), 'inside');
         document = setDecoration(document, pageId + ':' + fixture.id, { widgetKind: fixture.kind, widgetProps: fixture.props });
       }
+      const page = document.blueprint.pages[0];
+      page.composition = insertNode(page.composition, page.composition.id, createNode('records', 'formList21'), 'inside');
+      document = setDecoration(document, pageId + ':formList21', {
+        recordList: { url: 'http://127.0.0.1:4198/api/list', itemsPath: 'data.items', idField: 'id', labelField: 'name', pageSize: 8 }
+      });
     }
     const files = projectExportFiles(document);
     const data = new Uint8Array(await zipTextFiles(files).arrayBuffer());

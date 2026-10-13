@@ -135,6 +135,12 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
   const [direction, setDirection] = useState<'' | 'asc' | 'desc'>('');
   const serverPaging = source?.paginationMode === 'server';
   const pageSize = source?.pageSize ?? 8;
+  useEffect(() => {
+    if (!source?.url) return;
+    const refresh = () => setRevision((value) => value + 1);
+    window.addEventListener('atlas:records-refresh', refresh);
+    return () => window.removeEventListener('atlas:records-refresh', refresh);
+  }, [source?.url]);
   const signature = JSON.stringify(source ?? null);
   useEffect(() => { setPage(1); setSearch(''); setSearchInput(''); setFilter(''); setDirection(''); setSelectedId(''); }, [source?.url]);
   useEffect(() => {

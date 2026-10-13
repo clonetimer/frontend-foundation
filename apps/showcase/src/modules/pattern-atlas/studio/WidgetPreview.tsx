@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
-import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
+import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
 const rows = (value: unknown) => widgetItems(value).map((item, index) => { const [name, status = '—'] = item.split('|'); return { key: index, name, status }; });
@@ -159,16 +159,72 @@ function RemoteLineWidget({ props, live }: { props: Record<string, unknown>; liv
 function OverlayWidget({ kind, props, live }: { kind: 'modal' | 'drawer' | 'popconfirm'; props: Record<string, unknown>; live: boolean }) {
   const [open, setOpen] = useState(false);
   const [notify, context] = message.useMessage();
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => () => controller.current?.abort(), []);
   const title = label(props.title, '操作确认');
   const description = label(props.description);
   const ok = label(props.okText, '确认'), cancel = label(props.cancelText, '取消');
-  const trigger = <Button size="small" disabled={!live} onClick={() => setOpen(true)}>{label(props.triggerText, '打开')}</Button>;
+  const formConfig = label(props.formFields);
+  const fields = parseOverlayFormFields(formConfig);
+  const hasForm = kind !== 'popconfirm' && Boolean(formConfig.trim());
+  const url = apiUrl(props.submitUrl);
+  const close = () => { if (!pending.current) { setOpen(false); setErrors({}); setSubmitError(''); } };
+  const openDialog = () => { setDraft({}); setErrors({}); setSubmitError(''); setOpen(true); };
+  const trigger = <Button size="small" disabled={!live} onClick={openDialog}>{label(props.triggerText, '打开')}</Button>;
   const confirmed = () => { setOpen(false); void notify.success('操作已确认（未关联后端）'); };
+  const submit = async () => {
+    if (!hasForm || !live || pending.current) return;
+    if (!fields.length) { setSubmitError('字段配置有误，请检查每一行的字段名、标签、类型和必填设置'); return; }
+    const result = validateOverlayForm(fields, draft);
+    setErrors(result.errors);
+    if (Object.keys(result.errors).length) return;
+    if (!url) { setSubmitError('未配置有效的 POST 保存地址'); return; }
+    pending.current = true;
+    setBusy(true); setSubmitError('');
+    const request = new AbortController();
+    controller.current = request;
+    const timeout = setTimeout(() => request.abort(), 15000);
+    try {
+      const response = await fetch(url, {
+        method: 'POST', credentials: 'same-origin', signal: request.signal,
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result.payload)
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      setOpen(false);
+      setDraft({});
+      // The standalone RecordProvider and Studio record flow both subscribe to this event.
+      window.dispatchEvent(new Event('atlas:records-refresh'));
+      void notify.success('保存成功，记录已刷新');
+    } catch (reason) {
+      if (!request.signal.aborted) setSubmitError(reason instanceof Error ? '保存失败：' + reason.message : '保存失败');
+      else setSubmitError('请求超时或已取消');
+    } finally {
+      clearTimeout(timeout); pending.current = false; controller.current = null; setBusy(false);
+    }
+  };
+  const form = hasForm ? <div className="pa-studio-overlay-form">
+    {description ? <p>{description}</p> : null}
+    {fields.map((field) => <label className="pa-studio-field" key={field.key}><small>{field.label}{field.required ? ' *' : ''}</small>
+      <Input aria-label={field.label} type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+        maxLength={240} disabled={!live || busy} value={draft[field.key] ?? ''}
+        onChange={(event) => { setDraft((values) => ({ ...values, [field.key]: event.target.value })); setErrors((current) => ({ ...current, [field.key]: '' })); }}/>
+      {errors[field.key] ? <small role="alert">{errors[field.key]}</small> : null}
+    </label>)}
+    {!fields.length ? <small role="alert">字段配置无效：格式为 key|标签|text/email/number|required/optional，每行一个</small> : null}
+    {submitError ? <small role="alert">{submitError}</small> : null}
+    {!url ? <small>填写保存接口地址后才能提交数据；不会自动请求演示后端</small> : null}
+  </div> : description;
+  const actions = hasForm ? <Space><Button disabled={busy} onClick={close}>{cancel}</Button><Button type="primary" loading={busy} disabled={!live || !fields.length} onClick={() => { void submit(); }}>{ok}</Button></Space> : undefined;
   return <div className="pa-studio-rich pa-studio-overlay"><strong>{title}</strong>{context}
-    {kind === 'popconfirm' ? <Popconfirm title={title} description={description} open={open} onConfirm={confirmed} onCancel={() => setOpen(false)} okText={ok} cancelText={cancel}>{trigger}</Popconfirm> : trigger}
-    {kind === 'modal' ? <Modal title={title} open={open} onOk={confirmed} onCancel={() => setOpen(false)} okText={ok} cancelText={cancel} destroyOnHidden>{description}</Modal> : null}
-    {kind === 'drawer' ? <Drawer title={title} open={open} onClose={() => setOpen(false)} placement={props.placement === 'left' ? 'left' : 'right'} width={Math.max(280, Math.min(800, Number(props.width) || 420))} destroyOnHidden>{description}</Drawer> : null}
-    <small>{live ? '可在体验模式操作；确认不会提交后端' : '切换到体验模式后可操作'}</small>
+    {kind === 'popconfirm' ? <Popconfirm title={title} description={description} open={open} onConfirm={confirmed} onCancel={close} okText={ok} cancelText={cancel}>{trigger}</Popconfirm> : trigger}
+    {kind === 'modal' ? <Modal title={title} open={open} onOk={hasForm ? () => { void submit(); } : confirmed} onCancel={close} okText={ok} cancelText={cancel} okButtonProps={{ disabled: hasForm && (!live || !fields.length) }} confirmLoading={busy} closable={!busy} maskClosable={!busy} destroyOnHidden>{form}</Modal> : null}
+    {kind === 'drawer' ? <Drawer title={title} open={open} onClose={close} placement={props.placement === 'left' ? 'left' : 'right'} width={Math.max(280, Math.min(800, Number(props.width) || 420))} closable={!busy} maskClosable={!busy} footer={actions} destroyOnHidden>{form}</Drawer> : null}
+    <small>{hasForm ? (live ? '按配置校验字段，确认后 POST 保存；成功后刷新记录' : '切换到体验模式后可编辑和提交') : (live ? '可在体验模式操作；确认不会提交后端' : '切换到体验模式后可操作')}</small>
   </div>;
 }
 /** Live Studio widgets are backed by the same source code as the standalone React export. */
