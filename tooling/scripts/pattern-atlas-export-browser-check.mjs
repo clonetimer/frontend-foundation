@@ -41,6 +41,7 @@ export async function runExportedBrowserSmoke(directory) {
   ];
   const patchCalls = [];
   const followupCalls = [];
+  const detailCalls = [];
   let listReads = 0;
   const api = createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:4189');
@@ -48,6 +49,17 @@ export async function runExportedBrowserSmoke(directory) {
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
     if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
+    if (request.method === 'GET' && request.url?.startsWith('/api/row/')) {
+      detailCalls.push(request.url);
+      const id = decodeURIComponent(request.url.slice('/api/row/'.length));
+      const row = tableRows.find((record) => record.id === id);
+      if (!row) { response.writeHead(404); response.end('{}'); return; }
+      response.writeHead(200);
+      response.end(JSON.stringify({data: id === 'T-4'
+        ? {id:'wrong-record',name:'非法错误详情'}
+        : {...row,name:'详情'+row.name,email:'detail@example.org'}}));
+      return;
+    }
     if (request.method === 'GET' && request.url?.startsWith('/api/table')) {
       const query = new URL(request.url, 'http://127.0.0.1:4198');
       const values = Object.fromEntries(query.searchParams);
@@ -73,6 +85,12 @@ export async function runExportedBrowserSmoke(directory) {
     for await (const chunk of request) {
       body += String(chunk);
       if (body.length > 4096) { response.writeHead(413); response.end('{}'); return; }
+    }
+    if (request.method === 'PATCH' && request.url === '/api/edit/T-3') {
+      const submitted = JSON.parse(body);
+      patchCalls.push({ path:request.url, data:submitted });
+      Object.assign(tableRows[2], submitted);
+      response.writeHead(200); response.end('{"saved":true}'); return;
     }
     if (request.method === 'PATCH' && request.url === '/api/edit/R%2F1%20%3F') {
       const submitted = JSON.parse(body);
@@ -263,6 +281,34 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => tableCalls.some((request) => request.search === '可查' && request.filter === '已完成'), 'Server search plus filter not requested');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 1 条记录')"), 'Server filtered result count');
 
+
+    // Phase 22-A hardening: a second page has NO record-list source. A row
+    // selected on table page 2 must still feed detail GET and the edit modal.
+    await evaluate("location.hash = '#/isolated'");
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('无列表远程表格')"), 'Isolated table-only route');
+    assert(await evaluate("!document.querySelector('.atlas-record-list')"), 'Isolated page unexpectedly contains record list');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Isolated table data');
+    assert(await evaluate("(() => { const button=document.querySelector('.pa-studio-remote-table .ant-pagination-next button'); if (!button) return false; button.click(); return true; })()"), 'Isolated table page 2 action');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('可查对象')"), 'Isolated page 2 fetched');
+    assert(await evaluate("(() => { const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes('可查对象')); const button=row?.querySelector('button'); if (!button) return false; button.click(); return true; })()"), 'Choose page 2 record independent of list');
+    await until(() => detailCalls.includes('/api/row/T-3'), 'Details GET for page 2 record');
+    await until(() => evaluate("document.querySelector('.ant-modal') === null && [...document.querySelectorAll('button')].some(b=>b.textContent?.includes('编辑跨页记录') && !b.disabled)"), 'Editable detail loaded');
+    assert(await click('编辑跨页记录'), 'Independent edit modal trigger');
+    await until(() => evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.value === '详情可查对象'"), 'Detail GET did not prefill table-selected record');
+    assert.equal(await evaluate("document.querySelector('.ant-modal input[aria-label=邮箱]')?.value"), 'detail@example.org', 'Hidden form field not hydrated from detail');
+    await evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.focus()");
+    await evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.select()");
+    await call('Input.insertText',{text:'独立表格修改'});
+    assert(await evaluate("(() => {const button=document.querySelector('.ant-modal-footer button.ant-btn-primary');if(!button)return false;button.click();return true;})()"), 'Independent edit save');
+    await until(() => patchCalls.some(item=>item.path==='/api/edit/T-3'), 'PATCH selected page2 table record');
+    const savedIsolated = patchCalls.find(item=>item.path==='/api/edit/T-3');
+    assert.equal(savedIsolated.data.name,'独立表格修改', 'Incorrect independent edit payload');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('独立表格修改')"), 'Remote table refresh after independent edit');
+    assert(await evaluate("(() => { const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes('另一对象')); const button=row?.querySelector('button'); if (!button) return false; button.click(); return true; })()"), 'Select bad detail record');
+    await until(() => detailCalls.includes('/api/row/T-4'), 'Bad detail GET was not attempted');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table [role=alert]')?.textContent?.includes('主键不匹配')"), 'Mismatched detail ID was not rejected');
+    assert(await evaluate("([...document.querySelectorAll('button')].find(b=>b.textContent?.includes('编辑跨页记录'))?.disabled === true)"), 'Invalid detail record must block edit');
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -270,7 +316,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit and mismatched-ID protection', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
