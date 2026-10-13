@@ -15,7 +15,7 @@ import { buildStudioListUrl, readStudioListPayload, validQueryParameter, type St
 import { validRecordField, validRecordPath, validRecordUrl, type StudioRecordFieldBinding, type StudioRecordListBinding, type StudioRecordSubmitBinding } from './record-bindings';
 import { studioEffectStyles } from './effect-styles';
 import { appendWorkflowTrace, defaultWorkflowStep, type WorkflowActionStep, type WorkflowStep, type WorkflowStepType, type WorkflowTrace } from './studio-workflows';
-import { studioWidgetKinds, widgetDefinition, normalizeWidgetProps, type StudioWidgetKind } from './widgets';
+import { studioWidgetKinds, widgetDefinition, normalizeWidgetProps, type StudioWidgetKind, type OverlayRecordSelection } from './widgets';
 import { displayApiValue, requestStudioApi, validApiUrl, validResponsePath, type StudioApiBinding } from './api';
 import { projectExportFiles, zipTextFiles } from './exporter';
 import { walkNodes, backupStudioDocument, clearStudioBackup, createNode, editNode, editPageDocument, findNode, firstPageId, freshNodeId, insertKinds, insertNode, mayContain, moveNode, nodeLabel, normalizeGeometry, paletteGroups, parentOf, parseStudioFile, readStudioBackup, readStudioDocument, removeStudioComponent, removeStudioPage, saveStudioDocument, setDecoration, takeStudioHandoff, type InsertKind, type StudioDecoration, type StudioDocument, type StudioInteraction, type StudioPattern, type StudioGeometry, type StudioNavigation } from './model';
@@ -63,6 +63,8 @@ export function Component() {
   const [pageId, setPageId] = useState(() => firstPageId(doc.blueprint));
   const [absoluteLayer, setAbsoluteLayer] = useState<HTMLDivElement | null>(null);
   const [selectedId, setSelectedId] = useState(() => doc.blueprint.pages[0]?.composition?.id ?? '');
+  const [tableSelection, setTableSelection] = useState<OverlayRecordSelection | null>(null);
+  useEffect(() => { setTableSelection(null); }, [pageId]);
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [live, setLive] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
@@ -304,7 +306,7 @@ export function Component() {
       void notice.success('页面及对应目录已删除，可使用撤销恢复。');
     } catch (error) { void notice.warning(error instanceof Error ? error.message : '删除页面失败'); }
   };
-  const selectPage = (id: string) => { setPageId(id); setSelectedId(doc.blueprint.pages.find((item) => item.id === id)?.composition?.id ?? ''); setReplayKey((key) => key + 1); };
+  const selectPage = (id: string) => { setTableSelection(null); setPageId(id); setSelectedId(doc.blueprint.pages.find((item) => item.id === id)?.composition?.id ?? ''); setReplayKey((key) => key + 1); };
   const append = (type: InsertKind, target?: string, where: 'inside' | 'before' | 'after' = 'inside') => {
     if (!root) return;
     if (type === 'records' && existingListId) { void notice.warning('每个页面目前只能配置一个记录列表。'); setSelectedId(existingListId); setInspector('组件数据'); return; }
@@ -727,7 +729,7 @@ export function Component() {
           {doc.shell.navigation !== 'none' ? <nav aria-label="项目页面导航" className="pa-studio-preview-navigation"><div className="pa-studio-preview-brand">{doc.blueprint.project.title}</div><div className="pa-studio-preview-links">{orderedNavigation.map((entry) => <button type="button" key={entry.target} className={entry.target === page?.id ? 'active' : ''} onClick={() => selectPage(entry.target)}>{entry.label}</button>)}</div></nav> : null}
           <div className="pa-studio-screen" key={`${page?.id}-${replayKey}`} style={{ minHeight: Math.max(400, ...Object.entries(doc.decorations).filter(([key, meta]) => key.startsWith(`${page?.id}:`) && meta.geometry?.mode === 'absolute').map(([, meta]) => (meta.geometry?.y ?? 0) + (meta.geometry?.height ?? 150) + 52)) }}>
             <div ref={setAbsoluteLayer} className="pa-studio-absolute-layer" aria-label="页面绝对定位图层"/>
-            {root ? <StudioCanvas node={root} selectedId={chosen?.id} decorations={doc.decorations} pageId={page?.id} live={live} readOnly={live} onSelect={setSelectedId} onDropItem={drop} onNavigate={selectPage} recordFlow={recordFlow} dataSources={doc.dataSources} workflowPages={doc.blueprint.pages.map((entry) => entry.id)} absoluteLayer={absoluteLayer} onWorkflowTrace={(trace) => setWorkflowTraces((before) => appendWorkflowTrace(before, trace))}/> : <div>暂不支持编辑这一页的内容</div>}
+            {root ? <StudioCanvas node={root} selectedId={chosen?.id} decorations={doc.decorations} pageId={page?.id} live={live} readOnly={live} onSelect={setSelectedId} onDropItem={drop} onNavigate={selectPage} recordFlow={recordFlow} dataSources={doc.dataSources} tableSelection={tableSelection} onTableSelection={setTableSelection} workflowPages={doc.blueprint.pages.map((entry) => entry.id)} absoluteLayer={absoluteLayer} onWorkflowTrace={(trace) => setWorkflowTraces((before) => appendWorkflowTrace(before, trace))}/> : <div>暂不支持编辑这一页的内容</div>}
           </div>
         </div>
       </div></div></main>
