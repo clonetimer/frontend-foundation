@@ -198,7 +198,7 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
     const linkedSource = sourceKey ? dataSources?.find((entry) => entry.id === sourceKey) : undefined;
     const resolvedProps = sourceKey ? { ...widgetProps, submitUrl: linkedSource?.saveUrl ?? '' } : widgetProps;
     visual = <WidgetPreview kind={decoration.widgetKind} props={resolvedProps} live={live}
-      recordSelection={recordFlow ? { selectedId: recordFlow.selectedId, selected: recordFlow.selected, detailStatus: recordFlow.detailStatus } : undefined} workflowPages={workflowPages} onWorkflowNavigate={onNavigate}/>;
+      recordSelection={recordFlow ? { selectedId: recordFlow.selectedId, selected: recordFlow.selected, detailStatus: recordFlow.detailStatus } : undefined} workflowPages={workflowPages} onWorkflowNavigate={onNavigate} onRecordSelect={recordFlow ? (row) => recordFlow.select(row) : undefined}/>;
   } else {
     visual = <div className="pa-studio-placeholder"><strong>{text(props.title, '内容区域')}</strong><small>{text(props.description, '可以继续完善内容')}</small></div>;
   }
