@@ -421,7 +421,7 @@ export function Component() {
         </> : null}
         {meta.widgetKind === 'table' ? <>
           <label className="pa-studio-setting"><span>每页行数（服务端/本地）</span><InputNumber min={1} max={20} value={Number(richProps.pageSize) || 5} onChange={(value) => updateRich('pageSize', value ?? 5)} style={{ width: '100%' }}/></label>
-          <div className="pa-studio-note">配置数据 GET 地址后，体验模式和独立导出才发起请求。查询参数固定为 page、pageSize、search、filterField、filter、sort 和 order，分页、搜索、筛选和排序全部交给服务端。响应示例：<code>{'{"data":{"items":[{"id":"R-1","name":"记录","status":"进行中"}],"total":1}}'}</code>。返回字段应匹配表格列配置；“选择”直接传递当前行记录至编辑弹窗，不要求同页存在记录列表；如需补充未展示的字段，可配置带 {id} 的详情 GET。</div>
+          <div className="pa-studio-note">配置数据 GET 地址后，体验模式和独立导出才发起请求。查询参数固定为 page、pageSize、search、filterField、filter、sort 和 order，分页、搜索、筛选和排序全部交给服务端。响应示例：<code>{'{"data":{"items":[{"id":"R-1","name":"记录","status":"进行中"}],"total":1}}'}</code>。返回字段应匹配表格列配置；“选择”直接传递当前行记录至编辑弹窗，不要求同页存在记录列表；如需补充未展示的字段，可配置带 {'{id}'} 的详情 GET。</div>
         </> : null}
       </> : null}
       {chosen.label !== undefined || root?.type === 'tabs' ? <TextSetting title="标签名称" value={chosen.label ?? ''} change={(value) => updateNode(chosen.id, (node) => { node.label = value || '标签'; })}/> : null}
