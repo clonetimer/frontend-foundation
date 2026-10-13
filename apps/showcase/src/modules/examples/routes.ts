@@ -4,6 +4,6 @@ export const examplesModule = defineModule({
   featureFlag: 'examples',
   routes: [{
     id: 'examples.index', path: 'examples', lazy: async () => import('./pages/examples.route'),
-    handle: { foundation: { title: 'Examples', navigation: { label: 'Examples', order: 10 }, permission: 'examples.read' } }
+    handle: { foundation: { title: '案例', navigation: { label: '案例', order: 10 }, permission: 'examples.read' } }
   }]
 });

@@ -25,7 +25,9 @@ export default tseslint.config(
         Buffer: 'readonly',
         setTimeout: 'readonly',
         fetch: 'readonly',
-        WebSocket: 'readonly'
+        WebSocket: 'readonly',
+        URL: 'readonly',
+        clearTimeout: 'readonly'
       }
     }
   }

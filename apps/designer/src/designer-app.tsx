@@ -418,6 +418,45 @@ export function DesignerApp() {
     return () => window.removeEventListener('keydown', handler);
   }, [history, selectedNodeId, selectedPage?.id]);
 
+
+  // Local dev handoff from the Showcase page builder. No URL-encoded project JSON,
+  // cross-origin storage, runtime evaluator or extra Designer document format.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('atlasHandoff') !== '1' || !window.opener) return;
+    const showcaseOrigin = `${window.location.protocol}//${window.location.hostname}:5173`;
+    const opener = window.opener as Window;
+    const accept = (event: MessageEvent<unknown>) => {
+      if (event.source !== opener || event.origin !== showcaseOrigin || !event.data || typeof event.data !== 'object') return;
+      const request = event.data as { type?: unknown; blueprint?: unknown };
+      if (request.type !== 'foundation-showcase-open-blueprint') return;
+      try {
+        const serialized = JSON.stringify(request.blueprint);
+        if (!serialized || serialized.length > 250_000) throw new Error('Project file too large for the quick handoff.');
+        const incoming = parseProjectBlueprintText(serialized);
+        Modal.confirm({
+          title: '从前端工作台载入这个项目？',
+          content: '将替换当前设计器中尚未保存的工作内容。建议先保存原项目。',
+          okText: '载入并编辑', cancelText: '取消',
+          onOk: () => {
+            replaceDocument(incoming, false);
+            setFileHandle(undefined);
+            setFileName('foundation.project.json');
+            setCenterMode('Design');
+            opener.postMessage({ type: 'foundation-designer-imported' }, showcaseOrigin);
+            message.success('已载入项目，可以开始拖拽编辑。');
+          },
+          onCancel: () => opener.postMessage({ type: 'foundation-designer-cancelled' }, showcaseOrigin)
+        });
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '项目文件不符合 Designer 要求。');
+        opener.postMessage({ type: 'foundation-designer-cancelled' }, showcaseOrigin);
+      }
+    };
+    window.addEventListener('message', accept);
+    opener.postMessage({ type: 'foundation-designer-ready' }, showcaseOrigin);
+    return () => window.removeEventListener('message', accept);
+  }, []);
+
   const treeData = useMemo(() => selectedPage?.composition ? [nodeTree(selectedPage.composition)] : [], [selectedPage]);
   const filteredLayouts = layoutEntries.filter((entry) => `${entry.id} ${entry.description}`.toLowerCase().includes(paletteFilter.toLowerCase()));
   const filteredWidgets = widgetEntries.filter((entry) => `${entry.id} ${entry.description}`.toLowerCase().includes(paletteFilter.toLowerCase()));
@@ -427,38 +466,38 @@ export function DesignerApp() {
       <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => void handleFallbackFile(event.target.files?.[0])} />
       <input ref={registryInputRef} type="file" accept="application/json,.json" hidden onChange={(event: ChangeEvent<HTMLInputElement>) => void handleRegistryFile(event.target.files?.[0])} />
       <Header style={{ height: 52, lineHeight: '52px', padding: '0 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Typography.Text strong style={{ color: '#fff', whiteSpace: 'nowrap' }}>Foundation Visual Designer</Typography.Text>
-        <Tag color="blue">RC tooling</Tag>
-        {registryName ? <Tag color="purple">Registry: {registryName}</Tag> : null}
+        <Typography.Text strong style={{ color: '#fff', whiteSpace: 'nowrap' }}>Foundation 拖拽设计器</Typography.Text>
+        <Tag color="blue">图形编辑</Tag>
+        {registryName ? <Tag color="purple">组件目录：{registryName}</Tag> : null}
         <Divider type="vertical" style={{ borderColor: '#555' }} />
         <Typography.Text style={{ color: '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>{fileName}{dirty ? ' *' : ''}</Typography.Text>
         <div style={{ flex: 1 }} />
         <Space>
-          <Tooltip title="Undo · Ctrl/Cmd+Z"><Button size="small" disabled={!history.past.length} onClick={handleUndo}>Undo</Button></Tooltip>
-          <Tooltip title="Redo · Ctrl/Cmd+Shift+Z or Ctrl+Y"><Button size="small" disabled={!history.future.length} onClick={handleRedo}>Redo</Button></Tooltip>
+          <Tooltip title="Undo · Ctrl/Cmd+Z"><Button size="small" disabled={!history.past.length} onClick={handleUndo}>撤销</Button></Tooltip>
+          <Tooltip title="Redo · Ctrl/Cmd+Shift+Z or Ctrl+Y"><Button size="small" disabled={!history.future.length} onClick={handleRedo}>重做</Button></Tooltip>
           <Divider type="vertical" style={{ borderColor: '#555' }} />
-          <Button size="small" onClick={() => void handleOpen()}>Open</Button>
-          <Button size="small" onClick={() => registryInputRef.current?.click()}>Registry</Button>
-          <Button size="small" type="primary" onClick={() => void handleSave()}>Save</Button>
-          <Button size="small" onClick={() => void handleSaveAs()}>Save As</Button>
-          <Button size="small" onClick={() => { const next = cloneBlueprint(sampleBlueprint); setHistory((current) => commitHistory(current, next, blueprintEqual)); setJsonText(JSON.stringify(next, null, 2)); resetSelectionFor(next); setFileHandle(undefined); setFileName('foundation.project.json'); }}>Sample</Button>
+          <Button size="small" onClick={() => void handleOpen()}>打开项目</Button>
+          <Button size="small" onClick={() => registryInputRef.current?.click()}>组件目录</Button>
+          <Button size="small" type="primary" onClick={() => void handleSave()}>保存</Button>
+          <Button size="small" onClick={() => void handleSaveAs()}>另存为</Button>
+          <Button size="small" onClick={() => { const next = cloneBlueprint(sampleBlueprint); setHistory((current) => commitHistory(current, next, blueprintEqual)); setJsonText(JSON.stringify(next, null, 2)); resetSelectionFor(next); setFileHandle(undefined); setFileName('foundation.project.json'); }}>示例</Button>
         </Space>
       </Header>
 
       <Layout style={{ minHeight: 0 }}>
         <Sider width={260} theme="light" style={{ borderRight: '1px solid #e5e7eb', overflow: 'auto' }}>
           <div style={{ padding: 12 }}>
-            <Typography.Title level={5} style={{ margin: '0 0 8px' }}>Components</Typography.Title>
-            <Input.Search size="small" placeholder="Filter widgets" value={paletteFilter} onChange={(event: ChangeEvent<HTMLInputElement>) => setPaletteFilter(event.target.value)} />
+            <Typography.Title level={5} style={{ margin: '0 0 8px' }}>组件库</Typography.Title>
+            <Input.Search size="small" placeholder="筛选布局和组件" value={paletteFilter} onChange={(event: ChangeEvent<HTMLInputElement>) => setPaletteFilter(event.target.value)} />
           </div>
           <Collapse ghost defaultActiveKey={['layouts', 'widgets']} items={[
-            { key: 'layouts', label: `Layouts (${filteredLayouts.length})`, children: <PaletteList entries={filteredLayouts} kind="layout" onAdd={addPaletteNode} /> },
-            { key: 'widgets', label: `Widgets (${filteredWidgets.length})`, children: <PaletteList entries={filteredWidgets} kind="widget" onAdd={addPaletteNode} /> }
+            { key: 'layouts', label: `布局 (${filteredLayouts.length})`, children: <PaletteList entries={filteredLayouts} kind="layout" onAdd={addPaletteNode} /> },
+            { key: 'widgets', label: `组件 (${filteredWidgets.length})`, children: <PaletteList entries={filteredWidgets} kind="widget" onAdd={addPaletteNode} /> }
           ]} />
           <Divider style={{ margin: '8px 0' }} />
           <div style={{ padding: '0 12px 12px' }}>
             <Flex justify="space-between" align="center">
-              <Typography.Title level={5} style={{ margin: 0 }}>Object Tree</Typography.Title>
+              <Typography.Title level={5} style={{ margin: 0 }}>对象树</Typography.Title>
               <Badge count={countNodes(selectedPage?.composition)} showZero color="#1677ff" />
             </Flex>
             {treeData.length ? (
@@ -474,7 +513,7 @@ export function DesignerApp() {
             <Space size={4} wrap>
               <Button size="small" disabled={!selectedNodeId || selectedNodeId === selectedPage?.composition?.id} onClick={() => { if (!selectedPage?.composition || !selectedNodeId) return; mutateSelectedPage((page) => { if (page.composition) reorderNode(page.composition, selectedNodeId, -1); }); }}>↑</Button>
               <Button size="small" disabled={!selectedNodeId || selectedNodeId === selectedPage?.composition?.id} onClick={() => { if (!selectedPage?.composition || !selectedNodeId) return; mutateSelectedPage((page) => { if (page.composition) reorderNode(page.composition, selectedNodeId, 1); }); }}>↓</Button>
-              <Button danger size="small" disabled={!selectedNodeId || selectedNodeId === selectedPage?.composition?.id} onClick={deleteSelectedNode}>Delete</Button>
+              <Button danger size="small" disabled={!selectedNodeId || selectedNodeId === selectedPage?.composition?.id} onClick={deleteSelectedNode}>删除</Button>
             </Space>
           </div>
         </Sider>
@@ -492,10 +531,10 @@ export function DesignerApp() {
                 setSelectedNodeId(page?.composition?.id);
               }}
             />
-            <Segmented size="small" value={centerMode} options={['Design', 'JSON']} onChange={(value: string | number) => setCenterMode(value as CenterMode)} />
-            {centerMode === 'Design' ? <Segmented size="small" value={viewportMode} options={['Desktop', 'Tablet', 'Mobile']} onChange={(value: string | number) => setViewportMode(value as ViewportMode)} /> : null}
+            <Segmented size="small" value={centerMode} options={[{ label: '画布', value: 'Design' }, { label: '源码', value: 'JSON' }]} onChange={(value: string | number) => setCenterMode(value as CenterMode)} />
+            {centerMode === 'Design' ? <Segmented size="small" value={viewportMode} options={[{ label: '桌面', value: 'Desktop' }, { label: '平板', value: 'Tablet' }, { label: '手机', value: 'Mobile' }]} onChange={(value: string | number) => setViewportMode(value as ViewportMode)} /> : null}
             <div style={{ flex: 1 }} />
-            {diagnostics.length ? <Tag color="error">{diagnostics.length} diagnostic{diagnostics.length === 1 ? '' : 's'}</Tag> : <Tag color="success">Compiler preflight OK</Tag>}
+            {diagnostics.length ? <Tag color="error">{diagnostics.length} 个待处理问题</Tag> : <Tag color="success">编译前检查通过</Tag>}
           </Flex>
 
           {centerMode === 'Design' ? (
@@ -504,7 +543,7 @@ export function DesignerApp() {
                 {selectedPage?.composition ? (
                   <DesignerCanvasNode node={selectedPage.composition} selectedId={selectedNodeId} onSelect={setSelectedNodeId} onDrop={handleCanvasDrop} containerWidgetTypes={containerWidgetTypes} />
                 ) : (
-                  <Card><Button type="primary" onClick={(event: MouseEvent<HTMLElement>) => { event.stopPropagation(); mutateSelectedPage((page) => { page.composition = emptyComposition(); }); setSelectedNodeId('pageRoot'); }}>Create composition root</Button></Card>
+                  <Card><Button type="primary" onClick={(event: MouseEvent<HTMLElement>) => { event.stopPropagation(); mutateSelectedPage((page) => { page.composition = emptyComposition(); }); setSelectedNodeId('pageRoot'); }}>创建布局根节点</Button></Card>
                 )}
               </div>
             </div>
@@ -512,8 +551,8 @@ export function DesignerApp() {
             <div style={{ flex: 1, padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <Input.TextArea value={jsonText} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setJsonText(event.target.value)} spellCheck={false} style={{ flex: 1, resize: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 }} />
               <Flex justify="space-between" align="center" style={{ paddingTop: 8 }}>
-                <Typography.Text type="secondary">Exact Project Blueprint source. Apply is explicit.</Typography.Text>
-                <Button type="primary" onClick={applyJson}>Apply JSON</Button>
+                <Typography.Text type="secondary">原始 Project Blueprint；修改后须点击「应用 JSON」。</Typography.Text>
+                <Button type="primary" onClick={applyJson}>应用 JSON</Button>
               </Flex>
             </div>
           )}
@@ -526,11 +565,11 @@ export function DesignerApp() {
             onChange={(key: string) => setRightTab(key as RightTab)}
             tabBarStyle={{ padding: '0 10px', marginBottom: 0 }}
             items={[
-              { key: 'properties', label: 'Properties', children: <PropertyInspector node={selectedNode} propertySchema={propertySchema} isTabChild={selectedParent?.type === 'tabs'} parentId={selectedParent?.id} moveTargets={moveTargets} onChange={mutateSelectedNode} onRename={renameSelectedNodeId} onMove={moveSelectedNodeTo} /> },
-              { key: 'binding', label: 'Bindings', children: <BindingInspector page={selectedPage} node={selectedNode} bindingProperties={bindingProperties} onChange={mutateSelectedNode} /> },
-              { key: 'event', label: 'Events', children: <EventInspector page={selectedPage} node={selectedNode} widgetEvents={widgetEvents} onChange={mutateSelectedNode} /> },
-              { key: 'diagnostics', label: diagnostics.length ? `Diagnostics (${diagnostics.length})` : 'Diagnostics', children: <DiagnosticsInspector diagnostics={diagnostics} selectedPageId={selectedPage?.id} onSelectNode={(pageId, nodeId) => { setSelectedPageId(pageId); if (nodeId) setSelectedNodeId(nodeId); setCenterMode('Design'); }} /> },
-              { key: 'model', label: 'Page Model', children: <PageModelInspector page={selectedPage} issues={issues} onChange={mutateSelectedPage} onRenameState={renamePageState} onRenameAction={renamePageAction} onRenameDataSource={renamePageDataSource} onRenameOperation={renamePageOperation} /> }
+              { key: 'properties', label: '属性', children: <PropertyInspector node={selectedNode} propertySchema={propertySchema} isTabChild={selectedParent?.type === 'tabs'} parentId={selectedParent?.id} moveTargets={moveTargets} onChange={mutateSelectedNode} onRename={renameSelectedNodeId} onMove={moveSelectedNodeTo} /> },
+              { key: 'binding', label: '绑定', children: <BindingInspector page={selectedPage} node={selectedNode} bindingProperties={bindingProperties} onChange={mutateSelectedNode} /> },
+              { key: 'event', label: '事件', children: <EventInspector page={selectedPage} node={selectedNode} widgetEvents={widgetEvents} onChange={mutateSelectedNode} /> },
+              { key: 'diagnostics', label: diagnostics.length ? `诊断 (${diagnostics.length})` : '诊断', children: <DiagnosticsInspector diagnostics={diagnostics} selectedPageId={selectedPage?.id} onSelectNode={(pageId, nodeId) => { setSelectedPageId(pageId); if (nodeId) setSelectedNodeId(nodeId); setCenterMode('Design'); }} /> },
+              { key: 'model', label: '页面模型', children: <PageModelInspector page={selectedPage} issues={issues} onChange={mutateSelectedPage} onRenameState={renamePageState} onRenameAction={renamePageAction} onRenameDataSource={renamePageDataSource} onRenameOperation={renamePageOperation} /> }
             ]}
           />
         </Sider>
