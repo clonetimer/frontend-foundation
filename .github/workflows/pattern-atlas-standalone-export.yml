@@ -4,6 +4,7 @@ on:
     paths:
       - 'apps/showcase/src/modules/pattern-atlas/**'
       - 'tooling/scripts/pattern-atlas-export-build-smoke.mjs'
+      - 'tooling/scripts/pattern-atlas-export-browser-check.mjs'
       - '.github/workflows/pattern-atlas-standalone-export.yml'
   workflow_dispatch:
 permissions:
@@ -25,4 +26,16 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: node tooling/scripts/pattern-atlas-export-build-smoke.mjs
+      - name: Verify Chrome availability
+        run: google-chrome --version
+      - name: Build and browser-test real standalone export
+        run: node tooling/scripts/pattern-atlas-export-build-smoke.mjs --browser
+        env:
+          CHROMIUM_BIN: google-chrome
+      - name: Upload exported browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pattern-atlas-export-browser-${{ github.sha }}
+          path: artifacts/pattern-atlas-export-browser.png
+          if-no-files-found: ignore

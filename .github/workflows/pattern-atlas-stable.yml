@@ -3,6 +3,18 @@ name: Pattern Atlas Stable
 # Manual admission gate for an exact candidate commit; does not publish or promote packages.
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/showcase/src/modules/pattern-atlas/studio/studio-workflows.ts'
+      - 'apps/showcase/src/modules/pattern-atlas/studio/exported-workflows.ts'
+      - 'apps/showcase/src/modules/pattern-atlas/studio/WidgetPreview.tsx'
+      - 'apps/showcase/src/modules/pattern-atlas/studio/widgets.ts'
+      - 'tooling/scripts/pattern-atlas-stable-gate.mjs'
+      - 'tooling/scripts/pattern-atlas-stable-policy.mjs'
+      - 'tooling/scripts/pattern-atlas-stable-gate.test.mjs'
+      - 'tooling/scripts/pattern-atlas-export-browser-check.mjs'
+      - 'tooling/scripts/pattern-atlas-export-build-smoke.mjs'
+      - '.github/workflows/pattern-atlas-stable.yml'
 
 permissions:
   contents: read
@@ -41,6 +53,8 @@ jobs:
             test -n "$CHROME" || { echo 'No Chrome/Chromium binary on runner' >&2; exit 1; }
             echo "CHROMIUM_BIN=$CHROME" >> "$GITHUB_ENV"
           fi
+      - name: Prepare frozen workspace dependencies
+        run: pnpm install --frozen-lockfile
       - name: Full admission (no automatic Stable promotion)
         run: pnpm patterns:stable:check --full
       - name: Preserve evidence including failed reports
@@ -48,6 +62,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pattern-atlas-${{ matrix.os }}-node-${{ matrix.node }}-${{ github.sha }}
-          path: artifacts/pattern-atlas/stable-gate-report.json
+          path: |
+            artifacts/pattern-atlas/stable-gate-report.json
+            artifacts/pattern-atlas-export-browser.png
           if-no-files-found: warn
           retention-days: 30

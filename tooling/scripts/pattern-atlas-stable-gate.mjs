@@ -98,6 +98,7 @@ try {
     await gate('workspace-build', () => pnpmGate('workspace-build', ['-r', 'build']));
     await gate('workspace-lint', () => pnpmGate('workspace-lint', ['lint']));
     await gate('composition-compile', () => nodeGate('composition-compile', 'tooling/scripts/pattern-atlas-composition-check.mjs'));
+    await gate('standalone-export-browser', () => nodeGate('standalone-export-browser', 'tooling/scripts/pattern-atlas-export-build-smoke.mjs', ['--browser']));
     if (!finished) {
       let server;
       try {

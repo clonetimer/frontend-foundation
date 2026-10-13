@@ -35,7 +35,7 @@ assert(centerPage.includes('<ThemeBridgePreview'));
 assert(centerPage.includes('setScopedThemeEnabled'));
 assert(read('apps/showcase/src/modules/pattern-atlas/center/theme-bridge.css').includes('.pa-theme-bridge'));
 assert(read('apps/showcase/package.json').includes('"@foundation/theme"'));
-assert(read('pnpm-lock.yaml').includes("      '@foundation/theme':\n        specifier: workspace:*\n        version: link:../../packages/theme"));
+assert(read('pnpm-lock.yaml').replace(/\r\n/g, '\n').includes("      '@foundation/theme':\n        specifier: workspace:*\n        version: link:../../packages/theme"));
 
 for (const file of [
   'apps/showcase/src/modules/pattern-atlas/effects/pages/effects.route.tsx',

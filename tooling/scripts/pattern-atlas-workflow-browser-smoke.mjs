@@ -76,4 +76,10 @@ async function main() {
   } finally { ws.close(); }
 }
 try { await main(); } catch (error) { console.error(error); process.exitCode = 1; }
-finally { browser.kill(); rmSync(profile, { recursive: true, force: true }); }
+finally {
+  browser.kill('SIGTERM');
+  await sleep(500);
+  if (browser.exitCode === null) browser.kill('SIGKILL');
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 }); }
+  catch (error) { console.warn('Disposable browser profile cleanup:', String(error)); }
+}

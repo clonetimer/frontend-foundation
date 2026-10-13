@@ -23,17 +23,39 @@ for (const extension of ['.ts', '.tsx']) {
   };
 }
 const studio = resolve(__dirname, '../../apps/showcase/src/modules/pattern-atlas/studio');
-const { createStudioDocument } = loadCompiled(join(studio, 'model.ts'));
+const { createStudioDocument, createNode, insertNode, setDecoration } = loadCompiled(join(studio, 'model.ts'));
+const { runExportedBrowserSmoke } = await import('./pattern-atlas-export-browser-check.mjs');
 const { projectExportFiles, zipTextFiles } = loadCompiled(join(studio, 'exporter.ts'));
 function exec(program, args, cwd) {
-  const result = spawnSync(program, args, { cwd, stdio:'inherit', timeout: 600000, env: { ...process.env, CI:'true' } });
+  // npm is a .cmd wrapper on Windows, which must be launched via cmd.exe.
+  // This helper is only called with fixed internal commands/flags, never user input.
+  const windowsNpm = process.platform === 'win32' && program === 'npm';
+  const command = windowsNpm ? (process.env.ComSpec || 'cmd.exe') : program;
+  const commandArgs = windowsNpm ? ['/d', '/c', 'npm', ...args] : args;
+  const result = spawnSync(command, commandArgs, { cwd, stdio:'inherit', timeout: 600000, env: { ...process.env, CI:'true' } });
   if (result.error) throw result.error;
   assert.equal(result.status, 0, program + ' ' + args.join(' ') + ' failed');
 }
 (async () => {
   const destination = mkdtempSync(join(tmpdir(), 'pattern-atlas-export-'));
   try {
-    const files = projectExportFiles(createStudioDocument());
+    const browserAcceptance = process.argv.includes('--browser');
+    let document = createStudioDocument();
+    if (browserAcceptance) {
+      const pageId = document.blueprint.pages[0].id;
+      const fixtures = [
+        { id: 'browserModal', kind: 'modal', props: { title: '验收弹窗', triggerText: '打开验收弹窗', description: '验收弹窗内容', okText: '确认', cancelText: '取消' } },
+        { id: 'browserDrawer', kind: 'drawer', props: { title: '验收抽屉', triggerText: '打开验收抽屉', description: '验收抽屉内容', placement: 'right', width: 420 } },
+        { id: 'browserConfirm', kind: 'popconfirm', props: { title: '验收提示', triggerText: '执行验收确认', description: '请确认是否继续', okText: '确认', cancelText: '取消' } },
+        { id: 'browserChart', kind: 'line-chart', props: { title: '验收多序列曲线', items: ['A', 'B', 'C'], series: '温度:-20,0,120;参考:0,10,30', values: '', unit: '℃' } }
+      ];
+      for (const fixture of fixtures) {
+        const page = document.blueprint.pages[0];
+        page.composition = insertNode(page.composition, page.composition.id, createNode(fixture.kind, fixture.id), 'inside');
+        document = setDecoration(document, pageId + ':' + fixture.id, { widgetKind: fixture.kind, widgetProps: fixture.props });
+      }
+    }
+    const files = projectExportFiles(document);
     const data = new Uint8Array(await zipTextFiles(files).arrayBuffer());
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     let cursor = 0, extracted = 0;
@@ -61,6 +83,7 @@ function exec(program, args, cwd) {
     const built = join(destination,'dist','index.html');
     assert(existsSync(built),'Vite production output missing');
     assert.match(readFileSync(built,'utf8'),/assets\//,'Vite bundle missing');
+    if (browserAcceptance) await runExportedBrowserSmoke(destination);
     console.log('STANDALONE EXPORT BUILD PASSED');
   } finally {
     if(process.env.KEEP_ATLAS_EXPORT==='1') console.log('Preserving',destination);

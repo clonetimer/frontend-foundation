@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { URL } from 'node:url';
+import { URL, fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { normalizeCustomRegistry } from '../custom-registry.mjs';
 import { compileProjectBlueprint, diagnoseProjectBlueprint, inspectProjectBlueprintState, loadProjectBlueprint } from '../project.mjs';
@@ -136,7 +136,7 @@ test('foundation-project diagnose --json exposes stable machine-readable compile
   writeJson(join(root, 'foundation.registry.json'), { schemaVersion: 1, widgets: [{ id: 'bad', package: '@x/y', version: '1.0.0', exportName: 'Viewer', description: 'bad' }] });
   const blueprintFile = join(root, 'foundation.project.json');
   writeJson(blueprintFile, blueprint());
-  const cli = spawnSync(process.execPath, [new URL('../project.mjs', import.meta.url).pathname, 'diagnose', blueprintFile, '--json'], { encoding: 'utf8' });
+  const cli = spawnSync(process.execPath, [fileURLToPath(new URL('../project.mjs', import.meta.url)), 'diagnose', blueprintFile, '--json'], { encoding: 'utf8' });
   assert.equal(cli.status, 1);
   const result = JSON.parse(cli.stdout);
   assert.equal(result.valid, false);
