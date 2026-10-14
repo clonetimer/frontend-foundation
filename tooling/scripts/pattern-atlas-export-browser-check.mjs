@@ -143,6 +143,12 @@ export async function runExportedBrowserSmoke(directory) {
     if (request.method === 'POST' && request.url === '/api/mapped-create') {
       const record = JSON.parse(body);
       mappedPosts.push(record);
+      if (record.subject === '字段不合格') {
+        response.writeHead(422); response.end('{"errors":{"subject":["服务器要求更正姓名"],"__proto__":["unsafe"]}}'); return;
+      }
+      if (record.subject === '权限拒绝') {
+        response.writeHead(403); response.end('{"error":"not authorized"}'); return;
+      }
       if (mappedCommitThen503) {
         mappedCommitThen503 = false;
         response.writeHead(503); response.end('{"error":"committed but gateway returned 503"}'); return;
@@ -287,6 +293,30 @@ export async function runExportedBrowserSmoke(directory) {
     assert(await evaluate("Boolean(document.querySelector('.ant-modal input[aria-label=姓名]'))"), 'Uncertain save lost the draft');
     await evaluate("document.querySelector('.ant-modal-footer button.ant-btn-default')?.click()");
     await until(() => evaluate("!document.querySelector('.ant-modal')"), 'Shared uncertain modal did not close');
+    // C3: 422 validation errors use the shared source's backend alias
+    // "subject" but must render beside the visible "姓名" input.
+    assert(await click('共享写入新增'), 'C3 validation modal trigger missing');
+    await until(() => evaluate("document.querySelector('.ant-modal')?.textContent?.includes('共享写入表单')"), 'C3 validation modal missing');
+    await fill('.ant-modal', '姓名', '字段不合格');
+    assert(await evaluate("(() => {const b=document.querySelector('.ant-modal-footer button.ant-btn-primary');if(!b)return false;b.click();return true;})()"), 'C3 validation submit missing');
+    await until(() => mappedPosts.length === 3, 'C3 422 backend did not receive mapped request');
+    assert.deepEqual(mappedPosts[2], {subject:'字段不合格'}, 'C3 422 outgoing alias mismatch');
+    await until(() => evaluate("document.querySelector('.ant-modal [role=alert]')?.textContent?.includes('服务器要求更正姓名')"), 'C3 backend alias error not displayed on form');
+    assert(await evaluate("document.querySelector('.ant-modal [role=alert]')?.textContent?.includes('HTTP 422')"), 'C3 stable 422 status not displayed');
+    await evaluate("document.querySelector('.ant-modal-footer button.ant-btn-default')?.click()");
+    await until(() => evaluate("!document.querySelector('.ant-modal')"), 'C3 validation modal did not close');
+
+    // 403 must remain a permission failure, never "possibly committed".
+    assert(await click('共享写入新增'), 'C3 permission modal trigger missing');
+    await until(() => evaluate("document.querySelector('.ant-modal')?.textContent?.includes('共享写入表单')"), 'C3 permission modal missing');
+    await fill('.ant-modal', '姓名', '权限拒绝');
+    assert(await evaluate("(() => {const b=document.querySelector('.ant-modal-footer button.ant-btn-primary');if(!b)return false;b.click();return true;})()"), 'C3 403 submit missing');
+    await until(() => mappedPosts.length === 4, 'C3 403 server request missing');
+    await until(() => evaluate("document.querySelector('.ant-modal [role=alert]')?.textContent?.includes('HTTP 403')"), 'C3 explicit permission feedback missing');
+    assert.equal(await evaluate("document.querySelector('.ant-modal [role=alert]')?.textContent?.includes('写入结果不确定')"), false, 'C3 403 mislabeled uncertain');
+    await evaluate("document.querySelector('.ant-modal-footer button.ant-btn-default')?.click()");
+    await until(() => evaluate("!document.querySelector('.ant-modal')"), 'C3 permission modal did not close');
+
 
     assert(await click('打开错误示例'), 'Business drawer trigger missing');
     await until(() => evaluate("document.querySelector('.ant-drawer-body')?.textContent?.includes('失败反馈表单') || document.querySelector('.ant-drawer-body')?.textContent?.includes('模拟服务端失败')"), 'Business drawer open');
@@ -644,7 +674,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
