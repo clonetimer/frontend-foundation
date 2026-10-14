@@ -109,6 +109,30 @@ function LineWidget({ items, series, title, unit }: { items: string[]; series: C
     <div className="pa-studio-plot-legend">{series.map((entry,i) => <span key={i}><i style={{backgroundColor:colors[i%colors.length]}}/>{entry.name}</span>)}</div>
   </div>;
 }
+/** Reuse the same bounded, ID-checked GET contract for view and edit. */
+async function getRemoteTableDetail(row: RemoteTableRow, props: Record<string, unknown>, idField: string, signal: AbortSignal): Promise<Record<string, unknown>> {
+  const snapshot: Record<string, unknown> = { ...row };
+  if (!props.detailUrl) return snapshot;
+  const endpoint = overlaySubmitUrl(props.detailUrl, 'edit-selected', row.key);
+  if (!endpoint) throw new Error('详情接口需要包含一个有效的 {id} 占位符');
+  const response = await fetch(endpoint, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal });
+  if (!response.ok) throw new Error('HTTP ' + response.status);
+  if (Number(response.headers.get('content-length') || 0) > 262144) throw new Error('详情超过 256 KB');
+  const body = await response.text();
+  if (body.length > 262144) throw new Error('详情超过 256 KB');
+  const parsed = pathValue(JSON.parse(body) as unknown, label(props.detailPath, 'data'));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('详情响应不是记录对象');
+  const detail = parsed as Record<string, unknown>;
+  const remoteId = detail[idField];
+  if (remoteId !== undefined && String(remoteId) !== row.key) throw new Error('详情记录主键不匹配');
+  const result: Record<string, unknown> = { ...snapshot };
+  for (const [key, value] of Object.entries(detail)) {
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(key) || ['constructor','prototype','__proto__'].includes(key)) continue;
+    if (value === null || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e12 ||
+      typeof value === 'string' && value.length <= 240) result[key] = value;
+  }
+  return result;
+}
 /** Server-controlled table: pagination/filtering/sorting are never emulated locally. */
 function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<string, unknown>; live: boolean; onRecordSelect?: ((selection: OverlayRecordSelection) => void) | undefined }) {
   const title = label(props.title, '数据表格');
@@ -133,12 +157,34 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   const [selectionError, setSelectionError] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deletingId, setDeletingId] = useState('');
+  const [viewDetail, setViewDetail] = useState<{ id: string; status: 'loading' | 'ready' | 'error'; record: Record<string, unknown> | null; error: string } | null>(null);
   const detailRequest = useRef<AbortController | null>(null);
   const deleteRequest = useRef<AbortController | null>(null);
+  const viewRequest = useRef<AbortController | null>(null);
   const currentTableSelection = useRef('');
   const deleteTemplate = label(props.deleteUrl);
   const deleteEnabled = Boolean(deleteTemplate);
-  useEffect(() => () => { detailRequest.current?.abort(); deleteRequest.current?.abort(); }, []);
+  useEffect(() => () => { detailRequest.current?.abort(); deleteRequest.current?.abort(); viewRequest.current?.abort(); }, []);
+  const closeView = () => {
+    viewRequest.current?.abort();
+    viewRequest.current = null;
+    setViewDetail(null);
+  };
+  const viewRecord = async (row: RemoteTableRow) => {
+    if (!live) return;
+    viewRequest.current?.abort();
+    const controller = new AbortController();
+    viewRequest.current = controller;
+    setViewDetail({ id: row.key, status: props.detailUrl ? 'loading' : 'ready', record: props.detailUrl ? null : { ...row }, error: '' });
+    try {
+      const record = await getRemoteTableDetail(row, props, idField, controller.signal);
+      if (!controller.signal.aborted) setViewDetail({ id: row.key, status: 'ready', record, error: '' });
+    } catch (problem) {
+      if (!controller.signal.aborted) setViewDetail({ id: row.key, status: 'error', record: null, error: problem instanceof Error ? problem.message : '详情读取失败' });
+    } finally {
+      if (viewRequest.current === controller) viewRequest.current = null;
+    }
+  };
   const deleteRecord = async (id: string) => {
     if (!live || !deleteEnabled || deleteRequest.current) return;
     const endpoint = overlaySubmitUrl(deleteTemplate, 'edit-selected', id);
@@ -150,6 +196,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     try {
       const response = await fetch(endpoint, { method: 'DELETE', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
       if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (viewDetail?.id === id) closeView();
       if (currentTableSelection.current === id) {
         detailRequest.current?.abort();
         currentTableSelection.current = '';
@@ -174,43 +221,23 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     const selectedId = row.key;
     currentTableSelection.current = selectedId;
     const snapshot: Record<string, unknown> = { ...row };
-    const detailTemplate = props.detailUrl;
-    if (!detailTemplate) {
+    if (!props.detailUrl) {
       onRecordSelect({ selectedId, selected: snapshot, detailStatus: 'idle' });
-      return;
-    }
-    const endpoint = overlaySubmitUrl(detailTemplate, 'edit-selected', selectedId);
-    if (!endpoint) {
-      setSelectionError('详情接口需要包含一个有效的 {id} 占位符');
-      onRecordSelect({ selectedId, selected: null, detailStatus: 'error' });
       return;
     }
     const controller = new AbortController();
     detailRequest.current = controller;
     onRecordSelect({ selectedId, selected: snapshot, detailStatus: 'loading' });
     try {
-      const response = await fetch(endpoint, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      if (Number(response.headers.get('content-length') || 0) > 262144) throw new Error('详情超过 256 KB');
-      const body = await response.text();
-      if (body.length > 262144) throw new Error('详情超过 256 KB');
-      const parsed = pathValue(JSON.parse(body) as unknown, label(props.detailPath,'data'));
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('详情响应不是记录对象');
-      const detail = parsed as Record<string, unknown>;
-      const remoteId = detail[idField];
-      if (remoteId !== undefined && String(remoteId) !== selectedId) throw new Error('详情记录主键不匹配');
-      const result: Record<string, unknown> = { ...snapshot };
-      for (const [key, value] of Object.entries(detail)) {
-        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(key) || ['constructor','prototype','__proto__'].includes(key)) continue;
-        if (value === null || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e12 ||
-          typeof value === 'string' && value.length <= 240) result[key] = value;
-      }
-      if (!controller.signal.aborted) onRecordSelect({ selectedId, selected: result, detailStatus: 'ready' });
+      const record = await getRemoteTableDetail(row, props, idField, controller.signal);
+      if (!controller.signal.aborted) onRecordSelect({ selectedId, selected: record, detailStatus: 'ready' });
     } catch (reason) {
       if (!controller.signal.aborted) {
         setSelectionError(reason instanceof Error ? reason.message : '详情读取失败');
         onRecordSelect({ selectedId, selected: null, detailStatus: 'error' });
       }
+    } finally {
+      if (detailRequest.current === controller) detailRequest.current = null;
     }
   };
   useEffect(() => {
@@ -275,6 +302,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   const selectionColumn = onRecordSelect || deleteEnabled ? [{ title: '操作', key: 'action', render: (_: unknown, row: RemoteTableRow) =>
     <Space size="small">
       {onRecordSelect ? <Button size="small" onClick={() => { void chooseRecord(row); }}>选择</Button> : null}
+      <Button size="small" onClick={() => { void viewRecord(row); }}>查看</Button>
       {deleteEnabled ? <Popconfirm title="确认删除记录？" description={'删除记录 ' + row.key + ' 后不能撤销。'} okText="确认删除" cancelText="取消"
         onConfirm={() => { void deleteRecord(row.key); }}>
         <Button size="small" danger disabled={!live || Boolean(deletingId)} loading={deletingId === row.key}>删除</Button>
@@ -294,6 +322,14 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     {error ? <small role="alert">表格加载失败：{error}</small> : null}
     {selectionError ? <small role="alert">记录详情加载失败：{selectionError}</small> : null}
     {deleteError ? <small role="alert">{deleteError}</small> : null}
+    <Drawer title={viewDetail ? '记录详情：' + viewDetail.id : '记录详情'} open={Boolean(viewDetail)} onClose={closeView} destroyOnHidden>
+      {viewDetail?.status === 'loading' ? <Spin tip="正在加载详情"><div style={{ minHeight: 80 }}/></Spin> : null}
+      {viewDetail?.status === 'error' ? <Alert type="error" showIcon message="记录详情加载失败" description={viewDetail.error}/> : null}
+      {viewDetail?.status === 'ready' && viewDetail.record ?
+        <Descriptions bordered size="small" column={1} items={Object.entries(viewDetail.record).filter(([key]) => key !== 'key').map(([key, value]) => ({
+          key, label: columns.find((column) => column.key === key)?.title ?? key, children: value === null || value === undefined ? '—' : String(value)
+        }))}/> : null}
+    </Drawer>
     <Table<RemoteTableRow> size="small" rowKey="key" loading={loading} dataSource={data?.items ?? []}
       columns={[...displayColumns, ...selectionColumn]}
       pagination={{ current: page, pageSize, total: data?.total ?? 0, showSizeChanger: false }}
