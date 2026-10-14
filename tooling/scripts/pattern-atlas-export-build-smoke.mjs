@@ -53,7 +53,7 @@ function exec(program, args, cwd) {
           itemsPath: 'data.items', totalPath: 'data.total', detailPath: 'data',
           idField: 'id', labelField: 'name', pageSize: 2,
           paginationMode: 'server', pageParam: 'page', sizeParam: 'pageSize', searchParam: 'search',
-          filterField: 'status', filterParam: 'filter', filterValues: ['进行中','待开始','已完成'],
+          filterField: 'status', filterParam: 'state', filterValues: ['进行中','待开始','已完成'],
           sortField: 'name', sortParam: 'sort', sortDirectionParam: 'order',
           fieldMappings: [{field:'name',responsePath:'alias.name',saveField:'name'}]
         }
