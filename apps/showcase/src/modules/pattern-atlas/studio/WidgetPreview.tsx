@@ -131,13 +131,48 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectionError, setSelectionError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deletingId, setDeletingId] = useState('');
   const detailRequest = useRef<AbortController | null>(null);
-  useEffect(() => () => detailRequest.current?.abort(), []);
+  const deleteRequest = useRef<AbortController | null>(null);
+  const currentTableSelection = useRef('');
+  const deleteTemplate = label(props.deleteUrl);
+  const deleteEnabled = Boolean(deleteTemplate);
+  useEffect(() => () => { detailRequest.current?.abort(); deleteRequest.current?.abort(); }, []);
+  const deleteRecord = async (id: string) => {
+    if (!live || !deleteEnabled || deleteRequest.current) return;
+    const endpoint = overlaySubmitUrl(deleteTemplate, 'edit-selected', id);
+    if (!endpoint) { setDeleteError('删除接口需要包含一个有效的 {id} 占位符'); return; }
+    const controller = new AbortController();
+    deleteRequest.current = controller;
+    setDeletingId(id); setDeleteError('');
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(endpoint, { method: 'DELETE', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (currentTableSelection.current === id) {
+        detailRequest.current?.abort();
+        currentTableSelection.current = '';
+        onRecordSelect?.({ selectedId: '', selected: null, detailStatus: 'idle' });
+        setSelectionError('');
+      }
+      // No optimistic removal: keep server-authoritative paging and total count.
+      // The shared refresh event also updates any sibling record list.
+      window.dispatchEvent(new Event('atlas:records-refresh'));
+    } catch (problem) {
+      setDeleteError(controller.signal.aborted ? '删除请求已取消或超时' : '删除失败：' + (problem instanceof Error ? problem.message : '请求失败'));
+    } finally {
+      clearTimeout(timeout);
+      deleteRequest.current = null;
+      setDeletingId('');
+    }
+  };
   const chooseRecord = async (row: RemoteTableRow) => {
     if (!onRecordSelect || !live) return;
     detailRequest.current?.abort();
     setSelectionError('');
     const selectedId = row.key;
+    currentTableSelection.current = selectedId;
     const snapshot: Record<string, unknown> = { ...row };
     const detailTemplate = props.detailUrl;
     if (!detailTemplate) {
@@ -226,8 +261,14 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     sortOrder: key === sortField ? (direction === 'asc' ? 'ascend' as const : direction === 'desc' ? 'descend' as const : null) : null,
     render: (value: unknown) => value === null || value === undefined ? '—' : String(value)
   }));
-  const selectionColumn = onRecordSelect ? [{ title: '操作', key: 'action', render: (_: unknown, row: RemoteTableRow) =>
-    <Button size="small" onClick={() => { void chooseRecord(row); }}>选择</Button> }] : [];
+  const selectionColumn = onRecordSelect || deleteEnabled ? [{ title: '操作', key: 'action', render: (_: unknown, row: RemoteTableRow) =>
+    <Space size="small">
+      {onRecordSelect ? <Button size="small" onClick={() => { void chooseRecord(row); }}>选择</Button> : null}
+      {deleteEnabled ? <Popconfirm title="确认删除记录？" description={'删除记录 ' + row.key + ' 后不能撤销。'} okText="确认删除" cancelText="取消"
+        onConfirm={() => { void deleteRecord(row.key); }}>
+        <Button size="small" danger disabled={!live || Boolean(deletingId)} loading={deletingId === row.key}>删除</Button>
+      </Popconfirm> : null}
+    </Space> }] : [];
   return <div className="pa-studio-rich pa-studio-remote-table" data-atlas-table-source="remote">
     <strong>{title}</strong>
     <form className="pa-studio-widget-actions" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(searchInput.trim().slice(0,120)); }}>
@@ -241,6 +282,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     </form>
     {error ? <small role="alert">表格加载失败：{error}</small> : null}
     {selectionError ? <small role="alert">记录详情加载失败：{selectionError}</small> : null}
+    {deleteError ? <small role="alert">{deleteError}</small> : null}
     <Table<RemoteTableRow> size="small" rowKey="key" loading={loading} dataSource={data?.items ?? []}
       columns={[...displayColumns, ...selectionColumn]}
       pagination={{ current: page, pageSize, total: data?.total ?? 0, showSizeChanger: false }}
