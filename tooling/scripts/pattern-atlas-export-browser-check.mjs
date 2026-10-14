@@ -77,7 +77,9 @@ export async function runExportedBrowserSmoke(directory) {
       let records = [...tableRows];
       const search = (query.searchParams.get('search') ?? '').trim();
       if (search) records = records.filter((item) => item.name.includes(search));
-      if (query.searchParams.get('filterField') === 'status' && query.searchParams.get('filter')) {
+      if (query.searchParams.get('view') === 'shared' && query.searchParams.get('state')) {
+        records = records.filter((item) => item.status === query.searchParams.get('state'));
+      } else if (query.searchParams.get('filterField') === 'status' && query.searchParams.get('filter')) {
         records = records.filter((item) => item.status === query.searchParams.get('filter'));
       }
       if (query.searchParams.get('sort') === 'name' && query.searchParams.get('order')) {
@@ -324,6 +326,12 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => tableCalls.some((entry) => entry.view === 'shared'), 'Shared project-level table source did not issue GET');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('更新姓名')"), 'Shared field mapping did not map alias.name to name');
     assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('不应显示的原始字段')"), false, 'Shared mapping failed to override raw name');
+    const priorSharedReads = tableCalls.length;
+    assert(await evaluate("(() => { const field=document.querySelector('.pa-studio-remote-table select[aria-label=表格筛选]'); if(!field)return false;field.value='待开始';field.dispatchEvent(new Event('change',{bubbles:true}));return true;})()"), 'Shared table filter control missing');
+    await until(() => tableCalls.slice(priorSharedReads).some((request) => request.view === 'shared' && request.state === '待开始' && !request.filterField && !request.filter), 'Shared table did not honor custom state query parameter');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 1 条记录')"), 'Custom shared filter was not applied by server');
+    assert(await evaluate("(() => { const field=document.querySelector('.pa-studio-remote-table select[aria-label=表格筛选]'); if(!field)return false;field.value='';field.dispatchEvent(new Event('change',{bubbles:true}));return true;})()"), 'Shared table filter reset missing');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Shared table filter reset not server-authoritative');
     assert(await evaluate("!document.querySelector('.atlas-record-list')"), 'Isolated page unexpectedly contains record list');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Isolated table data');
     assert(await evaluate("(() => { const button=document.querySelector('.pa-studio-remote-table .ant-pagination-next button'); if (!button) return false; button.click(); return true; })()"), 'Isolated table page 2 action');
