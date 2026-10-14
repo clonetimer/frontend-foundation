@@ -9,7 +9,7 @@
 3. 配置项目名称、页面名称，选择“空白 / Bento / 主从分栏”。右侧是实时视觉预览，页面 ID 等非必要字段收在“高级设置”内。
 4. 选择 **进入拖拽设计器**。页面在 Showcase 的 `/studio` 打开，不需要另外启动或跳转到端口 5174。
 5. 左侧选择或拖放组件，在画布中定位，在右侧修改**内容、形式、交互、特效、风格**，可切换设备与编辑/体验模式。顶部可直接增加更多项目页面。
-6. 点击 **导出页面代码**，获得 ZIP：包含 Blueprint、可再次编辑的 Studio 文件、React 页面 TSX 和特效样式 CSS。
+6. 点击 **导出页面代码**，获得可单独运行的 React 19 + Ant Design 6 + Vite ZIP：包含 Blueprint、可再次编辑的 Studio 文件、React 页面 TSX、特效样式 CSS 和独立 `package.json`。解压后在其目录执行 `npm install`、`npm run build`、`npm run dev`，不需要 Foundation 工作区。
 
 **重要**：设计器有本地自动保存，但浏览器本地存储不等于项目文件。要长期存档、分享或迁移，请使用 ZIP 内 `atlas.studio.json`；下次在 `/studio` 点击“打开项目”导入该文件以恢复配置。
 
@@ -38,6 +38,7 @@ node tooling/create-app/project.mjs compile ./my-app/foundation.project.json
 - 访问 Showcase `/designer` 会重定向到新的 `/studio`。
 - 新设计器是**新增的应用层编辑体验**，不是原 Designer / Domain Registry / Action DSL 所有高级功能的完全替代。目前主要覆盖标准布局和基础组件、几类视觉编排、按钮反馈及 18 种可选 CSS 特效。
 - AI 开发说明仍是可选的沟通材料，不是生成页面代码的前置步骤。
-- 当前仅在本地浏览器保存；跨用户、多端协同、生产数据绑定与部署发布尚未实现。
+- Studio 支持可配置的远程 GET 表格（服务端分页/筛选/搜索/排序）、GET 只读行详情、PATCH 编辑以及二次确认的 DELETE 行操作；部分弹窗和工作流也能请求实际 API。详见仓库根目录 README 的 HTTP 契约与独立 ZIP 启动说明。
+- 当前项目草稿主要存储于本地浏览器；跨用户、多端协同及托管部署尚未实现。虽然已支持部分真实业务数据接口，但后端鉴权、CORS、版本冲突和审计仍需实际应用提供；多选批处理尚不支持。
 
 详见 [Phase 7 统一设计器技术说明](PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md)。
