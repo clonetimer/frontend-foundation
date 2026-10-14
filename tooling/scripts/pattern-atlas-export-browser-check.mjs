@@ -31,6 +31,8 @@ export async function runExportedBrowserSmoke(directory) {
   let chrome;
   let socket;
   const posts = [];
+  const mappedPosts = [];
+  let mappedCommitThen503 = false;
   const savedRecords = [{ id:'R/1 ?', name:'旧姓名', email:'old@example.org', amount:3 }];
   const tableCalls = [];
   const tableRows = [
@@ -138,11 +140,20 @@ export async function runExportedBrowserSmoke(directory) {
       Object.assign(tableRows[0], submitted);
       response.writeHead(200); response.end('{"saved":true}'); return;
     }
+    if (request.method === 'POST' && request.url === '/api/mapped-create') {
+      const record = JSON.parse(body);
+      mappedPosts.push(record);
+      if (mappedCommitThen503) {
+        mappedCommitThen503 = false;
+        response.writeHead(503); response.end('{"error":"committed but gateway returned 503"}'); return;
+      }
+      response.writeHead(201); response.end('{"saved":true}'); return;
+    }
     if (request.method === 'POST' && request.url === '/api/followup') {
       followupCalls.push(JSON.parse(body));
       response.writeHead(200); response.end('{"ok":true}'); return;
     }
-    if (request.url === '/api/fail') { response.writeHead(500); response.end('{"error":"intentional test failure"}'); return; }
+    if (request.url === '/api/fail') { response.writeHead(400); response.end('{"error":"definite validation rejection"}'); return; }
     if (request.url !== '/api/save') { response.writeHead(404); response.end('{}'); return; }
     const posted = JSON.parse(body);
     posts.push(posted);
@@ -255,11 +266,33 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('[data-studio-component=formList21]')?.classList.contains('atlas-workflow-highlight')"), 'Success workflow component highlight');
 
 
+    // Phase 22-C2: the shared source's createUrl wins over the legacy
+    // form submitUrl and names are translated to backend saveField aliases.
+    assert(await click('共享写入新增'), 'Shared create modal missing');
+    await until(() => evaluate("document.querySelector('.ant-modal')?.textContent?.includes('共享写入表单')"), 'Shared create modal did not open');
+    await fill('.ant-modal', '姓名', '映射新建');
+    assert(await evaluate("(() => { const button=document.querySelector('.ant-modal-footer button.ant-btn-primary'); if(!button)return false;button.click();return true;})()"), 'Shared create submit missing');
+    await until(() => mappedPosts.length === 1, 'Shared source POST target not called');
+    assert.deepEqual(mappedPosts[0], {subject:'映射新建'}, 'Shared source outgoing alias not applied');
+    await until(() => evaluate("!document.querySelector('.ant-modal')"), 'Shared create success did not close');
+    mappedCommitThen503 = true;
+    assert(await click('共享写入新增'), 'Shared uncertain write modal missing');
+    await until(() => evaluate("document.querySelector('.ant-modal')?.textContent?.includes('共享写入表单')"), 'Shared uncertain modal open');
+    await fill('.ant-modal', '姓名', '提交后503');
+    assert(await evaluate("(() => { const button=document.querySelector('.ant-modal-footer button.ant-btn-primary'); if(!button)return false;button.click();return true;})()"), 'Shared uncertain submit missing');
+    await until(() => mappedPosts.length === 2, 'Commit-then-503 mock request missing');
+    assert.deepEqual(mappedPosts[1], {subject:'提交后503'}, 'Uncertain mutation mapped body missing');
+    await until(() => evaluate("document.querySelector('.ant-modal [role=alert]')?.textContent?.includes('写入结果不确定')"), 'Committed-then-503 was not reported as uncertain');
+    assert.equal(await evaluate("document.body.textContent.includes('不应执行的失败工作流')"), false, 'Uncertain write triggered failure workflow');
+    assert(await evaluate("Boolean(document.querySelector('.ant-modal input[aria-label=姓名]'))"), 'Uncertain save lost the draft');
+    await evaluate("document.querySelector('.ant-modal-footer button.ant-btn-default')?.click()");
+    await until(() => evaluate("!document.querySelector('.ant-modal')"), 'Shared uncertain modal did not close');
+
     assert(await click('打开错误示例'), 'Business drawer trigger missing');
     await until(() => evaluate("document.querySelector('.ant-drawer-body')?.textContent?.includes('失败反馈表单') || document.querySelector('.ant-drawer-body')?.textContent?.includes('模拟服务端失败')"), 'Business drawer open');
     await fill('.ant-drawer-body', '姓名', '测试失败');
     assert(await evaluate("(() => { const button = document.querySelector('.ant-drawer-footer button.ant-btn-primary'); if (!button) return false; button.click(); return true; })()"), 'Business drawer submit missing');
-    await until(() => evaluate("document.querySelector('.ant-drawer-body [role=alert]')?.textContent?.includes('HTTP 500')"), 'Business drawer HTTP error');
+    await until(() => evaluate("document.querySelector('.ant-drawer-body [role=alert]')?.textContent?.includes('HTTP 400')"), 'Business drawer HTTP error');
     await until(() => evaluate("document.body.textContent.includes('提交失败分支执行')"), 'Failure workflow notification');
     assert(await evaluate("Boolean(document.querySelector('.ant-drawer-body input[aria-label=姓名]'))"), 'Failed form unexpectedly closed or lost draft');
     await evaluate("document.querySelector('.ant-drawer-footer button.ant-btn-default')?.click()");
@@ -611,7 +644,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();

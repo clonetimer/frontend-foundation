@@ -72,6 +72,12 @@ pnpm dev:studio   # 仅启动新的 Showcase 设计工作台
 
 共享查询遵循数据源中设置的 `pageParam`、`sizeParam`、`searchParam`、`filterParam`、`sortParam` 和 `sortDirectionParam`（默认 `page/pageSize/search/status/sortBy/sortOrder`），与原独立表格的 `filterField/filter/sort/order` 兼容模式不同。字段映射使用经过验证的 `fieldMappings`，将服务端嵌套字段同时映射到**表格展示列和详情 GET 的只读/编辑记录**；详情响应原始或映射后的记录 ID 与当前选择不符时均会拒绝继续编辑。**缺失、非法或不支持服务端分页的共享数据源会拒绝回退旧 URL**，避免误访问旧服务器。旧的直接 `dataUrl` 配置不受影响；初版暂不将图表、文件或异步任务直接迁移到同一数据契约。
 
+### Phase 22-C2 · 统一共享写入契约（POST / PATCH）
+
+Studio 弹窗/抽屉选择「复用共享数据源（保存地址）」后，**新增模式**优先使用项目数据源的 `createUrl`（POST；旧项目未配置时可沿用 `saveUrl`），**编辑选中记录模式**使用含单个 `{id}` 的 `saveUrl`（PATCH）；请求主键仍进行 URL 编码。共享源的 `fieldMappings[].saveField` 用于转换表单字段到服务端 JSON 字段名。比如表单 `name` 对应 `saveField=subject`，发送的请求体就是 `{"subject":"示例"}`。字段名不合法或映射重名时，禁止发送请求。
+
+Studio 体验模式与导出 ZIP 调用同一个纯配置解析器；共享源不存在、写入 URL 不适用于当前操作或模板不合法时，**不会使用曾经填写的旧 `submitUrl`**。未关联数据源的旧弹窗继续使用直接地址。对于 POST/PATCH 的 HTTP 409/412/428，提示并发冲突并刷新记录；HTTP 5xx、网络中断与超时为**结果不确定**，不自动再次提交，也不触发可能带来第二次写入的失败工作流。生产系统必须由后端实现鉴权、幂等性、版本原子校验和审计；前端无法证明某次超时请求是否已经落库。
+
 ### 验证入口
 
 ```bash

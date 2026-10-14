@@ -6,7 +6,7 @@ import { mayContain, nodeLabel, type StudioDecoration } from './model';
 import { displayApiValue, requestStudioApi, validApiUrl } from './api';
 import { recordId, recordText } from './record-bindings';
 import type { StudioRecordFlow } from './StudioRecords';
-import { resolveTableWidgetProps, type StudioDataSource } from './data-sources';
+import { resolveOverlayWidgetProps, resolveTableWidgetProps, type StudioDataSource } from './data-sources';
 import { WidgetPreview } from './WidgetPreview';
 import type { OverlayRecordSelection } from './widgets';
 import { dispatchWorkflowComponentEvent, runStudioWorkflow, type WorkflowTrace } from './studio-workflows';
@@ -200,6 +200,7 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
     const sourceKey = typeof widgetProps.sourceId === 'string' ? widgetProps.sourceId : '';
     const linkedSource = sourceKey ? dataSources?.find((entry) => entry.id === sourceKey) : undefined;
     const resolvedProps = decoration.widgetKind === 'table' ? resolveTableWidgetProps(widgetProps, dataSources ?? [])
+      : decoration.widgetKind === 'modal' || decoration.widgetKind === 'drawer' ? resolveOverlayWidgetProps(widgetProps, dataSources ?? [])
       : sourceKey ? { ...widgetProps, submitUrl: linkedSource?.saveUrl ?? '' } : widgetProps;
     visual = <WidgetPreview kind={decoration.widgetKind} props={resolvedProps} live={live}
       recordSelection={tableSelection ?? (recordFlow ? { selectedId: recordFlow.selectedId, selected: recordFlow.selected, detailStatus: recordFlow.detailStatus } : undefined)} workflowPages={workflowPages} onWorkflowNavigate={onNavigate} onRecordSelect={onTableSelection ?? undefined}/>;

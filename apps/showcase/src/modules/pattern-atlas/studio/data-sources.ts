@@ -153,6 +153,24 @@ export function resolveTableWidgetProps(props: Record<string, unknown>, sources:
     sortParam: source.sortParam || 'sortBy', sortDirectionParam: source.sortDirectionParam || 'sortOrder'
   };
 }
+/** Shared POST/PATCH mutation contract for overlay forms. When a source is linked,
+ * stale local submitUrl values must never become fallback mutation targets.
+ * Direct (unlinked) overlays retain their original behavior.
+ */
+export function resolveOverlayWidgetProps(props: Record<string, unknown>, sources: readonly StudioDataSource[]): Record<string, unknown> {
+  const sourceId = typeof props.sourceId === 'string' ? props.sourceId : '';
+  if (!sourceId) return props;
+  const source = sources.find((item) => item.id === sourceId);
+  const edit = props.formMode === 'edit-selected';
+  const { sourceId: _resolved, ...safeProps } = props;
+  void _resolved;
+  const base = { ...safeProps, submitUrl: '', submitMethod: edit ? 'PATCH' : 'POST',
+    saveFieldMappings: [], sourceError: '关联的写入数据源不存在或接口配置无效' };
+  if (!source) return base;
+  const target = edit ? source.saveUrl : (source.createUrl || source.saveUrl);
+  if (!target || (edit ? !validDetailTemplate(target) : !validRecordUrl(target) || target.includes('{id}'))) return base;
+  return { ...base, submitUrl: target, saveFieldMappings: normalizeFieldMappings(source.fieldMappings), sourceError: '' };
+}
 export function resolveRecordSubmit(binding: StudioRecordSubmitBinding | undefined, sources: readonly StudioDataSource[]): StudioRecordSubmitBinding | undefined {
   if (!binding) return undefined;
   if (!binding.sourceId) return binding;

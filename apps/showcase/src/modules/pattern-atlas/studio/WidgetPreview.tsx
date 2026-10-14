@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
-import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, overlaySubmitUrl, parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, type RemoteTableRow, type RemoteTablePage, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
+import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, mapOverlaySubmitPayload, overlaySubmitUrl, parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, type RemoteTableRow, type RemoteTablePage, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
 import { normalizeStudioWorkflow, runStudioWorkflow, dispatchWorkflowComponentEvent, type StudioWorkflow } from './studio-workflows';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
@@ -663,7 +663,11 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
     const result = validateOverlayForm(fields, draft);
     setErrors(result.errors);
     if (Object.keys(result.errors).length) return;
+    if (props.sourceError) { setSubmitError(label(props.sourceError)); return; }
     if (!url) { setSubmitError(editMode ? '编辑模式需要含单个 {id} 的有效保存地址和选中记录' : '未配置有效的保存地址'); return; }
+    let outgoing: Record<string, string | number>;
+    try { outgoing = mapOverlaySubmitPayload(result.payload, props.saveFieldMappings); }
+    catch (problem) { setSubmitError(problem instanceof Error ? problem.message : '保存字段映射无效'); return; }
     pending.current = true;
     setBusy(true); setSubmitError(''); setWorkflowError('');
     const snapshot = { ...draft };
@@ -671,12 +675,18 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
     const request = new AbortController();
     controller.current = request;
     const timeout = setTimeout(() => request.abort(), 15000);
+    let uncertain = false;
     try {
       const response = await fetch(url, {
         method: props.submitMethod === 'PATCH' ? 'PATCH' : 'POST', credentials: 'same-origin', signal: request.signal,
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result.payload)
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(outgoing)
       });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (!response.ok) {
+        uncertain = response.status >= 500;
+        if ([409, 412, 428].includes(response.status) || uncertain) window.dispatchEvent(new Event('atlas:records-refresh'));
+        throw new Error(uncertain ? 'HTTP ' + response.status + '：服务端可能已执行，请先核对最新记录，不要盲目重试'
+          : [409, 412, 428].includes(response.status) ? 'HTTP ' + response.status + '：数据版本已变化，请刷新并重新选择' : 'HTTP ' + response.status);
+      }
       setOpen(false);
       setDraft({});
       // The standalone RecordProvider and Studio record flow both subscribe to this event.
@@ -684,9 +694,15 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
       void notify.success('保存成功，记录已刷新');
       await runFollowup('successWorkflow', snapshot, submittedId);
     } catch (reason) {
-      if (!request.signal.aborted) setSubmitError(reason instanceof Error ? '保存失败：' + reason.message : '保存失败');
-      else setSubmitError('请求超时或已取消');
-      await runFollowup('failureWorkflow', snapshot, submittedId);
+      if (request.signal.aborted) uncertain = true;
+      if (!request.signal.aborted && reason instanceof TypeError) uncertain = true;
+      if (uncertain) {
+        setSubmitError('写入结果不确定：服务端可能已执行，请先核对最新记录，禁止直接重复提交');
+        window.dispatchEvent(new Event('atlas:records-refresh'));
+      } else setSubmitError(reason instanceof Error ? '保存失败：' + reason.message : '保存失败');
+      // A failure workflow may contain a second write. Never launch it after an
+      // indeterminate request, or it could duplicate an already committed save.
+      if (!uncertain) await runFollowup('failureWorkflow', snapshot, submittedId);
     } finally {
       clearTimeout(timeout); pending.current = false; controller.current = null; setBusy(false);
     }

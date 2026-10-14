@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, normalizeWidgetProps, overlaySubmitUrl } from '../studio/widgets';
+import { parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, normalizeWidgetProps, overlaySubmitUrl, mapOverlaySubmitPayload } from '../studio/widgets';
 import { createStudioDocument, createNode, insertNode, setDecoration, serializeStudioDocument, parseStudioFile } from '../studio/model';
-import { newServerDemoSource, resolveTableWidgetProps, normalizeDataSources } from '../studio/data-sources';
+import { newServerDemoSource, resolveTableWidgetProps, resolveOverlayWidgetProps, normalizeDataSources } from '../studio/data-sources';
 import { buildStudioListUrl } from '../studio/source-query';
 import { generateReactPage, projectExportFiles } from '../studio/exporter';
 import { exportedWidgetCatalog, exportedWidgetPreview } from '../studio/exported-widgets';
@@ -131,6 +131,35 @@ describe('Phase 22 · remote business tables', () => {
     expect(orphanCode).not.toContain('/api/shared?scope=team');
     expect(orphanCode).not.toContain('/stale-get');
     expect(orphanCode).not.toContain('/stale-delete/{id}');
+  });
+  it('resolves source-backed create/edit mutations and outbound alias mapping without stale fallback', () => {
+    const source={...newServerDemoSource('shared-save'),
+      createUrl:'/api/create-real',saveUrl:'/api/edit-real/{id}',
+      fieldMappings:[{field:'name',responsePath:'alias.name',saveField:'subject'}]};
+    const inputs=normalizeDataSources([source]);
+    const create=resolveOverlayWidgetProps({sourceId:'shared-save', formMode:'create',submitUrl:'/stale-write'},inputs);
+    expect(create.submitUrl).toBe('/api/create-real');
+    expect(create.submitMethod).toBe('POST');
+    expect(mapOverlaySubmitPayload({name:'张三'},create.saveFieldMappings)).toEqual({subject:'张三'});
+    const edit=resolveOverlayWidgetProps({sourceId:'shared-save',formMode:'edit-selected',submitMethod:'POST',submitUrl:'/stale-edit'},inputs);
+    expect(edit.submitUrl).toBe('/api/edit-real/{id}');
+    expect(edit.submitMethod).toBe('PATCH');
+    const missing=resolveOverlayWidgetProps({sourceId:'shared-save',submitUrl:'/stale-write'},[]);
+    expect(missing.submitUrl).toBe('');
+    expect(missing.sourceError).toContain('不存在');
+    expect(resolveOverlayWidgetProps({sourceId:'shared-save',formMode:'edit-selected'},[{...source,saveUrl:'/api/not-templated'}]).submitUrl).toBe('');
+    expect(resolveOverlayWidgetProps({formMode:'create',submitUrl:'/standalone'},[]).submitUrl).toBe('/standalone');
+    expect(() => mapOverlaySubmitPayload({name:'a',subject:'b'},create.saveFieldMappings)).toThrow('映射冲突');
+    let doc=createStudioDocument(); const page=doc.blueprint.pages[0]!;
+    doc.dataSources=inputs;
+    page.composition=insertNode(page.composition!,page.composition!.id,createNode('modal','writeModal'),'inside');
+    doc=setDecoration(doc,page.id+':writeModal',{widgetKind:'modal',widgetProps:{
+      title:'共享新增',formMode:'create',sourceId:'shared-save',formFields:'name|姓名|text|required',
+      submitUrl:'/stale-write'}});
+    const exported=generateReactPage(parseStudioFile(serializeStudioDocument(doc)),page.id);
+    expect(exported).toContain('/api/create-real');
+    expect(exported).toContain('subject');
+    expect(exported).not.toContain('/stale-write');
   });
   it('keeps deletion opt-in and rejects invalid DELETE URL templates', () => {
     expect(normalizeWidgetProps('table', {}).deleteUrl).toBe('');

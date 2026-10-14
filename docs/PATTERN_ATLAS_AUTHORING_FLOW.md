@@ -45,4 +45,6 @@ node tooling/create-app/project.mjs compile ./my-app/foundation.project.json
 
 - Phase 22-C1：可以在「接口管理」设置一个服务端分页的项目数据源，并在表格「共享表格数据源」选择其 ID，使表格复用同一套列表/详情/删除地址、查询参数及字段映射。Studio 导出 ZIP 会解析共享引用；删除了数据源时不会偷用旧的单独 URL。直接配置 `dataUrl` 的表格仍保持兼容。
 
+- Phase 22-C2：共享写入契约统一弹窗/抽屉。新增模式读取项目数据源 `createUrl`（兼容旧 `saveUrl`），编辑模式读取带 `{id}` 的 `saveUrl`；服务端字段由 `fieldMappings[].saveField` 指定。源缺失或 URL 无效时禁止回退旧地址；5xx/超时按写入结果不确定处理，不启动可能再次写入的失败后续工作流。
+
 详见 [Phase 7 统一设计器技术说明](PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md)。
