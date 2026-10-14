@@ -162,7 +162,9 @@ export function resolveOverlayWidgetProps(props: Record<string, unknown>, source
   if (!sourceId) return props;
   const source = sources.find((item) => item.id === sourceId);
   const edit = props.formMode === 'edit-selected';
-  const base = { ...props, sourceId: '', submitUrl: '', submitMethod: edit ? 'PATCH' : 'POST',
+  const { sourceId: _resolved, ...safeProps } = props;
+  void _resolved;
+  const base = { ...safeProps, submitUrl: '', submitMethod: edit ? 'PATCH' : 'POST',
     saveFieldMappings: [], sourceError: '关联的写入数据源不存在或接口配置无效' };
   if (!source) return base;
   const target = edit ? source.saveUrl : (source.createUrl || source.saveUrl);
