@@ -404,15 +404,15 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => tableCalls.slice(readsBeforeBoundaryDelete).some((item) => item.page === '1'), 'Invalid server page did not fall back to page 1');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 2 条记录')"), 'Recovered last page total not rendered');
     assert(await evaluate("document.querySelector('.pa-studio-remote-table .ant-pagination-item-active')?.textContent?.trim() === '1'"), 'Table remained on invalid page after DELETE');
-    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('旧姓名')"), 'Recovered page 1 was not rendered');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('更新姓名')"), 'Recovered page 1 was not rendered');
 
     // Primary keys containing /, spaces and '?' must be encoded before DELETE.
-    assert(await deleteRow('旧姓名'), 'Encoded-ID record delete missing');
+    assert(await deleteRow('更新姓名'), 'Encoded-ID record delete missing');
     await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Encoded-ID confirmation missing');
     assert(await confirmDelete(), 'Encoded-ID delete confirmation unavailable');
     await until(() => deleteCalls.includes('/api/delete/R%2F1%20%3F'), 'Special-character ID was not URI encoded for DELETE');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 1 条记录')"), 'Encoded-ID delete did not refresh server total');
-    assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('旧姓名')"), false, 'Encoded-ID delete still displays removed record');
+    assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('更新姓名')"), false, 'Encoded-ID delete still displays removed record');
 
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
