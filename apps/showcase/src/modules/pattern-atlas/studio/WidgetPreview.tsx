@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
-import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, mapOverlaySubmitPayload, overlaySubmitUrl, parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, type RemoteTableRow, type RemoteTablePage, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
+import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, mapOverlaySubmitPayload, classifyMutationHttpFailure, classifyMutationTransportFailure, parseMutationFieldErrors, type MutationFailure, overlaySubmitUrl, parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, type RemoteTableRow, type RemoteTablePage, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
 import { normalizeStudioWorkflow, runStudioWorkflow, dispatchWorkflowComponentEvent, type StudioWorkflow } from './studio-workflows';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
@@ -158,13 +158,10 @@ async function requestRemoteDelete(endpoint: string, signal: AbortSignal, etag?:
       ...(etag ? { headers: { 'If-Match': etag } } : {})
     });
     if (response.ok) return { kind: 'success', reason: '' };
-    if (response.status === 401 || response.status === 403) return { kind: 'denied', reason: 'HTTP ' + response.status + '：无权限，未确认删除' };
-    if ([404, 409, 412, 428].includes(response.status)) return { kind: 'conflict', reason: 'HTTP ' + response.status + '：记录状态已变化，请刷新核对后重新选择' };
-    if (response.status >= 500) return { kind: 'uncertain', reason: 'HTTP ' + response.status + '：服务端可能已执行，先核对最新数据，禁止盲目重试' };
-    return { kind: 'failed', reason: 'HTTP ' + response.status };
-  } catch (error) {
-    return { kind: 'uncertain', reason: signal.aborted ? '请求中止或超时：执行结果不确定，请先核对后端' :
-      '网络异常：执行结果不确定，请先核对后端（' + (error instanceof Error ? error.message : '请求失败') + '）' };
+    const failure = classifyMutationHttpFailure(response.status);
+    return { kind: failure.kind === 'invalid' ? 'failed' : failure.kind, reason: failure.message };
+  } catch {
+    return { kind: 'uncertain', reason: classifyMutationTransportFailure(signal.aborted).message };
   }
 }
 /** Server-controlled table: pagination/filtering/sorting are never emulated locally. */
@@ -675,17 +672,31 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
     const request = new AbortController();
     controller.current = request;
     const timeout = setTimeout(() => request.abort(), 15000);
-    let uncertain = false;
+    let failure: MutationFailure | null = null;
     try {
       const response = await fetch(url, {
         method: props.submitMethod === 'PATCH' ? 'PATCH' : 'POST', credentials: 'same-origin', signal: request.signal,
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(outgoing)
       });
       if (!response.ok) {
-        uncertain = response.status >= 500;
-        if ([409, 412, 428].includes(response.status) || uncertain) window.dispatchEvent(new Event('atlas:records-refresh'));
-        throw new Error(uncertain ? 'HTTP ' + response.status + '：服务端可能已执行，请先核对最新记录，不要盲目重试'
-          : [409, 412, 428].includes(response.status) ? 'HTTP ' + response.status + '：数据版本已变化，请刷新并重新选择' : 'HTTP ' + response.status);
+        failure = classifyMutationHttpFailure(response.status);
+        if (failure.refresh) window.dispatchEvent(new Event('atlas:records-refresh'));
+        if (failure.kind === 'invalid') {
+          // Error responses are untrusted: parse at most 16 KB and expose only
+          // bounded, declared form fields. Never reflect arbitrary HTML/JSON.
+          try {
+            if (Number(response.headers.get('content-length') || 0) <= 16384) {
+              const body = await response.text();
+              if (body.length <= 16384) {
+                const feedback = parseMutationFieldErrors(JSON.parse(body) as unknown, props.saveFieldMappings);
+                const allowed = new Set(fields.map((field) => field.key));
+                const visible = Object.fromEntries(Object.entries(feedback).filter(([key]) => allowed.has(key)));
+                if (Object.keys(visible).length) setErrors((current) => ({ ...current, ...visible }));
+              }
+            }
+          } catch { /* no field-level details; retain the stable error classification */ }
+        }
+        throw new Error(failure.message);
       }
       setOpen(false);
       setDraft({});
@@ -694,15 +705,16 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
       void notify.success('保存成功，记录已刷新');
       await runFollowup('successWorkflow', snapshot, submittedId);
     } catch (reason) {
-      if (request.signal.aborted) uncertain = true;
-      if (!request.signal.aborted && reason instanceof TypeError) uncertain = true;
-      if (uncertain) {
-        setSubmitError('写入结果不确定：服务端可能已执行，请先核对最新记录，禁止直接重复提交');
+      if (!failure && (request.signal.aborted || reason instanceof TypeError)) {
+        failure = classifyMutationTransportFailure(request.signal.aborted);
         window.dispatchEvent(new Event('atlas:records-refresh'));
+      }
+      if (failure?.kind === 'uncertain') {
+        setSubmitError('写入结果不确定：' + failure.message);
       } else setSubmitError(reason instanceof Error ? '保存失败：' + reason.message : '保存失败');
-      // A failure workflow may contain a second write. Never launch it after an
-      // indeterminate request, or it could duplicate an already committed save.
-      if (!uncertain) await runFollowup('failureWorkflow', snapshot, submittedId);
+      // Failure workflows may contain mutations; do not run them for unknown
+      // outcomes, even if a proxy committed before replying 503.
+      if (failure?.kind !== 'uncertain') await runFollowup('failureWorkflow', snapshot, submittedId);
     } finally {
       clearTimeout(timeout); pending.current = false; controller.current = null; setBusy(false);
     }
