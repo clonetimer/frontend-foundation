@@ -393,6 +393,27 @@ export async function runExportedBrowserSmoke(directory) {
     assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('独立表格修改')"), false, 'Deleted row remained visible');
     assert.equal(await evaluate("Boolean(document.querySelector('.pa-studio-remote-table [role=alert]'))"), false, 'Successful delete did not clear failed attempt state');
 
+    // Deleting the final row of server page 2 shrinks 3 rows to 2. The page
+    // cursor must recover to 1, and the final view must come from a real GET.
+    const readsBeforeBoundaryDelete = tableCalls.length;
+    assert(await deleteRow('另一对象'), 'Last-page delete control missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Last-page confirmation missing');
+    assert(await confirmDelete(), 'Last-page delete confirmation unavailable');
+    await until(() => deleteCalls.includes('/api/delete/T-4'), 'Last-page DELETE was not sent');
+    await until(() => tableCalls.slice(readsBeforeBoundaryDelete).some((item) => item.page === '2'), 'Deleted last-page row did not trigger page-2 refetch');
+    await until(() => tableCalls.slice(readsBeforeBoundaryDelete).some((item) => item.page === '1'), 'Invalid server page did not fall back to page 1');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 2 条记录')"), 'Recovered last page total not rendered');
+    assert(await evaluate("document.querySelector('.pa-studio-remote-table .ant-pagination-item-active')?.textContent?.trim() === '1'"), 'Table remained on invalid page after DELETE');
+    assert(await evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('旧姓名')"), 'Recovered page 1 was not rendered');
+
+    // Primary keys containing /, spaces and '?' must be encoded before DELETE.
+    assert(await deleteRow('旧姓名'), 'Encoded-ID record delete missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Encoded-ID confirmation missing');
+    assert(await confirmDelete(), 'Encoded-ID delete confirmation unavailable');
+    await until(() => deleteCalls.includes('/api/delete/R%2F1%20%3F'), 'Special-character ID was not URI encoded for DELETE');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 1 条记录')"), 'Encoded-ID delete did not refresh server total');
+    assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('旧姓名')"), false, 'Encoded-ID delete still displays removed record');
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -400,7 +421,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'confirmed DELETE with 403, retry and refreshed server total', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
