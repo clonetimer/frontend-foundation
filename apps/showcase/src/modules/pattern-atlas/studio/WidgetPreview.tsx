@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
-import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, overlaySubmitUrl, parseRemoteTableColumns, parseRemoteTablePage, type RemoteTableRow, type RemoteTablePage, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
+import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, overlaySubmitUrl, parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, type RemoteTableRow, type RemoteTablePage, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
 import { normalizeStudioWorkflow, runStudioWorkflow, dispatchWorkflowComponentEvent, type StudioWorkflow } from './studio-workflows';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
@@ -133,6 +133,24 @@ async function getRemoteTableDetail(row: RemoteTableRow, props: Record<string, u
   }
   return result;
 }
+type RemoteDeleteResult = { kind: 'success' | 'denied' | 'conflict' | 'failed' | 'uncertain'; reason: string };
+/** An HTTP failure is not necessarily a rejected mutation: 5xx/transport may follow a committed DELETE. */
+async function requestRemoteDelete(endpoint: string, signal: AbortSignal, etag?: string): Promise<RemoteDeleteResult> {
+  try {
+    const response = await fetch(endpoint, {
+      method: 'DELETE', credentials: 'same-origin', cache: 'no-store', signal,
+      ...(etag ? { headers: { 'If-Match': etag } } : {})
+    });
+    if (response.ok) return { kind: 'success', reason: '' };
+    if (response.status === 401 || response.status === 403) return { kind: 'denied', reason: 'HTTP ' + response.status + '：无权限，未确认删除' };
+    if ([404, 409, 412, 428].includes(response.status)) return { kind: 'conflict', reason: 'HTTP ' + response.status + '：记录状态已变化，请刷新核对后重新选择' };
+    if (response.status >= 500) return { kind: 'uncertain', reason: 'HTTP ' + response.status + '：服务端可能已执行，先核对最新数据，禁止盲目重试' };
+    return { kind: 'failed', reason: 'HTTP ' + response.status };
+  } catch (error) {
+    return { kind: 'uncertain', reason: signal.aborted ? '请求中止或超时：执行结果不确定，请先核对后端' :
+      '网络异常：执行结果不确定，请先核对后端（' + (error instanceof Error ? error.message : '请求失败') + '）' };
+  }
+}
 /** Server-controlled table: pagination/filtering/sorting are never emulated locally. */
 function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<string, unknown>; live: boolean; onRecordSelect?: ((selection: OverlayRecordSelection) => void) | undefined }) {
   const title = label(props.title, '数据表格');
@@ -141,6 +159,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   const idField = label(props.idField, 'id');
   const itemsPath = label(props.itemsPath, 'data.items');
   const totalPath = label(props.totalPath, 'data.total');
+  const deleteEtagField = label(props.deleteEtagField).trim();
   const sortField = label(props.sortField, 'name');
   const filterField = label(props.filterField);
   const filterValues = label(props.filterValues).split(',').map((value) => value.trim()).filter(Boolean).slice(0, 16);
@@ -159,7 +178,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   const [deletingId, setDeletingId] = useState('');
   const [bulkSelectedKeys, setBulkSelectedKeys] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [bulkOutcome, setBulkOutcome] = useState<{ successful: string[]; failed: { id: string; reason: string }[] } | null>(null);
+  const [bulkOutcome, setBulkOutcome] = useState<{ successful: string[]; failed: { id: string; reason: string }[]; conflict: { id: string; reason: string }[]; uncertain: { id: string; reason: string }[]; skipped: string[] } | null>(null);
   const [viewDetail, setViewDetail] = useState<{ id: string; status: 'loading' | 'ready' | 'error'; record: Record<string, unknown> | null; error: string } | null>(null);
   const detailRequest = useRef<AbortController | null>(null);
   const deleteRequest = useRef<AbortController | null>(null);
@@ -192,14 +211,19 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   };
   const deleteSelectedRecords = async () => {
     if (!live || !deleteEnabled || !data || loading || bulkBusy || batchRequest.current || deleteRequest.current) return;
-    // Selection is scoped to the currently loaded server page, never hidden
-    // or unchecked records from earlier filters, searches or pagination.
-    const visible = new Set(data.items.map((row) => row.key));
+    const visible = new Map(data.items.map((row) => [row.key, row]));
     const ids = bulkSelectedKeys.filter((id) => visible.has(id)).slice(0, 20);
     if (!ids.length) return;
-    const endpoints = ids.map((id) => ({ id, url: overlaySubmitUrl(deleteTemplate, 'edit-selected', id) }));
-    if (endpoints.some((item) => !item.url)) {
-      setBulkOutcome({ successful: [], failed: ids.map((id) => ({ id, reason: '删除 URL 配置无效' })) });
+    const endpoints = ids.map((id) => {
+      const row = visible.get(id)!;
+      return { id, url: overlaySubmitUrl(deleteTemplate, 'edit-selected', id),
+        etag: deleteEtagField ? strongRecordEtag(row[deleteEtagField]) : undefined };
+    });
+    // Fail the entire batch before any side effect if a required precondition
+    // is missing; mixed guarded and unguarded mutations would be unsafe.
+    if (endpoints.some((item) => !item.url || (deleteEtagField && !item.etag))) {
+      setBulkSelectedKeys([]);
+      setBulkOutcome({ successful: [], failed: ids.map((id) => ({ id, reason: '删除地址或强 ETag 前置条件无效，未发送请求' })), conflict: [], uncertain: [], skipped: [] });
       return;
     }
     const controller = new AbortController();
@@ -207,22 +231,21 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     setBulkBusy(true); setBulkOutcome(null);
     const successful: string[] = [];
     const failed: { id: string; reason: string }[] = [];
+    const conflict: { id: string; reason: string }[] = [];
+    const uncertain: { id: string; reason: string }[] = [];
+    const skipped: string[] = [];
     const timeout = setTimeout(() => controller.abort(), 60000);
+    let blocked = false;
     try {
-      // Sequential requests prevent uncontrolled concurrency; each item has
-      // an independent server-authoritative result and can fail individually.
-      for (const { id, url } of endpoints) {
-        if (controller.signal.aborted) {
-          failed.push({ id, reason: '未执行，批量请求已取消或超时' });
-          continue;
-        }
-        try {
-          const response = await fetch(url!, { method: 'DELETE', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
-          if (!response.ok) throw new Error('HTTP ' + response.status);
-          successful.push(id);
-        } catch (problem) {
-          failed.push({ id, reason: controller.signal.aborted ? '请求中断，服务端结果待核对' : problem instanceof Error ? problem.message : '请求失败' });
-        }
+      for (const item of endpoints) {
+        if (blocked || controller.signal.aborted) { skipped.push(item.id); continue; }
+        const result = await requestRemoteDelete(item.url!, controller.signal, item.etag ?? undefined);
+        if (result.kind === 'success') successful.push(item.id);
+        else if (result.kind === 'conflict') conflict.push({ id: item.id, reason: result.reason });
+        else if (result.kind === 'uncertain') {
+          uncertain.push({ id: item.id, reason: result.reason });
+          blocked = true; // Never issue subsequent writes after indeterminate outcome.
+        } else failed.push({ id: item.id, reason: result.reason });
       }
       if (successful.some((id) => id === viewDetail?.id)) closeView();
       if (successful.includes(currentTableSelection.current)) {
@@ -231,10 +254,10 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
         onRecordSelect?.({ selectedId: '', selected: null, detailStatus: 'idle' });
         setSelectionError('');
       }
-      // Never rollback an acknowledged server DELETE: report partial success,
-      // retain only failures for an explicitly confirmed retry and refresh GET.
+      // Retry only definitive failures; conflict/unknown/skipped require
+      // server-side reinspection and a fresh user selection.
       setBulkSelectedKeys(failed.map(({ id }) => id));
-      setBulkOutcome({ successful, failed });
+      setBulkOutcome({ successful, failed, conflict, uncertain, skipped });
       window.dispatchEvent(new Event('atlas:records-refresh'));
     } finally {
       clearTimeout(timeout);
@@ -243,30 +266,37 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     }
   };
   const deleteRecord = async (id: string) => {
-    if (!live || !deleteEnabled || deleteRequest.current || batchRequest.current) return;
+    if (!live || !deleteEnabled || deleteRequest.current || batchRequest.current || loading) return;
+    const row = data?.items.find((item) => item.key === id);
     const endpoint = overlaySubmitUrl(deleteTemplate, 'edit-selected', id);
-    if (!endpoint) { setDeleteError('删除接口需要包含一个有效的 {id} 占位符'); return; }
+    const etag = deleteEtagField ? strongRecordEtag(row?.[deleteEtagField]) : undefined;
+    if (!endpoint || (deleteEtagField && !etag)) {
+      setDeleteError('删除地址或强 ETag 前置条件无效：未发送 DELETE，请刷新记录后重试');
+      return;
+    }
     const controller = new AbortController();
     deleteRequest.current = controller;
     setDeletingId(id); setDeleteError('');
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const response = await fetch(endpoint, { method: 'DELETE', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      if (viewDetail?.id === id) closeView();
-      setBulkSelectedKeys((previous) => previous.filter((key) => key !== id));
-      setBulkOutcome(null);
-      if (currentTableSelection.current === id) {
-        detailRequest.current?.abort();
-        currentTableSelection.current = '';
-        onRecordSelect?.({ selectedId: '', selected: null, detailStatus: 'idle' });
-        setSelectionError('');
+      const result = await requestRemoteDelete(endpoint, controller.signal, etag ?? undefined);
+      if (result.kind === 'success') {
+        if (viewDetail?.id === id) closeView();
+        setBulkSelectedKeys((previous) => previous.filter((key) => key !== id));
+        setBulkOutcome(null);
+        if (currentTableSelection.current === id) {
+          detailRequest.current?.abort();
+          currentTableSelection.current = '';
+          onRecordSelect?.({ selectedId: '', selected: null, detailStatus: 'idle' });
+          setSelectionError('');
+        }
+      } else {
+        setDeleteError(result.kind === 'uncertain' ? '删除结果不确定：' + result.reason :
+          result.kind === 'conflict' ? '删除冲突：' + result.reason :
+          '删除失败：' + result.reason);
       }
-      // No optimistic removal: keep server-authoritative paging and total count.
-      // The shared refresh event also updates any sibling record list.
+      // Reconcile even on conflict/timeout: server state may have changed.
       window.dispatchEvent(new Event('atlas:records-refresh'));
-    } catch (problem) {
-      setDeleteError(controller.signal.aborted ? '删除请求已取消或超时' : '删除失败：' + (problem instanceof Error ? problem.message : '请求失败'));
     } finally {
       clearTimeout(timeout);
       deleteRequest.current = null;
@@ -320,7 +350,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
         const jsonBody: unknown = JSON.parse(body);
         const records = pathValue(jsonBody, itemsPath);
         const total = pathValue(jsonBody, totalPath);
-        const parsed = parseRemoteTablePage({ items: records, total }, idField, columns);
+        const parsed = parseRemoteTablePage({ items: records, total }, idField, columns, deleteEtagField);
         if (!parsed) throw new Error('远程表格数据格式无效');
         if (!controller.signal.aborted) {
           // A successful DELETE (or concurrent server change) may remove the last
@@ -344,7 +374,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     };
     void load();
     return () => controller.abort();
-  }, [sourceUrl, idField, itemsPath, totalPath, props.tableColumns, sortField, filterField, page, pageSize, search, filter, direction, revision, live]);
+  }, [sourceUrl, idField, itemsPath, totalPath, props.tableColumns, sortField, filterField, page, pageSize, search, filter, direction, revision, live, deleteEtagField]);
   useEffect(() => {
     if (!live || !sourceUrl) return;
     const refresh = () => setRevision((previous) => previous + 1);
@@ -393,9 +423,14 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
       </Popconfirm>
       <Button size="small" disabled={bulkBusy || !bulkSelectedKeys.length} onClick={clearBulkSelection}>清空选择</Button>
     </div> : null}
-    {bulkOutcome ? <Alert showIcon type={bulkOutcome.failed.length ? 'warning' : 'success'}
-      message={'批量删除：成功 ' + bulkOutcome.successful.length + ' 条，失败 ' + bulkOutcome.failed.length + ' 条'}
-      description={bulkOutcome.failed.length ? '失败记录（仅保留当前页可见项供再次确认）：' + bulkOutcome.failed.map((item) => item.id + '（' + item.reason + '）').join('；') + '。请求超时或断开时应核对后端状态，重复删除要求接口具备幂等语义。' : '已请求重新加载服务端列表。'}/> : null}
+    {bulkOutcome ? <Alert showIcon type={bulkOutcome.failed.length || bulkOutcome.conflict.length || bulkOutcome.uncertain.length || bulkOutcome.skipped.length ? 'warning' : 'success'}
+      message={'批量删除：成功 ' + bulkOutcome.successful.length + ' 条，失败 ' + bulkOutcome.failed.length + ' 条，冲突 ' + bulkOutcome.conflict.length + ' 条，结果不确定 ' + bulkOutcome.uncertain.length + ' 条，未执行 ' + bulkOutcome.skipped.length + ' 条'}
+      description={[
+        ...bulkOutcome.failed.map((item) => item.id + '：' + item.reason),
+        ...bulkOutcome.conflict.map((item) => item.id + '：' + item.reason),
+        ...bulkOutcome.uncertain.map((item) => item.id + '：' + item.reason),
+        ...(bulkOutcome.skipped.length ? ['尚未执行：' + bulkOutcome.skipped.join('、')] : [])
+      ].join('；') + '。冲突、不确定和未执行记录必须先核对最新服务端状态后重新选择；仅确定失败项可再次确认重试。'}/> : null}
     <Drawer title={viewDetail ? '记录详情：' + viewDetail.id : '记录详情'} open={Boolean(viewDetail)} onClose={closeView} destroyOnHidden>
       {viewDetail?.status === 'loading' ? <Spin tip="正在加载详情"><div style={{ minHeight: 80 }}/></Spin> : null}
       {viewDetail?.status === 'error' ? <Alert type="error" showIcon message="记录详情加载失败" description={viewDetail.error}/> : null}
