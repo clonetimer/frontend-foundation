@@ -51,6 +51,16 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
   const [saveError, setSaveError] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [revision, setRevision] = useState(0);
+  const writeLock = useRef(false);
+  const [writing, setWriting] = useState(false);
+  const announceMutation = () => window.dispatchEvent(new Event('atlas:records-refresh'));
+  // Synchronous mutual exclusion: a rapid double click cannot issue two writes.
+  const exclusiveWrite = async (operation: () => Promise<void>): Promise<void> => {
+    if (writeLock.current) throw new Error('已有写入请求正在执行，请勿重复提交');
+    writeLock.current = true; setWriting(true);
+    try { await operation(); }
+    finally { writeLock.current = false; setWriting(false); }
+  };
   const retainedDraft = useRef<{ id: string; values: Record<string,string> } | null>(null);
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
@@ -122,7 +132,7 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
     retainedDraft.current = null;
     setDraft(next); setErrors({});
   }, [selected, keys]);
-  const save = async (config: StudioRecordSubmitBinding) => {
+  const performSave = async (config: StudioRecordSubmitBinding) => {
     if (!source) throw new Error('请在本页面先配置记录列表。');
     if (source.detailUrl && (detailStatus !== 'ready' || detail?.id !== selectedId)) throw new Error(detailError || '请等待详情加载完成。');
     const problems = validateRecordDraft(draft, rules);
@@ -134,7 +144,7 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
     setSaveStatus('loading'); setSaveError('');
     try {
       await requestStudioApi({ method: 'POST', url: actual.url, body: JSON.stringify(mapOutgoingPayload(payload, actual.fieldMappings)) });
-      setSaveStatus('success'); setRevision((old) => old + 1);
+      setSaveStatus('success'); announceMutation();
     } catch (reason) {
       const failure = classifyMutationException(reason);
       if (reason instanceof StudioRequestError && failure.kind === 'invalid') {
@@ -145,46 +155,49 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
       }
       if (failure.refresh) {
         retainedDraft.current = { id: selectedId, values: { ...draft } };
-        setRevision((old) => old + 1);
+        announceMutation();
       }
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
       throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
-  const create = async (title: string) => {
+  const performCreate = async (title: string) => {
     if (!source?.createUrl) throw new Error('请先在数据源中配置新增 POST 接口。');
     if (title.trim().length < 2 || title.length > 120) throw new Error('标题需要 2–120 个字符。');
     setSaveStatus('loading'); setSaveError('');
     try {
       const payload = mapOutgoingPayload({ title: title.trim(), status: 'draft' }, source.fieldMappings);
       await requestStudioApi({ method: 'POST', url: source.createUrl, body: JSON.stringify(payload) });
-      setSaveStatus('success'); setPage(1); setRevision((old) => old + 1);
+      setSaveStatus('success'); setPage(1); announceMutation();
     } catch (reason) {
       const failure = classifyMutationException(reason);
-      if (failure.refresh) setRevision((old) => old + 1);
+      if (failure.refresh) announceMutation();
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
       throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
-  const remove = async () => {
+  const performRemove = async () => {
     if (!source?.deleteUrl || !selectedId) throw new Error('请先选中记录，并配置删除 DELETE 接口。');
     const url = detailRequestUrl(source.deleteUrl, selectedId);
     setSaveStatus('loading'); setSaveError('');
     try {
       await requestStudioApi({ method: 'DELETE', url });
-      setSelectedId(''); setDetail(null); setSaveStatus('success'); setRevision((old) => old + 1);
+      setSelectedId(''); setDetail(null); setSaveStatus('success'); announceMutation();
     } catch (reason) {
       const failure = classifyMutationException(reason);
-      if (failure.refresh) setRevision((old) => old + 1);
+      if (failure.refresh) announceMutation();
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message);
       throw new Error(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
+  const save = (config: StudioRecordSubmitBinding): Promise<void> => exclusiveWrite(() => performSave(config));
+  const create = (title: string): Promise<void> => exclusiveWrite(() => performCreate(title));
+  const remove = (): Promise<void> => exclusiveWrite(performRemove);
   const applySearch = () => { setPage(1); setSelectedId(''); setSearch(searchInput.trim().slice(0, 120)); setSaveStatus('idle'); };
-  return { status, detailStatus, detailError, saveStatus, saveError, idField: source?.idField ?? 'id', labelField: source?.labelField ?? 'title', sourceUrl: source?.url ?? '', rows, visibleRows, selected, selectedId, error, draft, saving: saveStatus === 'loading', errors,
+  return { status, detailStatus, detailError, saveStatus, saveError, idField: source?.idField ?? 'id', labelField: source?.labelField ?? 'title', sourceUrl: source?.url ?? '', rows, visibleRows, selected, selectedId, error, draft, saving: writing, errors,
     page: currentPage, pageSize, totalPages, totalRows: filteredTotal, serverPaging, searchInput, setSearchInput, applySearch, retry: () => setRevision((old) => old + 1),
     filter, setFilter: (value) => { setFilter(value); setPage(1); setSelectedId(''); },
     direction, setDirection: (value) => { setDirection(value); setPage(1); setSelectedId(''); },
