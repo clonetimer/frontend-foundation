@@ -405,13 +405,13 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
         }))}/> : null}
     </Drawer>
     <Table<RemoteTableRow> size="small" rowKey="key" loading={loading || bulkBusy} dataSource={data?.items ?? []}
-      rowSelection={deleteEnabled ? { selectedRowKeys: bulkSelectedKeys, onChange: (keys) => {
+      {...(deleteEnabled ? { rowSelection: { selectedRowKeys: bulkSelectedKeys, onChange: (keys: (string | number | bigint)[]) => {
         if (!bulkBusy && !loading) {
           const visible = new Set(data?.items.map((item) => item.key) ?? []);
           setBulkSelectedKeys(keys.map(String).filter((id) => visible.has(id)).slice(0, 20));
           setBulkOutcome(null);
         }
-      }, getCheckboxProps: () => ({ disabled: bulkBusy || loading || Boolean(deletingId) }) } : undefined}
+      }, getCheckboxProps: () => ({ disabled: bulkBusy || loading || Boolean(deletingId) }) } } : {})}
       columns={[...displayColumns, ...selectionColumn]}
       pagination={{ current: page, pageSize, total: data?.total ?? 0, showSizeChanger: false }}
       onChange={(pagination, _filters, sorter) => {
