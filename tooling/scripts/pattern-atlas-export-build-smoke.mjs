@@ -85,6 +85,7 @@ function exec(program, args, cwd) {
         widgetProps: { title: '无列表远程表格', dataUrl: 'http://127.0.0.1:4198/api/table', itemsPath: 'data.items', totalPath: 'data.total',
           idField: 'id', detailUrl: 'http://127.0.0.1:4198/api/row/{id}', detailPath: 'data',
           deleteUrl: 'http://127.0.0.1:4198/api/delete/{id}',
+          deleteEtagField: 'etag',
           tableColumns: 'name|名称\nstatus|状态', pageSize: 2, sortField: 'name', filterField: 'status', filterValues: '进行中,待开始,已完成' }
       });
       document = setDecoration(document, 'isolated:isolatedEdit22', {
