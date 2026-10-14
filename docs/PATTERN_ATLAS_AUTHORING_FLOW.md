@@ -51,4 +51,6 @@ node tooling/create-app/project.mjs compile ./my-app/foundation.project.json
 
 - Phase 22-C4：旧 Record Provider 的保存、新增、删除采用 C3 相同的错误分类与字段提示约束；冲突/不确定结果需从服务端重新校对，尝试保留当前编辑草稿。Studio 与独立 ZIP 均覆盖，且未给旧记录列表伪造尚未实现的原子 ETag 校验。POST/DELETE 的幂等与审计仍必须由后端负责。
 
+- Phase 22-C5：旧 Record Provider 的保存、新增、删除加入单 Provider 实例内的同步在途锁，防止跨按钮快速双击重复提交；成功、冲突或结果不确定时，通过 `atlas:records-refresh` 通知同页旧记录列表与增强表格重新 GET。该事件不会同步其他浏览器/终端，也不替代后端幂等与原子版本检查。
+
 详见 [Phase 7 统一设计器技术说明](PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md)。
