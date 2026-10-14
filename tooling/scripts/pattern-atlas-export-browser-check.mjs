@@ -34,15 +34,17 @@ export async function runExportedBrowserSmoke(directory) {
   const savedRecords = [{ id:'R/1 ?', name:'旧姓名', email:'old@example.org', amount:3 }];
   const tableCalls = [];
   const tableRows = [
-    {id:'R/1 ?',name:'旧姓名',status:'进行中'},
-    {id:'T-2',name:'第二对象',status:'待开始'},
-    {id:'T-3',name:'可查对象',status:'已完成'},
-    {id:'T-4',name:'另一对象',status:'进行中'}
+    {id:'R/1 ?',name:'旧姓名',status:'进行中',etag:'"v1"'},
+    {id:'T-2',name:'第二对象',status:'待开始',etag:'"v1"'},
+    {id:'T-3',name:'可查对象',status:'已完成',etag:'"v1"'},
+    {id:'T-4',name:'另一对象',status:'进行中',etag:'"v1"'}
   ];
   const patchCalls = [];
   const followupCalls = [];
   const detailCalls = [];
   const deleteCalls = [];
+  const deleteHeaders = [];
+  let commitThen503Id = '';
   let rejectFirstDelete = true;
   let failNextBatchDeleteId = '';
   let listReads = 0;
@@ -52,7 +54,7 @@ export async function runExportedBrowserSmoke(directory) {
   const api = createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:4189');
     response.setHeader('Access-Control-Allow-Methods', 'POST, PATCH, DELETE, OPTIONS');
-    response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type, If-Match');
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
     if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
     if (request.method === 'GET' && request.url?.startsWith('/api/row/')) {
@@ -89,17 +91,24 @@ export async function runExportedBrowserSmoke(directory) {
     }
     if (request.method === 'DELETE' && request.url?.startsWith('/api/delete/')) {
       deleteCalls.push(request.url);
+      deleteHeaders.push({url: request.url, etag: request.headers['if-match'] ?? ''});
+      const id = decodeURIComponent(request.url.slice('/api/delete/'.length));
+      const index = tableRows.findIndex((row) => row.id === id);
+      if (index < 0) { response.writeHead(404); response.end('{}'); return; }
+      if (request.headers['if-match'] !== tableRows[index].etag) { response.writeHead(412); response.end('{"error":"etag conflict"}'); return; }
+      if (commitThen503Id === id) {
+        commitThen503Id = '';
+        tableRows.splice(index, 1);
+        response.writeHead(503); response.end('{"error":"write committed but proxy returned 503"}'); return;
+      }
       if (request.url === '/api/delete/' + failNextBatchDeleteId && failNextBatchDeleteId) {
         failNextBatchDeleteId = '';
-        response.writeHead(503); response.end('{"error":"temporary batch deletion failure"}'); return;
+        response.writeHead(403); response.end('{"error":"permission denied"}'); return;
       }
       if (request.url === '/api/delete/T-3' && rejectFirstDelete) {
         rejectFirstDelete = false;
         response.writeHead(403); response.end('{"error":"permission denied"}'); return;
       }
-      const id = decodeURIComponent(request.url.slice('/api/delete/'.length));
-      const index = tableRows.findIndex((row) => row.id === id);
-      if (index < 0) { response.writeHead(404); response.end('{}'); return; }
       tableRows.splice(index, 1);
       response.writeHead(204); response.end(); return;
     }
@@ -463,9 +472,9 @@ export async function runExportedBrowserSmoke(directory) {
     // B3: 4 records over 2 pages. Selection deliberately never spans
     // pages; cancelling the bulk confirmation must issue zero DELETEs.
     tableRows.push(
-      {id:'B-1',name:'批量失败对象',status:'待开始'},
-      {id:'B-2',name:'批量后续对象',status:'进行中'},
-      {id:'B-3',name:'批量末页对象',status:'已完成'}
+      {id:'B-1',name:'批量失败对象',status:'待开始',etag:'"v1"'},
+      {id:'B-2',name:'批量后续对象',status:'进行中',etag:'"v1"'},
+      {id:'B-3',name:'批量末页对象',status:'已完成',etag:'"v1"'}
     );
     assert(await evaluate("(() => {const button=[...document.querySelectorAll('.pa-studio-remote-table .pa-studio-widget-actions button')].find(b=>b.textContent?.replace(/\\s/g,'')==='刷新');if(!button)return false;button.click();return true;})()"), 'Bulk fixture refresh missing');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Bulk fixture server total missing');
@@ -497,7 +506,7 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => deleteCalls.length === deleteCountBeforeBatch + 2, 'Bulk did not send two bounded DELETE requests');
     assert.deepEqual(deleteCalls.slice(deleteCountBeforeBatch), ['/api/delete/T-2', '/api/delete/B-1'], 'Bulk request order or selected IDs inconsistent');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table .ant-alert')?.textContent?.includes('成功 1 条，失败 1 条')"), 'Bulk partial failure not reported');
-    assert(await evaluate("document.querySelector('.pa-studio-remote-table .ant-alert')?.textContent?.includes('HTTP 503')"), 'Failed item HTTP status not reported');
+    assert(await evaluate("document.querySelector('.pa-studio-remote-table .ant-alert')?.textContent?.includes('HTTP 403')"), 'Failed item HTTP status not reported');
     await until(() => selectedCount(1), 'Failed item not retained for retry');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 3 条记录')"), 'Partial successful bulk delete not reconciled from GET');
     const countBeforeRetry = deleteCalls.length;
@@ -510,6 +519,7 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 2 条记录')"), 'Retry did not refresh server total');
     await until(() => selectedCount(0), 'Bulk selection remained stale after successful retry');
     assert.equal(tableRows.some((row) => row.id === 'T-2' || row.id === 'B-1'), false, 'Batch outcomes not applied by backend');
+    assert(deleteHeaders.every((entry) => entry.etag === '"v1"'), 'Prior DELETE requests lacked configured If-Match strong ETag');
 
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
