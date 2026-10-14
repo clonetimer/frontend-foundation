@@ -192,7 +192,7 @@ export function safeWidgetImageUrl(url: unknown): string | undefined {
 
 /** Normalize only declarative presentation values. Never put these in Foundation Blueprint props. */
 function normalizedOverlayOption(kind: StudioWidgetKind, key: string, value: unknown): string | undefined {
-  if (kind !== 'modal' && kind !== 'drawer') return undefined;
+  if (kind !== 'modal' && kind !== 'drawer' && kind !== 'table') return undefined;
   if (key === 'formMode') return value === 'edit-selected' ? 'edit-selected' : 'create';
   if (key === 'submitMethod') return value === 'PATCH' ? 'PATCH' : 'POST';
   if (key === 'sourceId') return typeof value === 'string' && /^[a-z][a-z0-9-]{0,35}$/.test(value) ? value : '';
