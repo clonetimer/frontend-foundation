@@ -98,7 +98,7 @@ function exec(program, args, cwd) {
         widgetProps: { title: '无列表远程表格', sourceId: 'isolated-table-shared',
           dataUrl: '/should-never-be-used', detailUrl: '/should-never-delete/{id}',
           deleteUrl: '/should-never-delete/{id}', deleteEtagField: 'etag',
-          tableColumns: 'name|名称\\nstatus|状态' }
+          tableColumns: 'name|名称\nstatus|状态' }
       });
       document = setDecoration(document, 'isolated:isolatedEdit22', {
         widgetKind: 'modal',
