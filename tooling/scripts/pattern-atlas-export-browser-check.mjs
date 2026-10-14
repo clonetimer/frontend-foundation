@@ -363,6 +363,47 @@ export async function runExportedBrowserSmoke(directory) {
     await until(editIsolatedEnabled, 'Successful detail retry did not restore edit');
     assert.equal(await evaluate("Boolean(document.querySelector('.pa-studio-remote-table [role=alert]'))"), false, 'Successful retry did not clear prior detail error');
 
+    // Phase 22-B2: read-only row details use a real GET but do not overwrite
+    // the selected-record edit context. Hidden detail fields remain visible.
+    const viewIsolatedRow = (name) => evaluate("(() => { const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes(" + JSON.stringify(name) + "));const button=[...(row?.querySelectorAll('button')??[])].find(el=>el.textContent?.replace(/\\s/g,'')==='查看');if(!button)return false;button.click();return true;})()");
+    const drawerBody = () => evaluate("document.querySelector('.ant-drawer-body')?.textContent ?? ''");
+    const closeDetail = () => evaluate("(() => { const button=document.querySelector('.ant-drawer-close');if(!button)return false;button.click();return true;})()");
+    const initialDetailReads = detailCount('T-3');
+    assert(await viewIsolatedRow('独立表格修改'), 'Read-only view row action missing');
+    await until(() => detailCount('T-3') > initialDetailReads, 'Read-only view did not issue GET');
+    await until(async () => (await drawerBody()).includes('detail@example.org'), 'Read-only view did not show detail-only email');
+    assert((await drawerBody()).includes('详情独立表格修改'), 'Read-only view did not display server name');
+    assert(await closeDetail(), 'Read-only detail drawer close missing');
+    await until(() => evaluate("!document.querySelector('.ant-drawer-body')"), 'Read-only detail drawer did not close');
+
+    // HTTP rejection stays in the detail view and does not submit or enable
+    // a stale selected-record edit. The next open must recover without reload.
+    failNextDetailId = 'T-3';
+    const failViewStart = detailCount('T-3');
+    assert(await viewIsolatedRow('独立表格修改'), 'Error view trigger missing');
+    await until(() => detailCount('T-3') > failViewStart, 'Error view GET missing');
+    await until(async () => (await drawerBody()).includes('HTTP 503'), 'Read-only detail did not display 503');
+    assert(await closeDetail(), 'Error drawer cannot close');
+    await until(() => evaluate("!document.querySelector('.ant-drawer-body')"), 'Error drawer did not unmount');
+    assert(await viewIsolatedRow('独立表格修改'), 'View retry action missing');
+    await until(async () => (await drawerBody()).includes('detail@example.org'), 'Read-only view retry did not recover');
+    assert(await closeDetail(), 'Recovered drawer cannot close');
+    await until(() => evaluate("!document.querySelector('.ant-drawer-body')"), 'Recovered drawer did not unmount');
+
+    // Quick switching aborts an outdated detail GET. T-4 deliberately returns
+    // a mismatched record ID, which must never poison a newer T-3 view.
+    slowNextDetailId = 'T-4';
+    const oldViewStart = detailCount('T-4');
+    assert(await viewIsolatedRow('另一对象'), 'Slow read-only detail trigger missing');
+    await until(() => detailCount('T-4') > oldViewStart, 'Slow read-only GET missing');
+    assert(await viewIsolatedRow('独立表格修改'), 'Cannot supersede slow read-only GET');
+    await until(async () => (await drawerBody()).includes('detail@example.org'), 'Replacement read-only view missing');
+    await pause(1300);
+    assert((await drawerBody()).includes('详情独立表格修改'), 'Stale mismatched response replaced new detail');
+    assert(!(await drawerBody()).includes('主键不匹配'), 'Stale detail error leaked to current view');
+    assert(await closeDetail(), 'Replacement drawer close missing');
+    await until(() => evaluate("!document.querySelector('.ant-drawer-body')"), 'Replacement drawer still mounted');
+
     // Phase 22-B row actions: explicit confirmation, server authorization, no
     // optimistic disappearance on 403, retry, and GET-driven reconciliation.
     const deleteRow = (name) => evaluate("(() => { const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes(" + JSON.stringify(name) + "));const button=[...(row?.querySelectorAll('button')??[])].find(el=>el.textContent?.replace(/\\s/g,'')==='删除');if(!button)return false;button.click();return true;})()");
@@ -421,7 +462,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();

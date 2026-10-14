@@ -416,8 +416,8 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
 
 - **StudioApp.tsx**：多页面入口组件，支持左侧目录、顶部菜单或隐藏菜单；通过 #/页面ID 切换，无需额外路由依赖。将它作为目标 React 项目的 App。
 - **pages/*.tsx + studio-effects.css**：React 19 / Ant Design 6 页面与特效源码。
-- **studio-records.tsx**：记录列表 GET、分页与表单联动；表格组件由 **studio-widget-preview.tsx** 处理独立的服务端分页、搜索、筛选、排序、可选详情 GET、选中记录编辑 PATCH、二次确认的行级 DELETE。编辑提交后重新获取后端数据；删除成功后刷新列表与表格、清除被删除记录的选中上下文并在越页时回到有效页。删除失败时不伪造成功。
-- **studio-widget-preview.tsx + widgets.ts**：与设计器同源的组件，包括文件上传/文件列表、异步任务/执行日志、折线/环形/热力图等。文件上传需配置真实 POST 接口；任务进度需配置 GET 状态接口；文件列表、日志、图表当前为静态或本地交互，不会自动接入后端。
+- **studio-records.tsx**：记录列表 GET、分页与表单联动；表格组件由 **studio-widget-preview.tsx** 处理独立的服务端分页、搜索、筛选、排序、行级「查看」只读详情抽屉与可选详情 GET、选中记录编辑 PATCH、二次确认的行级 DELETE。编辑提交后重新获取后端数据；删除成功后刷新列表与表格、清除被删除记录的选中上下文并在越页时回到有效页。删除失败时不伪造成功。
+- **studio-widget-preview.tsx + widgets.ts**：与设计器同源的组件，包括文件上传/文件列表、异步任务/执行日志、折线/环形/热力图等。文件上传需配置真实 POST 接口；任务进度需配置 GET 状态接口；多序列折线图可通过 dataUrl/dataPath 接入真实 GET；文件列表、日志与未配置接口的图表保持静态或本地交互。
 - **studio-workflows.ts**：按钮工作流执行器；支持双分支判断、请求返回变量、组件事件、执行日志以及旧有确认、保存、刷新、导航步骤。
 - **studio-api.tsx**：独立 GET 数值/文字读取和按钮 POST 请求示例。浏览器直接请求接口；项目级共享记录源则在导出时解析为实际地址。需后端允许 CORS 或部署同源 API，不支持在设计文件中安全存储凭据。请勿将 Token、密码或密钥放入设计文件或接口 URL。
 - **atlas.studio.json**：可重新导入本设计器，恢复全部页面、导航设置、项目数据源目录、页面绝对坐标、数值尺寸、动效与 API 配置。
@@ -427,7 +427,7 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
 
 Studio 中选中「数据表格」，将 \`dataUrl\` 设为 \`/api/records\`、\`itemsPath\` 设为 \`data.items\`、\`totalPath\` 设为 \`data.total\`、\`idField\` 设为 \`id\`、\`tableColumns\` 设为两行 \`name|名称\` 与 \`status|状态\`。服务端 GET 返回 \`{"data":{"items":[{"id":"A-1","name":"Example","status":"active"}],"total":1}}\`。分页/搜索/筛选/排序按 \`page\`、\`pageSize\`、\`search\`、\`filterField\`、\`filter\`、\`sort\`、\`order\` 查询参数交给服务端实现。
 
-可设置 \`detailUrl=/api/records/{id}\` 与 \`detailPath=data\`，详情 GET 的 JSON 应包含相同记录主键；编辑弹窗配置 \`edit-selected\`、\`PATCH\` 和带 \`{id}\` 的提交地址。可选的 \`deleteUrl=/api/records/{id}\` 启用「确认删除」；不配置则隐藏行删除操作。DELETE 请求无 body，后端应真实鉴权并返回适当 HTTP 状态，失败会保留原列表。主键经过 URL 编码。
+「查看」按钮以只读抽屉显示当前记录，配置 \`detailUrl=/api/records/{id}\` 与 \`detailPath=data\` 时会请求真实详情 GET；HTTP 失败会显示错误，再次打开可重试，关闭后不会提交任何修改。详情 GET 的 JSON 应包含相同记录主键；编辑弹窗配置 \`edit-selected\`、\`PATCH\` 和带 \`{id}\` 的提交地址。可选的 \`deleteUrl=/api/records/{id}\` 启用「确认删除」；不配置则隐藏行删除操作。DELETE 请求无 body，后端应真实鉴权并返回适当 HTTP 状态，失败会保留原列表。主键经过 URL 编码。
 
 请自行提供后端与授权策略；跨域 API 需配置 CORS/认证，浏览器默认使用同源凭据策略。**不要在导出文件里储存 API Token、密码或密钥。** 删除是否允许必须由服务器决定。当前没有多选批处理或部分失败恢复，不要将 UI 功能视为生产授权控制。
 

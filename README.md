@@ -33,7 +33,7 @@ pnpm dev:studio   # 仅启动新的 Showcase 设计工作台
 1. 使用 Node.js 22.13+ 或 Node.js 24、pnpm 11.7.0，在仓库根目录运行 `pnpm install --frozen-lockfile`、`pnpm dev:studio`。
 2. 按 Vite 输出的地址打开 Showcase，从 `/create` 创建页面，进入 `/studio`；增加「数据表格」及需要的「模态弹窗」或「侧边抽屉」。
 3. 选中表格，在右侧配置 `dataUrl`（列表 GET）、`itemsPath`（默认 `data.items`）、`totalPath`（默认 `data.total`）、`idField`（默认 `id`），以及 `tableColumns`，每行格式为 `name|名称`。`pageSize` 范围 1–20，搜索、筛选、排序、分页参数发送给服务端，不在客户端伪造结果。
-4. 可配置 `detailUrl`（例如 `/api/records/{id}`）、`detailPath`（默认 `data`），使当前选中记录先 GET 详情再进入编辑弹窗。编辑弹窗选择「编辑当前选中记录」、`PATCH`，使用含 `{id}` 的保存 URL。配置 `deleteUrl`（例如 `/api/records/{id}`）后，远程表格才显示带二次确认的「删除」按钮。
+4. 点击远程表格的「查看」，可在只读详情抽屉中直接检查当前记录；配置 `detailUrl`（例如 `/api/records/{id}`）、`detailPath`（默认 `data`）时，抽屉通过真实 GET 加载详情，失败可关闭后重试，且不会替换编辑选中状态。「选择」则为编辑弹窗提供当前记录，必要时也先 GET 详情。编辑弹窗选择「编辑当前选中记录」、`PATCH`，使用含 `{id}` 的保存 URL。配置 `deleteUrl`（例如 `/api/records/{id}`）后，远程表格才显示带二次确认的「删除」按钮。
 5. 切换「体验」模式验证真实 HTTP 交互，再点击 Studio 导出 ZIP。解压后在**独立目录**运行：
 
    ```bash
