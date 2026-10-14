@@ -67,7 +67,9 @@ export async function runExportedBrowserSmoke(directory) {
       response.writeHead(200);
       response.end(JSON.stringify({data: id === 'T-4'
         ? {id:'wrong-record',name:'非法错误详情'}
-        : {...row,name:'详情'+row.name,email:'detail@example.org'}}));
+        : id === 'T-3'
+          ? {...row,name:'不应显示的详情字段',alias:{name:'详情'+row.name},email:'detail@example.org'}
+          : {...row,name:'详情'+row.name,email:'detail@example.org'}}));
       return;
     }
     if (request.method === 'GET' && request.url?.startsWith('/api/table')) {
@@ -341,6 +343,7 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.ant-modal') === null && [...document.querySelectorAll('button')].some(b=>b.textContent?.includes('编辑跨页记录') && !b.disabled)"), 'Editable detail loaded');
     assert(await click('编辑跨页记录'), 'Independent edit modal trigger');
     await until(() => evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.value === '详情可查对象'"), 'Detail GET did not prefill table-selected record');
+    assert.equal(await evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.value === '不应显示的详情字段'"), false, 'Shared detail field mappings were not applied');
     assert.equal(await evaluate("document.querySelector('.ant-modal input[aria-label=邮箱]')?.value"), 'detail@example.org', 'Hidden form field not hydrated from detail');
     await evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.focus()");
     await evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.select()");
