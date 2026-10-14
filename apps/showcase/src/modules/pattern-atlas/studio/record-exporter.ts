@@ -1,9 +1,9 @@
 /* Standalone generated runtime: kept aligned with StudioRecords and source-query. */
-export const exportedRecordRuntime = String.raw`import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+export const exportedRecordRuntime = String.raw`import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Input, Modal, Popconfirm, Select, message } from 'antd';
 import { appendWorkflowTrace, dispatchWorkflowComponentEvent, runStudioWorkflow, type StudioWorkflow, type WorkflowTrace } from './studio-workflows';
 import { WidgetPreview } from ${JSON.stringify('./studio-widget-preview')};
-import type { StudioWidgetKind, OverlayRecordSelection } from './widgets';
+import { classifyMutationException, parseMutationFieldErrors, type StudioWidgetKind, type OverlayRecordSelection } from './widgets';
 
 export interface FieldMap { field: string; responsePath: string; saveField: string }
 export interface RecordSource { url: string; itemsPath: string; idField: string; labelField: string; pageSize?: number; detailUrl?: string; detailPath?: string; paginationMode?: 'client' | 'server'; pageParam?: string; sizeParam?: string; searchParam?: string; totalPath?: string; fieldMappings?: FieldMap[]; filterField?: string; filterParam?: string; filterValues?: string[]; sortField?: string; sortParam?: string; sortDirectionParam?: string; createUrl?: string; deleteUrl?: string }
@@ -100,19 +100,15 @@ async function request(url: string, options: RequestInit): Promise<unknown> {
   const response = await fetch(url, { credentials: 'same-origin', ...options });
   const contentType = response.headers.get('content-type') ?? '';
   if (!response.ok) {
-    let data: unknown;
-    try { data = await response.json() as unknown; } catch { data = null; }
+    let data: unknown = null;
+    try {
+      const raw = await response.text();
+      if (raw.length <= 16384) data = JSON.parse(raw) as unknown;
+    } catch { /* Treat malformed/overlong error bodies as unavailable. */ }
     const record = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {};
-    const description = [record.error, record.detail, record.message, record.title].find((item): item is string => typeof item === 'string' && item.length > 0);
-    const problem = new Error('HTTP ' + response.status + (description ? '：' + description.slice(0, 240) : '')) as Error & { fieldErrors?: Record<string,string> };
-    if (record.errors && typeof record.errors === 'object' && !Array.isArray(record.errors)) {
-      const fields: Record<string,string> = {};
-      for (const [field, value] of Object.entries(record.errors).slice(0, 30)) if (safeName(field)) {
-        const item = Array.isArray(value) ? value[0] : value;
-        if (typeof item === 'string') fields[field] = item.slice(0, 240);
-      }
-      problem.fieldErrors = fields;
-    }
+    const problem = Object.assign(new Error('HTTP ' + response.status), {
+      status: response.status, fieldErrors: record.errors
+    });
     throw problem;
   }
   return contentType.includes('json') ? await response.json() as unknown : await response.text();
@@ -131,6 +127,7 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
   const [saveStatus, setSaveStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [saveError, setSaveError] = useState('');
   const [revision, setRevision] = useState(0);
+  const retainedDraft = useRef<{ id: string; values: Record<string,string> } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
@@ -190,7 +187,13 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
   }, [selectedId, rows, currentPage, search, source?.detailUrl, source?.detailPath, signature, revision]);
   const selected = summary ? (detail?.id === selectedId ? detail.row : summary) : null;
   const names = fields.join('|');
-  useEffect(() => { const next: Record<string, string> = {}; if (selected) for (const field of fields) if (safeName(field)) next[field] = valueText(selected[field]); setDraft(next); setErrors({}); }, [selected, names]);
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    if (selected) for (const field of fields) if (safeName(field)) next[field] = valueText(selected[field]);
+    if (selected && retainedDraft.current?.id === selectedId) Object.assign(next, retainedDraft.current.values);
+    retainedDraft.current = null;
+    setDraft(next); setErrors({});
+  }, [selected, names]);
   const save = async (config: RecordSubmit) => {
     if (!source || !selected) throw new Error('请先选择记录');
     if (source.detailUrl && (detailStatus !== 'ready' || detail?.id !== selectedId)) throw new Error(detailError || '请等待详情加载完成');
@@ -217,12 +220,20 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
       await request(config.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(savePayload(payload, config.fieldMappings)) });
       setSaveStatus('success'); setRevision((value) => value + 1);
     } catch (reason) {
-      const raw = reason as Error & { fieldErrors?: Record<string, string> };
-      const reverse = new Map(config.fieldMappings?.map((entry) => [entry.saveField || entry.field, entry.field]) ?? []);
-      const mapped: Record<string, string> = {};
-      for (const [field, value] of Object.entries(raw.fieldErrors ?? {})) mapped[reverse.get(field) ?? field] = value;
-      setErrors((old) => ({ ...old, ...mapped })); setSaveStatus('error'); setSaveError(raw.message);
-      throw reason;
+      const failure = classifyMutationException(reason);
+      if (failure.kind === 'invalid' && reason && typeof reason === 'object') {
+        const parsed = parseMutationFieldErrors({ errors: (reason as {fieldErrors?: unknown}).fieldErrors }, config.fieldMappings);
+        const allowed = new Set(fields);
+        const visible = Object.fromEntries(Object.entries(parsed).filter(([field]) => allowed.has(field)));
+        if (Object.keys(visible).length) setErrors((old) => ({ ...old, ...visible }));
+      }
+      if (failure.refresh) {
+        retainedDraft.current = { id: selectedId, values: { ...draft } };
+        setRevision((value) => value + 1);
+      }
+      setSaveStatus('error');
+      setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
+      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
   const create = async (title: string) => {
@@ -232,7 +243,13 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
     try {
       await request(source.createUrl, { method: 'POST', headers: { 'Content-Type':'application/json' }, body:JSON.stringify(savePayload({ title:title.trim(), status:'draft' }, source.fieldMappings)) });
       setSaveStatus('success'); setPage(1); setRevision((n) => n + 1);
-    } catch (reason) { setSaveStatus('error'); setSaveError(reason instanceof Error ? reason.message : '新增失败'); throw reason; }
+    } catch (reason) {
+      const failure = classifyMutationException(reason);
+      if (failure.refresh) setRevision((n) => n + 1);
+      setSaveStatus('error');
+      setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
+      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
+    }
   };
   const remove = async () => {
     if (!source?.deleteUrl || !selectedId) throw new Error('未选中记录或未配置删除接口');
@@ -241,7 +258,13 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
     const url = template.replace('{id}', encodeURIComponent(selectedId));
     setSaveStatus('loading'); setSaveError('');
     try { await request(url, { method:'DELETE' }); setSelectedId(''); setDetail(null); setSaveStatus('success'); setRevision((n) => n + 1); }
-    catch (reason) { setSaveStatus('error'); setSaveError(reason instanceof Error ? reason.message : '删除失败'); throw reason; }
+    catch (reason) {
+      const failure = classifyMutationException(reason);
+      if (failure.refresh) setRevision((n) => n + 1);
+      setSaveStatus('error');
+      setSaveError(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message);
+      throw new Error(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message, { cause: reason });
+    }
   };
   return <Context.Provider value={{ source, visibleRows, loading, error, selected, selectedId, draft, errors, detailStatus, detailError, tableSelection, chooseTable: setTableSelection, saveStatus, saveError,
     page: currentPage, pageSize, totalPages, totalRows: count, searchInput, setSearchInput, applySearch: () => { setPage(1); setSelectedId(''); setSearch(searchInput.trim().slice(0, 120)); }, retry: () => setRevision((value) => value + 1),

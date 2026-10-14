@@ -243,6 +243,22 @@ export function classifyMutationTransportFailure(aborted: boolean): MutationFail
       '网络异常：写入结果不确定，请先核对服务端状态',
     refresh: true, safeToRetry: false };
 }
+/** Normalize request exceptions from both StudioRequestError and standalone
+ * record runtimes. Configuration/validation exceptions are not network
+ * failures and must never be labeled as a possibly committed write.
+ */
+export function classifyMutationException(error: unknown): MutationFailure {
+  if (error && typeof error === 'object') {
+    const candidate = error as { status?: unknown; name?: unknown; message?: unknown };
+    if (typeof candidate.status === 'number') return classifyMutationHttpFailure(candidate.status);
+    if (candidate.name === 'AbortError' || candidate.name === 'TimeoutError' || error instanceof TypeError)
+      return classifyMutationTransportFailure(candidate.name === 'AbortError' || candidate.name === 'TimeoutError');
+    return { kind: 'failed', status: null,
+      message: typeof candidate.message === 'string' ? candidate.message.slice(0, 240) : '写入校验失败',
+      refresh: false, safeToRetry: false };
+  }
+  return { kind: 'failed', status: null, message: '写入校验失败', refresh: false, safeToRetry: false };
+}
 /** Bound field-level errors returned as {errors:{backendField:["message"]}}.
  * Resolve saveField aliases back to the visible form keys, rejecting ambiguous
  * mappings, prototype keys, non-string content, and overlong responses.

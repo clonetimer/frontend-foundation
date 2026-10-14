@@ -96,6 +96,14 @@ function exec(program, args, cwd) {
       document = setDecoration(document, pageId + ':formList21', {
         recordList: { url: 'http://127.0.0.1:4198/api/list', itemsPath: 'data.items', idField: 'id', labelField: 'name', pageSize: 8 }
       });
+      // The legacy Record Provider is deliberately exercised independently of
+      // enhanced overlay forms: server errors must use the same C3 contract.
+      document.blueprint.pages[0].composition = insertNode(document.blueprint.pages[0].composition, document.blueprint.pages[0].composition.id, { ...createNode('input', 'legacyRecordFieldC4'), props:{ label:'记录姓名C4',placeholder:'填写记录姓名' } }, 'inside');
+      document.blueprint.pages[0].composition = insertNode(document.blueprint.pages[0].composition, document.blueprint.pages[0].composition.id, { ...createNode('button', 'legacyRecordSaveC4'), props:{ label:'保存修改C4',type:'primary' } }, 'inside');
+      document = setDecoration(document, pageId + ':legacyRecordFieldC4', { recordField: {field:'name'} });
+      document = setDecoration(document, pageId + ':legacyRecordSaveC4', {
+        recordSubmit: { url: 'http://127.0.0.1:4198/api/legacy-record-save', includeId:false }
+      });
       // A second page has no record-list binding at all. The table must own
       // selection and optional detail retrieval without relying on list paging.
       const isolated = { ...document.blueprint.pages[0], id: 'isolated', title: '无列表表格验证', index: false, composition: createNode('stack', 'isolatedRoot') };
