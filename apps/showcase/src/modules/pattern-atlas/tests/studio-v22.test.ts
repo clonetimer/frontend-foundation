@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, normalizeWidgetProps, overlaySubmitUrl, mapOverlaySubmitPayload, classifyMutationHttpFailure, classifyMutationTransportFailure, parseMutationFieldErrors } from '../studio/widgets';
+import { parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, normalizeWidgetProps, overlaySubmitUrl, mapOverlaySubmitPayload, classifyMutationHttpFailure, classifyMutationTransportFailure, parseMutationFieldErrors, classifyMutationException } from '../studio/widgets';
 import { createStudioDocument, createNode, insertNode, setDecoration, serializeStudioDocument, parseStudioFile } from '../studio/model';
 import { newServerDemoSource, resolveTableWidgetProps, resolveOverlayWidgetProps, normalizeDataSources } from '../studio/data-sources';
 import { buildStudioListUrl } from '../studio/source-query';
 import { generateReactPage, projectExportFiles } from '../studio/exporter';
 import { exportedWidgetCatalog, exportedWidgetPreview } from '../studio/exported-widgets';
+import { exportedRecordRuntime } from '../studio/record-exporter';
 
 describe('Phase 22 · remote business tables', () => {
   const columns = parseRemoteTableColumns('name|名称\nstatus|状态\namount|数量');
@@ -183,6 +184,18 @@ describe('Phase 22 · remote business tables', () => {
     expect(parseMutationFieldErrors({errors:{subject:{malicious:true}}},mappings)).toEqual({});
     expect(parseMutationFieldErrors({errors:{subject:'拒绝'}},[{field:'name',saveField:'subject'},{field:'other',saveField:'subject'}])).toEqual({});
     expect(parseMutationFieldErrors(null,mappings)).toEqual({});
+  });
+  it('keeps hosted and generated Record Providers on the same write failure taxonomy', () => {
+    expect(classifyMutationException({status:422,message:'bad'})).toMatchObject({kind:'invalid',refresh:false,status:422});
+    expect(classifyMutationException({status:403,message:'denied'})).toMatchObject({kind:'denied',refresh:false,status:403});
+    expect(classifyMutationException({status:503,message:'server'})).toMatchObject({kind:'uncertain',refresh:true,status:503});
+    expect(classifyMutationException(new TypeError('network down'))).toMatchObject({kind:'uncertain',refresh:true,status:null});
+    expect(classifyMutationException(new Error('配置地址缺失'))).toMatchObject({kind:'failed',refresh:false,status:null});
+    expect(exportedRecordRuntime).toContain('classifyMutationException');
+    expect(exportedRecordRuntime).toContain('parseMutationFieldErrors');
+    expect(exportedRecordRuntime).toContain('retainedDraft');
+    expect(exportedRecordRuntime).toContain('status: response.status');
+    expect(exportedRecordRuntime).toContain('raw.length <= 16384');
   });
   it('keeps deletion opt-in and rejects invalid DELETE URL templates', () => {
     expect(normalizeWidgetProps('table', {}).deleteUrl).toBe('');
