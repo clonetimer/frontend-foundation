@@ -75,7 +75,8 @@ function exec(program, args, cwd) {
         { id:'mappedCreateC2', kind:'modal', props:{
           title:'共享写入表单',triggerText:'共享写入新增',formMode:'create',sourceId:'overlay-shared-create',
           formFields:'name|姓名|text|required',submitUrl:'/stale-write-must-not-run',
-          okText:'提交共享写入',cancelText:'取消' } },
+          okText:'提交共享写入',cancelText:'取消',
+          failureWorkflow: JSON.stringify({steps:[{id:'should-not-fire',type:'notify',text:'不应执行的失败工作流'}]}) } },
         { id: 'followupModal21c', kind: 'modal', props: { title: '接口联动表单', triggerText: '提交并执行后续请求', formFields:'name|姓名|text|required', submitUrl:'http://127.0.0.1:4198/api/save', okText:'提交',
           successWorkflow: JSON.stringify({steps:[{id:'confirm-extra',type:'confirm',text:'允许执行后续业务请求？'},
             {id:'call-extra',type:'request',method:'POST',url:'http://127.0.0.1:4198/api/followup',body:'{"name":"{{draft.name}}"}'},
