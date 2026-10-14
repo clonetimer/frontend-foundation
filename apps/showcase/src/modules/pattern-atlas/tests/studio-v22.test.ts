@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRemoteTableColumns, parseRemoteTablePage, normalizeWidgetProps } from '../studio/widgets';
+import { parseRemoteTableColumns, parseRemoteTablePage, normalizeWidgetProps, overlaySubmitUrl } from '../studio/widgets';
 import { createStudioDocument, createNode, insertNode, setDecoration, serializeStudioDocument, parseStudioFile } from '../studio/model';
 import { generateReactPage, projectExportFiles } from '../studio/exporter';
 import { exportedWidgetCatalog, exportedWidgetPreview } from '../studio/exported-widgets';
@@ -33,7 +33,7 @@ describe('Phase 22 · remote business tables', () => {
     page.composition=insertNode(page.composition!,page.composition!.id,createNode('table','tableOnly'),'inside');
     page.composition=insertNode(page.composition!,page.composition!.id,createNode('modal','editOnly'),'inside');
     doc=setDecoration(doc,page.id+':tableOnly',{widgetKind:'table',widgetProps:normalizeWidgetProps('table',{
-      dataUrl:'/api/table',detailUrl:'/api/records/{id}',detailPath:'data',idField:'id',
+      dataUrl:'/api/table',detailUrl:'/api/records/{id}',detailPath:'data',deleteUrl:'/api/delete/{id}',idField:'id',
       tableColumns:'name|姓名\nstatus|状态',pageSize:2
     })});
     doc=setDecoration(doc,page.id+':editOnly',{widgetKind:'modal',widgetProps:normalizeWidgetProps('modal',{
@@ -45,6 +45,7 @@ describe('Phase 22 · remote business tables', () => {
     expect(compiled).toContain('StudioRecordWidget kind={"table"}');
     expect(compiled).toContain('StudioRecordWidget kind={"modal"}');
     expect(compiled).toContain('/api/records/{id}');
+    expect(compiled).toContain('/api/delete/{id}');
     const files=projectExportFiles(restored);
     const runtime=files.find(f=>f.name==='studio-records.tsx')?.text ?? '';
     expect(runtime).toContain('chooseTable: setTableSelection');
@@ -52,7 +53,7 @@ describe('Phase 22 · remote business tables', () => {
     expect(runtime).toContain('setTableSelection(null)');
   });
   it('roundtrips remote configuration, bounded page size and exact exported implementation', () => {
-    const remote={dataUrl:'/api/table',itemsPath:'data.items',totalPath:'data.total',detailUrl:'/api/record/{id}',detailPath:'data',idField:'id',tableColumns:'name|名称\nstatus|状态',filterField:'status',filterValues:'进行中,已完成',sortField:'name',pageSize:500};
+    const remote={dataUrl:'/api/table',itemsPath:'data.items',totalPath:'data.total',detailUrl:'/api/record/{id}',detailPath:'data',deleteUrl:'/api/delete/{id}',idField:'id',tableColumns:'name|名称\nstatus|状态',filterField:'status',filterValues:'进行中,已完成',sortField:'name',pageSize:500};
     let doc=createStudioDocument();
     const page=doc.blueprint.pages[0]!;
     page.composition=insertNode(page.composition!,page.composition!.id,createNode('table','remoteTable22'),'inside');
@@ -60,6 +61,7 @@ describe('Phase 22 · remote business tables', () => {
     const restored=parseStudioFile(serializeStudioDocument(doc));
     const props=restored.decorations[page.id+':remoteTable22']?.widgetProps;
     expect(props?.dataUrl).toBe('/api/table');
+    expect(props?.deleteUrl).toBe('/api/delete/{id}');
     expect(props?.pageSize).toBe(20);
     expect(props?.tableColumns).toContain('status|状态');
     const output=generateReactPage(restored,page.id);
@@ -69,5 +71,13 @@ describe('Phase 22 · remote business tables', () => {
     expect(files.find((item)=>item.name==='studio-widget-preview.tsx')?.text).toBe(exportedWidgetPreview);
     expect(files.find((item)=>item.name==='widgets.ts')?.text).toBe(exportedWidgetCatalog);
     expect(files.find((item)=>item.name==='studio-records.tsx')?.text).toContain('onRecordSelect');
+    expect(files.find((item)=>item.name==='studio-widget-preview.tsx')?.text).toContain('确认删除记录？');
+  });
+  it('keeps deletion opt-in and rejects invalid DELETE URL templates', () => {
+    expect(normalizeWidgetProps('table', {}).deleteUrl).toBe('');
+    expect(overlaySubmitUrl('/api/delete/{id}', 'edit-selected', 'R/1 ?')).toBe('/api/delete/R%2F1%20%3F');
+    expect(overlaySubmitUrl('/api/delete/{id}/{id}', 'edit-selected', '1')).toBeUndefined();
+    expect(overlaySubmitUrl('javascript:alert({id})', 'edit-selected', '1')).toBeUndefined();
+    expect(overlaySubmitUrl('//attacker.invalid/api/{id}', 'edit-selected', '1')).toBeUndefined();
   });
 });

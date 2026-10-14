@@ -42,13 +42,15 @@ export async function runExportedBrowserSmoke(directory) {
   const patchCalls = [];
   const followupCalls = [];
   const detailCalls = [];
+  const deleteCalls = [];
+  let rejectFirstDelete = true;
   let listReads = 0;
   // Deterministic fault injection for exported-table detail request races/recovery.
   let slowNextDetailId = '';
   let failNextDetailId = '';
   const api = createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:4189');
-    response.setHeader('Access-Control-Allow-Methods', 'POST, PATCH, OPTIONS');
+    response.setHeader('Access-Control-Allow-Methods', 'POST, PATCH, DELETE, OPTIONS');
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
     if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
@@ -83,6 +85,18 @@ export async function runExportedBrowserSmoke(directory) {
       response.writeHead(200); response.end(JSON.stringify({data:{
         items: records.slice((page - 1) * pageSize, page * pageSize), total: records.length
       }})); return;
+    }
+    if (request.method === 'DELETE' && request.url?.startsWith('/api/delete/')) {
+      deleteCalls.push(request.url);
+      if (request.url === '/api/delete/T-3' && rejectFirstDelete) {
+        rejectFirstDelete = false;
+        response.writeHead(403); response.end('{"error":"permission denied"}'); return;
+      }
+      const id = decodeURIComponent(request.url.slice('/api/delete/'.length));
+      const index = tableRows.findIndex((row) => row.id === id);
+      if (index < 0) { response.writeHead(404); response.end('{}'); return; }
+      tableRows.splice(index, 1);
+      response.writeHead(204); response.end(); return;
     }
     if (request.method === 'GET' && request.url === '/api/list') { listReads += 1; response.writeHead(200); response.end(JSON.stringify({data:{items:savedRecords}})); return; }
     if (request.method !== 'POST' && request.method !== 'PATCH') { response.writeHead(405); response.end('{}'); return; }
@@ -349,6 +363,57 @@ export async function runExportedBrowserSmoke(directory) {
     await until(editIsolatedEnabled, 'Successful detail retry did not restore edit');
     assert.equal(await evaluate("Boolean(document.querySelector('.pa-studio-remote-table [role=alert]'))"), false, 'Successful retry did not clear prior detail error');
 
+    // Phase 22-B row actions: explicit confirmation, server authorization, no
+    // optimistic disappearance on 403, retry, and GET-driven reconciliation.
+    const deleteRow = (name) => evaluate("(() => { const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes(" + JSON.stringify(name) + "));const button=[...(row?.querySelectorAll('button')??[])].find(el=>el.textContent?.replace(/\\s/g,'')==='删除');if(!button)return false;button.click();return true;})()");
+    const confirmDelete = () => evaluate("(() => { const button=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(el=>el.textContent?.replace(/\\s/g,'')==='确认删除');if(!button)return false;button.click();return true;})()");
+    const cancelDelete = () => evaluate("(() => { const button=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(el=>el.textContent?.replace(/\\s/g,'')==='取消');if(!button)return false;button.click();return true;})()");
+    assert(await deleteRow('独立表格修改'), 'Row delete action not rendered');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Row delete confirmation missing');
+    assert.equal(deleteCalls.length, 0, 'DELETE sent before explicit confirmation');
+    assert(await cancelDelete(), 'Delete cancel action unavailable');
+    await pause(250);
+    assert.equal(deleteCalls.length, 0, 'Cancelled deletion reached backend');
+    assert(await deleteRow('独立表格修改'), 'Delete retry action missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Delete confirmation did not reopen');
+    assert(await confirmDelete(), 'Delete confirmation button unavailable');
+    await until(() => deleteCalls.length === 1, 'DELETE 403 request missing');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table [role=alert]')?.textContent?.includes('HTTP 403')"), '403 authorization denial not surfaced');
+    assert(await evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('独立表格修改')"), 'Failed delete removed row optimistically');
+    assert.equal(await editIsolatedEnabled(), true, '403 deletion incorrectly cleared selected edit context');
+    const readsBeforeDelete = tableCalls.length;
+    assert(await deleteRow('独立表格修改'), 'Delete after 403 not retryable');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Retry delete confirmation missing');
+    assert(await confirmDelete(), 'Delete retry confirmation unavailable');
+    await until(() => deleteCalls.length === 2, 'Successful DELETE request missing');
+    assert.deepEqual(deleteCalls, ['/api/delete/T-3','/api/delete/T-3'], 'Delete target changed or was not ID-safe');
+    await until(() => tableCalls.length > readsBeforeDelete, 'Successful DELETE did not refresh server table GET');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 3 条记录')"), 'Server total not reconciled after DELETE');
+    assert.equal(await editIsolatedEnabled(), false, 'Deleted selected record remains editable');
+    assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('独立表格修改')"), false, 'Deleted row remained visible');
+    assert.equal(await evaluate("Boolean(document.querySelector('.pa-studio-remote-table [role=alert]'))"), false, 'Successful delete did not clear failed attempt state');
+
+    // Deleting the final row of server page 2 shrinks 3 rows to 2. The page
+    // cursor must recover to 1, and the final view must come from a real GET.
+    const readsBeforeBoundaryDelete = tableCalls.length;
+    assert(await deleteRow('另一对象'), 'Last-page delete control missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Last-page confirmation missing');
+    assert(await confirmDelete(), 'Last-page delete confirmation unavailable');
+    await until(() => deleteCalls.includes('/api/delete/T-4'), 'Last-page DELETE was not sent');
+    await until(() => tableCalls.slice(readsBeforeBoundaryDelete).some((item) => item.page === '2'), 'Deleted last-page row did not trigger page-2 refetch');
+    await until(() => tableCalls.slice(readsBeforeBoundaryDelete).some((item) => item.page === '1'), 'Invalid server page did not fall back to page 1');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 2 条记录')"), 'Recovered last page total not rendered');
+    assert(await evaluate("document.querySelector('.pa-studio-remote-table .ant-pagination-item-active')?.textContent?.trim() === '1'"), 'Table remained on invalid page after DELETE');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('更新姓名')"), 'Recovered page 1 was not rendered');
+
+    // Primary keys containing /, spaces and '?' must be encoded before DELETE.
+    assert(await deleteRow('更新姓名'), 'Encoded-ID record delete missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Encoded-ID confirmation missing');
+    assert(await confirmDelete(), 'Encoded-ID delete confirmation unavailable');
+    await until(() => deleteCalls.includes('/api/delete/R%2F1%20%3F'), 'Special-character ID was not URI encoded for DELETE');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 1 条记录')"), 'Encoded-ID delete did not refresh server total');
+    assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('更新姓名')"), false, 'Encoded-ID delete still displays removed record');
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -356,7 +421,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
