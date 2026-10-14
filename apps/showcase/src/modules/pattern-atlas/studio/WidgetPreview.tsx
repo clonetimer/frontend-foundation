@@ -236,7 +236,18 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
         const total = pathValue(jsonBody, totalPath);
         const parsed = parseRemoteTablePage({ items: records, total }, idField, columns);
         if (!parsed) throw new Error('远程表格数据格式无效');
-        if (!controller.signal.aborted) { setData(parsed); setError(''); }
+        if (!controller.signal.aborted) {
+          // A successful DELETE (or concurrent server change) may remove the last
+          // row of the last page. Re-query the last valid server page instead of
+          // leaving a visually empty, out-of-range pagination cursor.
+          const lastPage = Math.max(1, Math.ceil(parsed.total / pageSize));
+          if (page > lastPage) {
+            setData(null);
+            setPage(lastPage);
+            return;
+          }
+          setData(parsed); setError('');
+        }
       } catch (caught) {
         if (!controller.signal.aborted) { setData(null); setError(caught instanceof Error ? caught.message : '请求失败'); }
       } finally { if (!controller.signal.aborted) setLoading(false); }
