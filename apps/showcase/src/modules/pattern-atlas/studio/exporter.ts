@@ -3,7 +3,7 @@ import { designCssVariables } from '../effects/config';
 import { nodeLabel, serializeStudioDocument, walkNodes, type StudioDecoration, type StudioDocument } from './model';
 import { findRecordFields, type StudioRecordListBinding } from './record-bindings';
 import { exportedRecordRuntime } from './record-exporter';
-import { resolveRecordList, resolveRecordSubmit } from './data-sources';
+import { resolveRecordList, resolveRecordSubmit, resolveTableWidgetProps } from './data-sources';
 import { studioEffectStyles } from './effect-styles';
 import { exportedWidgetCatalog, exportedWidgetPreview } from './exported-widgets';
 import { exportedWorkflowRuntime } from './exported-workflows';
@@ -180,6 +180,9 @@ export function generateReactPage(document: StudioDocument, pageId: string): str
   // Resolve shared-source references when generating standalone code. The original
   // Studio file retains references so that editing one source updates every binding.
   const exportDecorations: Record<string, StudioDecoration> = Object.fromEntries(Object.entries(document.decorations).map(([key, value]) => {
+    if (value.widgetKind === 'table') {
+      return [key, { ...value, widgetProps: resolveTableWidgetProps(value.widgetProps ?? {}, document.dataSources) }];
+    }
     if (value.widgetKind === 'modal' || value.widgetKind === 'drawer') {
       const props = value.widgetProps ?? {};
       const sourceId = typeof props.sourceId === 'string' ? props.sourceId : '';
