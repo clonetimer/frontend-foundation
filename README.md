@@ -18,11 +18,53 @@ pnpm install --frozen-lockfile
 pnpm dev:studio   # 仅启动新的 Showcase 设计工作台
 ```
 
-`/studio` 编辑时在浏览器本机自动保存，可以导入原 Foundation Blueprint 或 `atlas.studio.json`，导出的 ZIP 同时包含原生 `foundation.project.json`、可再次编辑的 `atlas.studio.json` 以及 React TSX/CSS 页面代码。**原 Foundation Project Compiler 只消费原生 Blueprint，不会自动携带 Studio 专有的交互/特效标记；需要特效时请集成导出的 TSX/CSS。** 现阶段仅对基础组件、若干布局模式、按钮示例行为提供可编辑和可导出能力，不能等同于全部 38 种交互模式的生产级实现。
+`/studio` 编辑时在浏览器本机自动保存，可以导入原 Foundation Blueprint 或 `atlas.studio.json`，导出的 ZIP 同时包含原生 `foundation.project.json`、可再次编辑的 `atlas.studio.json` 以及 React TSX/CSS 页面代码。**原 Foundation Project Compiler 只消费原生 Blueprint，不会自动携带 Studio 专有的交互/特效标记；需要特效时请集成导出的 TSX/CSS。** Studio 还支持部分真实 GET/PATCH/DELETE 的业务组件和独立 React ZIP 导出；并非全部 38 种交互模式的生产级实现，详见下方接口约定及限制。
 
 原有 `apps/designer` 未删除。为了现有 Blueprint / Registry / Designer 工具链兼容，仍可使用 `pnpm designer` 单独启动原设计器；`pnpm dev:studio:legacy` 保留旧双应用启动命令。正常新建页面不再依赖原设计器或双应用端口切换。
 
 详见 [`docs/PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md`](docs/PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md) 和 [`docs/PATTERN_ATLAS_AUTHORING_FLOW.md`](docs/PATTERN_ATLAS_AUTHORING_FLOW.md)。
+
+## Pattern Atlas Studio · 真实业务表格与独立 React ZIP（Phase 21–22）
+
+**适用范围**：以下是 Showcase `/studio` 的应用层能力，不修改冻结的 Foundation 0.21.0 Blueprint / Compiler / Designer 契约。独立 ZIP 可以在 Foundation monorepo 之外直接构建；它不会自带后端、数据库、业务权限或部署环境。
+
+### 使用步骤
+
+1. 使用 Node.js 22.13+ 或 Node.js 24、pnpm 11.7.0，在仓库根目录运行 `pnpm install --frozen-lockfile`、`pnpm dev:studio`。
+2. 按 Vite 输出的地址打开 Showcase，从 `/create` 创建页面，进入 `/studio`；增加「数据表格」及需要的「模态弹窗」或「侧边抽屉」。
+3. 选中表格，在右侧配置 `dataUrl`（列表 GET）、`itemsPath`（默认 `data.items`）、`totalPath`（默认 `data.total`）、`idField`（默认 `id`），以及 `tableColumns`，每行格式为 `name|名称`。`pageSize` 范围 1–20，搜索、筛选、排序、分页参数发送给服务端，不在客户端伪造结果。
+4. 可配置 `detailUrl`（例如 `/api/records/{id}`）、`detailPath`（默认 `data`），使当前选中记录先 GET 详情再进入编辑弹窗。编辑弹窗选择「编辑当前选中记录」、`PATCH`，使用含 `{id}` 的保存 URL。配置 `deleteUrl`（例如 `/api/records/{id}`）后，远程表格才显示带二次确认的「删除」按钮。
+5. 切换「体验」模式验证真实 HTTP 交互，再点击 Studio 导出 ZIP。解压后在**独立目录**运行：
+
+   ```bash
+   npm install
+   npm run build
+   npm run dev
+   ```
+
+   按 Vite 提示地址打开导出的 React 19 / Ant Design 6 页面。导出 ZIP 包含可再次编辑的 `atlas.studio.json` 和原始 `foundation.project.json`，还包含 `StudioApp.tsx`、`pages/*.tsx`、`studio-records.tsx`、`widgets.ts` 等独立运行文件。
+
+### 后端接口约定
+
+列表 GET 示例请求为 `GET /api/records?page=1&pageSize=5&search=foo&filterField=status&filter=active&sort=name&order=asc`。后端应按查询条件和分页实际返回有效总数，响应示例如下：
+
+```json
+{"data":{"items":[{"id":"A-1","name":"Example","status":"active"}],"total":1}}
+```
+
+可选详情 GET `/api/records/A-1` 返回 `{"data":{"id":"A-1","name":"Example","status":"active"}}`。编辑通过 `PATCH /api/records/A-1` 提交经过表单字段校验的数据；删除通过 `DELETE /api/records/A-1` 提交**无请求体**的确认操作，成功后重新 GET 并自动修正失效页码。URL 模板仅允许一个 `{id}`，主键在替换时进行 URL 编码；删除失败（包括 HTTP 403）不会在页面上乐观移除记录。未配置删除地址时不显示远程删除能力。
+
+**安全与限制**：组件仅使用浏览器同源凭据策略（`credentials: same-origin`）；跨域接口需按部署环境配置 CORS/认证。**真正的权限验证、授权、并发版本冲突处理与数据完整性必须由后端承担**，不能把按钮隐藏当作权限控制。不要把 Token/密码放入 Studio 文档或 URL；批量删除、多选批处理与部分失败恢复尚未实现。部分业务工作流与 API 能力需在实际后端集成后验收，不能将独立 ZIP 构建 PASS 等同于生产可用。
+
+### 验证入口
+
+```bash
+pnpm check
+pnpm patterns:stable:check
+node tooling/scripts/pattern-atlas-export-build-smoke.mjs --browser
+```
+
+最后一项会将真正生成的 Studio ZIP 解包为独立 React 项目、安装公开依赖、构建并通过 Chromium 执行交互验收；它需要相应浏览器/执行环境，并非单纯检查 TSX 字符串。跨平台和安全完整证据请以对应 GitHub PR **最新 HEAD** 的 Actions 为准。Stable Gate 的 `local-gates-passed` 不代表 0.21.0 已完成 registry promotion。进一步细节见 [页面创建流程](docs/PATTERN_ATLAS_AUTHORING_FLOW.md)。
 
 ## 当前状态
 
