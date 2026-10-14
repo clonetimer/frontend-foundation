@@ -439,6 +439,10 @@ HTTP 401/403 是权限拒绝；404/409/412/428 视为版本或状态冲突，刷
 
 如在 Studio 表格配置了 \`sourceId\`，本 ZIP 已将该项目数据源解析为本地页面所需的真实 \`dataUrl\`、详情、删除、参数字段和安全映射，无需连接设计工作台；原 \`atlas.studio.json\` 仍保留 \`sourceId\` 供再次编辑。仅支持服务端分页共享源，按共享源的 \`pageParam\` / \`sizeParam\` / \`searchParam\` / \`filterParam\` / \`sortParam\` / \`sortDirectionParam\` 传递查询条件。如源已失效会报错且不会回退之前填写的 URL。老的直接 URL 表格不受影响。服务端必须实现对应查询契约与鉴权。
 
+### 共享写入契约（Phase 22-C2）
+
+若弹窗/抽屉在 Studio 中绑定 \`sourceId\`：新增记录使用 \`createUrl\`（老数据源若未配置则兼容 \`saveUrl\`），编辑选中记录使用带 \`{id}\` 的 \`saveUrl\`，分别按 POST/PATCH 提交。请求体经过数据源的 \`fieldMappings.saveField\` 映射；字段重名/非法会拒绝请求。失效的共享源绝不会继续使用旧 \`submitUrl\`，而独立 URL 模式仍兼容。HTTP 409/412/428 需要先刷新并重新选择；5xx 和网络超时可能已提交成功，不能盲目重试或自动执行附加写入的失败工作流。本 ZIP 不包含后端权限、幂等和审计实现。
+
 注意：绝对坐标以当前页面内容区左上角为原点，由 React portal 统一定位；响应式断点需自行检查组件是否溢出。原 Foundation Compiler 不读取 Studio 专有的尺寸偏移、交互、数据接口和特效元数据。要获得这部分行为，请使用此包的 React TSX/CSS 输出。不要只编译 Blueprint 后期待其包含所有动效与 API。
 ` },
   ];
