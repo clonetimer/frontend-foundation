@@ -190,6 +190,28 @@ export function safeWidgetImageUrl(url: unknown): string | undefined {
   try { const target = new URL(url); return ['http:', 'https:'].includes(target.protocol) && !target.username && !target.password ? url : undefined; } catch { return undefined; }
 }
 
+/** Apply project source save-field aliases without dynamic code or untrusted keys.
+ * A collision fails before sending any mutation, never silently overwrites it.
+ */
+export function mapOverlaySubmitPayload(payload: Record<string, string | number>, mappings: unknown): Record<string, string | number> {
+  const alias = new Map<string, string>();
+  if (Array.isArray(mappings)) for (const entry of mappings.slice(0, 24)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const row = entry as Record<string, unknown>;
+    const valid = (value: unknown): value is string => typeof value === 'string' &&
+      /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(value) && !['constructor', 'prototype', '__proto__'].includes(value);
+    if (valid(row.field) && valid(row.saveField)) alias.set(row.field, row.saveField);
+  }
+  const result: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    const target = alias.get(key) ?? key;
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(target) || ['constructor', 'prototype', '__proto__'].includes(target)) throw new Error('提交字段不安全');
+    if (Object.prototype.hasOwnProperty.call(result, target)) throw new Error('共享保存字段映射冲突：' + target);
+    result[target] = value;
+  }
+  return result;
+}
+
 /** Normalize only declarative presentation values. Never put these in Foundation Blueprint props. */
 function normalizedOverlayOption(kind: StudioWidgetKind, key: string, value: unknown): string | undefined {
   if (kind !== 'modal' && kind !== 'drawer' && kind !== 'table') return undefined;
