@@ -212,6 +212,68 @@ export function mapOverlaySubmitPayload(payload: Record<string, string | number>
   return result;
 }
 
+/** One declarative error contract for remote table DELETE and overlay POST/PATCH.
+ * A 5xx response may follow a committed mutation, so retry is not assumed safe.
+ * This classifies network outcomes; it never grants permission or assumes a
+ * backend has implemented atomic preconditions/idempotency.
+ */
+export type MutationFailureKind = 'denied' | 'conflict' | 'invalid' | 'uncertain' | 'failed';
+export interface MutationFailure {
+  kind: MutationFailureKind;
+  status: number | null;
+  message: string;
+  refresh: boolean;
+  safeToRetry: boolean;
+}
+export function classifyMutationHttpFailure(status: number): MutationFailure {
+  const prefix = 'HTTP ' + (Number.isSafeInteger(status) && status >= 100 && status <= 599 ? status : '未知');
+  if (status === 401 || status === 403)
+    return { kind: 'denied', status, message: prefix + '：权限被拒绝', refresh: false, safeToRetry: false };
+  if ([404, 409, 412, 428].includes(status))
+    return { kind: 'conflict', status, message: prefix + '：记录不存在或版本已经变化，请刷新后重新选择', refresh: true, safeToRetry: false };
+  if (status === 400 || status === 422)
+    return { kind: 'invalid', status, message: prefix + '：提交字段未通过校验', refresh: false, safeToRetry: false };
+  if (status >= 500 || !Number.isSafeInteger(status) || status < 100 || status > 599)
+    return { kind: 'uncertain', status, message: prefix + '：服务端可能已执行，请先核对最新数据，禁止盲目重试', refresh: true, safeToRetry: false };
+  return { kind: 'failed', status, message: prefix + '：请求未成功，请核对服务端状态', refresh: false, safeToRetry: false };
+}
+export function classifyMutationTransportFailure(aborted: boolean): MutationFailure {
+  return { kind: 'uncertain', status: null,
+    message: aborted ? '请求超时或中断：可能已经写入，请先核对服务端状态' :
+      '网络异常：写入结果不确定，请先核对服务端状态',
+    refresh: true, safeToRetry: false };
+}
+/** Bound field-level errors returned as {errors:{backendField:["message"]}}.
+ * Resolve saveField aliases back to the visible form keys, rejecting ambiguous
+ * mappings, prototype keys, non-string content, and overlong responses.
+ */
+export function parseMutationFieldErrors(payload: unknown, mappings: unknown): Record<string, string> {
+  const output: Record<string, string> = {};
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return output;
+  const object = payload as Record<string, unknown>;
+  if (!object.errors || typeof object.errors !== 'object' || Array.isArray(object.errors)) return output;
+  const valid = (key: string) => /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(key) &&
+    !['constructor', 'prototype', '__proto__'].includes(key);
+  const reverse = new Map<string, string>();
+  const duplicates = new Set<string>();
+  if (Array.isArray(mappings)) for (const item of mappings.slice(0, 24)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.field !== 'string' || typeof entry.saveField !== 'string' ||
+      !valid(entry.field) || !valid(entry.saveField)) continue;
+    if (reverse.has(entry.saveField) && reverse.get(entry.saveField) !== entry.field) duplicates.add(entry.saveField);
+    reverse.set(entry.saveField, entry.field);
+  }
+  for (const [rawKey, rawValue] of Object.entries(object.errors as Record<string, unknown>).slice(0, 16)) {
+    if (!valid(rawKey) || duplicates.has(rawKey)) continue;
+    const visibleKey = reverse.get(rawKey) ?? rawKey;
+    if (!valid(visibleKey) || Object.prototype.hasOwnProperty.call(output, visibleKey)) continue;
+    const message = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+    if (typeof message === 'string' && message.trim()) output[visibleKey] = message.slice(0, 240);
+  }
+  return output;
+}
+
 /** Normalize only declarative presentation values. Never put these in Foundation Blueprint props. */
 function normalizedOverlayOption(kind: StudioWidgetKind, key: string, value: unknown): string | undefined {
   if (kind !== 'modal' && kind !== 'drawer' && kind !== 'table') return undefined;
