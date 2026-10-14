@@ -43,4 +43,6 @@ node tooling/create-app/project.mjs compile ./my-app/foundation.project.json
 
 - Phase 22-B4 增加可选 `deleteEtagField`，从列表数据提取带引号的强 ETag，并在 DELETE 时发送 `If-Match`；HTTP 409/412 按并发冲突处理，HTTP 5xx/超时按结果不确定处理并禁止盲目重试。真正的版本原子校验、幂等和审计须由后端实现。
 
+- Phase 22-C1：可以在「接口管理」设置一个服务端分页的项目数据源，并在表格「共享表格数据源」选择其 ID，使表格复用同一套列表/详情/删除地址、查询参数及字段映射。Studio 导出 ZIP 会解析共享引用；删除了数据源时不会偷用旧的单独 URL。直接配置 `dataUrl` 的表格仍保持兼容。
+
 详见 [Phase 7 统一设计器技术说明](PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md)。
