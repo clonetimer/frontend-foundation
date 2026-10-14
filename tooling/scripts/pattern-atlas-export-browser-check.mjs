@@ -86,7 +86,9 @@ export async function runExportedBrowserSmoke(directory) {
       const page = Math.max(1, Number(query.searchParams.get('page') || '1'));
       const pageSize = Math.max(1, Math.min(20, Number(query.searchParams.get('pageSize') || '2')));
       response.writeHead(200); response.end(JSON.stringify({data:{
-        items: records.slice((page - 1) * pageSize, page * pageSize), total: records.length
+        items: records.slice((page - 1) * pageSize, page * pageSize).map((record) =>
+          query.searchParams.get('view') === 'shared' ? {...record, name:'不应显示的原始字段', alias:{name:record.name}} : record),
+        total: records.length
       }})); return;
     }
     if (request.method === 'DELETE' && request.url?.startsWith('/api/delete/')) {
@@ -319,6 +321,9 @@ export async function runExportedBrowserSmoke(directory) {
     // selected on table page 2 must still feed detail GET and the edit modal.
     await evaluate("location.hash = '#/isolated'");
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('无列表远程表格')"), 'Isolated table-only route');
+    await until(() => tableCalls.some((entry) => entry.view === 'shared'), 'Shared project-level table source did not issue GET');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('更新姓名')"), 'Shared field mapping did not map alias.name to name');
+    assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('不应显示的原始字段')"), false, 'Shared mapping failed to override raw name');
     assert(await evaluate("!document.querySelector('.atlas-record-list')"), 'Isolated page unexpectedly contains record list');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Isolated table data');
     assert(await evaluate("(() => { const button=document.querySelector('.pa-studio-remote-table .ant-pagination-next button'); if (!button) return false; button.click(); return true; })()"), 'Isolated table page 2 action');
