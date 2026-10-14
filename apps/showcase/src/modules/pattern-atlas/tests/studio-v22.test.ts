@@ -32,7 +32,7 @@ describe('Phase 22 · remote business tables', () => {
     expect(strongRecordEtag('"rev-2"')).toBe('"rev-2"');
     expect(strongRecordEtag('W/"weak"')).toBeNull();
     expect(strongRecordEtag('not-quoted')).toBeNull();
-    expect(strongRecordEtag('"line\\nfeed"')).toBeNull();
+    expect(strongRecordEtag('"line\nfeed"')).toBeNull();
     expect(strongRecordEtag(null)).toBeNull();
     expect(parseRemoteTablePage(input,'id',columns,'etag')).toEqual({items:[{
       key:'X-1',id:'X-1',name:'任务',status:'进行中',amount:null,etag:'"rev-2"'
