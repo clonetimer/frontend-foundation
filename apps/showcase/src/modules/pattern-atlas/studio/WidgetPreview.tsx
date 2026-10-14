@@ -344,7 +344,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
           const keys = [label(props.pageParam, 'page'), label(props.sizeParam, 'pageSize'),
             label(props.searchParam, 'search'), ...(filterField ? [label(props.filterParam, 'status')] : []),
             ...(sortField ? [label(props.sortParam, 'sortBy'), label(props.sortDirectionParam, 'sortOrder')] : [])];
-          if (keys.some((key) => !/^[A-Za-z][\\w-]{0,39}$/.test(key)) || new Set(keys).size !== keys.length) {
+          if (keys.some((key) => !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(key)) || new Set(keys).size !== keys.length) {
             throw new Error('共享数据源查询参数存在无效或重复字段');
           }
           address.searchParams.set(keys[0]!, String(page));
