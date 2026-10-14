@@ -138,7 +138,7 @@ export function parseRemoteTableColumns(value: unknown): RemoteTableColumn[] {
   return columns;
 }
 export function parseRemoteTablePage(value: unknown, idField: string, columns: readonly RemoteTableColumn[], etagField = ''): RemoteTablePage | null {
-  if (!remoteTableKey(idField) || (etagField && !remoteTableKey(etagField)) || !columns.length || !value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (!remoteTableKey(idField) || (etagField && (!remoteTableKey(etagField) || etagField === 'key' || etagField === idField)) || !columns.length || !value || typeof value !== 'object' || Array.isArray(value)) return null;
   const root = value as Record<string, unknown>;
   if (!Array.isArray(root.items) || root.items.length > 100 || !Number.isSafeInteger(root.total) || (root.total as number) < 0 || (root.total as number) > 10_000_000) return null;
   const ids = new Set<string>();
