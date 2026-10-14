@@ -47,4 +47,6 @@ node tooling/create-app/project.mjs compile ./my-app/foundation.project.json
 
 - Phase 22-C2：共享写入契约统一弹窗/抽屉。新增模式读取项目数据源 `createUrl`（兼容旧 `saveUrl`），编辑模式读取带 `{id}` 的 `saveUrl`；服务端字段由 `fieldMappings[].saveField` 指定。源缺失或 URL 无效时禁止回退旧地址；5xx/超时按写入结果不确定处理，不启动可能再次写入的失败后续工作流。
 
+- Phase 22-C3：增强表格与弹窗的 HTTP 写入失败统一识别：401/403 为权限拒绝，404/409/412/428 为冲突，400/422 为字段校验，5xx/网络错误/超时为执行结果不确定。共享弹窗支持将后端 `errors` 内的 `saveField` 反向映射回表单字段，拒绝未知或不安全字段，并限制错误体大小。对不确定写入不会自动重试或执行失败后续写入。旧 Record Provider 尚未迁移到此契约。
+
 详见 [Phase 7 统一设计器技术说明](PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md)。
