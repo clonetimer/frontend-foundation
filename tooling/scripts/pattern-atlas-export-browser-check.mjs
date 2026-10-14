@@ -44,6 +44,7 @@ export async function runExportedBrowserSmoke(directory) {
   const detailCalls = [];
   const deleteCalls = [];
   let rejectFirstDelete = true;
+  let failNextBatchDeleteId = '';
   let listReads = 0;
   // Deterministic fault injection for exported-table detail request races/recovery.
   let slowNextDetailId = '';
@@ -88,6 +89,10 @@ export async function runExportedBrowserSmoke(directory) {
     }
     if (request.method === 'DELETE' && request.url?.startsWith('/api/delete/')) {
       deleteCalls.push(request.url);
+      if (request.url === '/api/delete/' + failNextBatchDeleteId && failNextBatchDeleteId) {
+        failNextBatchDeleteId = '';
+        response.writeHead(503); response.end('{"error":"temporary batch deletion failure"}'); return;
+      }
       if (request.url === '/api/delete/T-3' && rejectFirstDelete) {
         rejectFirstDelete = false;
         response.writeHead(403); response.end('{"error":"permission denied"}'); return;
@@ -455,6 +460,57 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 1 条记录')"), 'Encoded-ID delete did not refresh server total');
     assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('更新姓名')"), false, 'Encoded-ID delete still displays removed record');
 
+    // B3: 4 records over 2 pages. Selection deliberately never spans
+    // pages; cancelling the bulk confirmation must issue zero DELETEs.
+    tableRows.push(
+      {id:'B-1',name:'批量失败对象',status:'待开始'},
+      {id:'B-2',name:'批量后续对象',status:'进行中'},
+      {id:'B-3',name:'批量末页对象',status:'已完成'}
+    );
+    assert(await evaluate("(() => {const button=[...document.querySelectorAll('.pa-studio-remote-table .pa-studio-widget-actions button')].find(b=>b.textContent?.replace(/\\s/g,'')==='刷新');if(!button)return false;button.click();return true;})()"), 'Bulk fixture refresh missing');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Bulk fixture server total missing');
+    const selectBulkRow = (name) => evaluate("(() => {const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes(" + JSON.stringify(name) + "));const check=row?.querySelector('input[type=checkbox]');if(!check)return false;check.click();return true;})()");
+    const selectedCount = (count) => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('当前页已选择 ' + " + "String(count)" + " + ' 条')");
+    assert(await selectBulkRow('第二对象'), 'Bulk row checkbox missing');
+    await until(() => selectedCount(1), 'Bulk first selected row count');
+    assert(await evaluate("(() => {const button=document.querySelector('.pa-studio-remote-table .ant-pagination-next button');if(!button)return false;button.click();return true;})()"), 'Bulk next-page button missing');
+    await until(() => selectedCount(0), 'Cross-page multi-selection was not cleared');
+    assert(await evaluate("(() => {const button=document.querySelector('.pa-studio-remote-table .ant-pagination-prev button');if(!button)return false;button.click();return true;})()"), 'Bulk previous-page button missing');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('批量失败对象')"), 'Bulk page-one rows not refreshed');
+    assert(await selectBulkRow('第二对象'), 'Bulk row one unavailable');
+    await until(() => selectedCount(1), 'Bulk first row not reselected');
+    assert(await selectBulkRow('批量失败对象'), 'Bulk row two unavailable');
+    await until(() => selectedCount(2), 'Bulk two-row selection missing');
+    const batchTrigger = () => evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(el=>el.textContent?.replace(/\\s/g,'')==='批量删除');if(!b)return false;b.click();return true;})()");
+    const confirmBulk = () => evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(el=>el.textContent?.replace(/\\s/g,'')==='确认批量删除');if(!b)return false;b.click();return true;})()");
+    const deleteCountBeforeBatch = deleteCalls.length;
+    assert(await batchTrigger(), 'Bulk delete trigger missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Bulk confirm unavailable');
+    assert.equal(deleteCalls.length, deleteCountBeforeBatch, 'Bulk delete sent without confirmation');
+    assert(await cancelDelete(), 'Bulk confirmation cannot be cancelled');
+    await pause(250);
+    assert.equal(deleteCalls.length, deleteCountBeforeBatch, 'Cancelled bulk deletion sent requests');
+    failNextBatchDeleteId = 'B-1';
+    assert(await batchTrigger(), 'Bulk delete confirmation cannot reopen');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Bulk retry confirmation unavailable');
+    assert(await confirmBulk(), 'Explicit bulk confirmation failed');
+    await until(() => deleteCalls.length === deleteCountBeforeBatch + 2, 'Bulk did not send two bounded DELETE requests');
+    assert.deepEqual(deleteCalls.slice(deleteCountBeforeBatch), ['/api/delete/T-2', '/api/delete/B-1'], 'Bulk request order or selected IDs inconsistent');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table .ant-alert')?.textContent?.includes('成功 1 条，失败 1 条')"), 'Bulk partial failure not reported');
+    assert(await evaluate("document.querySelector('.pa-studio-remote-table .ant-alert')?.textContent?.includes('HTTP 503')"), 'Failed item HTTP status not reported');
+    await until(() => selectedCount(1), 'Failed item not retained for retry');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 3 条记录')"), 'Partial successful bulk delete not reconciled from GET');
+    const countBeforeRetry = deleteCalls.length;
+    assert(await batchTrigger(), 'Failed-only bulk retry trigger missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Failed-only confirmation missing');
+    assert(await confirmBulk(), 'Failed-only retry confirmation failed');
+    await until(() => deleteCalls.length === countBeforeRetry + 1, 'Failed-only retry did not send DELETE');
+    assert.equal(deleteCalls.at(-1), '/api/delete/B-1', 'Retry deleted previously successful item');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table .ant-alert')?.textContent?.includes('成功 1 条，失败 0 条')"), 'Retry result not reported');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 2 条记录')"), 'Retry did not refresh server total');
+    await until(() => selectedCount(0), 'Bulk selection remained stale after successful retry');
+    assert.equal(tableRows.some((row) => row.id === 'T-2' || row.id === 'B-1'), false, 'Batch outcomes not applied by backend');
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -462,7 +518,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
