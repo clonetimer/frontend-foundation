@@ -3,7 +3,7 @@ import { designCssVariables } from '../effects/config';
 import { nodeLabel, serializeStudioDocument, walkNodes, type StudioDecoration, type StudioDocument } from './model';
 import { findRecordFields, type StudioRecordListBinding } from './record-bindings';
 import { exportedRecordRuntime } from './record-exporter';
-import { resolveRecordList, resolveRecordSubmit, resolveTableWidgetProps } from './data-sources';
+import { resolveOverlayWidgetProps, resolveRecordList, resolveRecordSubmit, resolveTableWidgetProps } from './data-sources';
 import { studioEffectStyles } from './effect-styles';
 import { exportedWidgetCatalog, exportedWidgetPreview } from './exported-widgets';
 import { exportedWorkflowRuntime } from './exported-workflows';
@@ -184,13 +184,7 @@ export function generateReactPage(document: StudioDocument, pageId: string): str
       return [key, { ...value, widgetProps: resolveTableWidgetProps(value.widgetProps ?? {}, document.dataSources) }];
     }
     if (value.widgetKind === 'modal' || value.widgetKind === 'drawer') {
-      const props = value.widgetProps ?? {};
-      const sourceId = typeof props.sourceId === 'string' ? props.sourceId : '';
-      if (!sourceId) return [key, value];
-      const source = document.dataSources.find((entry) => entry.id === sourceId);
-      const { sourceId: _linked, ...rest } = props;
-      void _linked;
-      return [key, { ...value, widgetProps: { ...rest, submitUrl: source?.saveUrl ?? '' } }];
+      return [key, { ...value, widgetProps: resolveOverlayWidgetProps(value.widgetProps ?? {}, document.dataSources) }];
     }
     if (!value.recordSubmit) return [key, value];
     const resolved = resolveRecordSubmit(value.recordSubmit, document.dataSources);
