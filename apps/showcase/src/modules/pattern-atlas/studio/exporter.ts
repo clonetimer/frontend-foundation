@@ -441,6 +441,10 @@ Studio 中选中「数据表格」，将 \`dataUrl\` 设为 \`/api/records\`、\
 
 HTTP 401/403 是权限拒绝；404/409/412/428 视为版本或状态冲突，刷新 GET 核对后重新选择。HTTP 5xx、超时和网络中断均视为**执行结果不确定**，批量请求停止后续写入，不自动重试不确定项；后端必须实现鉴权、幂等和审计。前端提示/禁用按钮不构成服务端权限策略。
 
+### 项目级共享数据源（Phase 22-C1）
+
+如在 Studio 表格配置了 \`sourceId\`，本 ZIP 已将该项目数据源解析为本地页面所需的真实 \`dataUrl\`、详情、删除、参数字段和安全映射，无需连接设计工作台；原 \`atlas.studio.json\` 仍保留 \`sourceId\` 供再次编辑。仅支持服务端分页共享源，按共享源的 \`pageParam\` / \`sizeParam\` / \`searchParam\` / \`filterParam\` / \`sortParam\` / \`sortDirectionParam\` 传递查询条件。如源已失效会报错且不会回退之前填写的 URL。老的直接 URL 表格不受影响。服务端必须实现对应查询契约与鉴权。
+
 注意：绝对坐标以当前页面内容区左上角为原点，由 React portal 统一定位；响应式断点需自行检查组件是否溢出。原 Foundation Compiler 不读取 Studio 专有的尺寸偏移、交互、数据接口和特效元数据。要获得这部分行为，请使用此包的 React TSX/CSS 输出。不要只编译 Blueprint 后期待其包含所有动效与 API。
 ` },
   ];
