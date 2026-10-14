@@ -8,6 +8,7 @@ import { recordId, recordText } from './record-bindings';
 import type { StudioRecordFlow } from './StudioRecords';
 import type { StudioDataSource } from './data-sources';
 import { WidgetPreview } from './WidgetPreview';
+import type { OverlayRecordSelection } from './widgets';
 import { dispatchWorkflowComponentEvent, runStudioWorkflow, type WorkflowTrace } from './studio-workflows';
 
 export interface CanvasProps {
@@ -24,6 +25,8 @@ export interface CanvasProps {
   recordFlow?: StudioRecordFlow | undefined;
   dataSources?: readonly StudioDataSource[] | undefined;
   workflowPages?: readonly string[] | undefined;
+  tableSelection?: OverlayRecordSelection | null | undefined;
+  onTableSelection?: ((value: OverlayRecordSelection | null) => void) | undefined;
   absoluteLayer?: HTMLDivElement | null | undefined;
   onWorkflowTrace?: ((entry: WorkflowTrace) => void) | undefined;
 }
@@ -39,7 +42,7 @@ function confirmAction(content: string): Promise<boolean> {
   });
 }
 
-export function StudioCanvas({ node, selectedId, decorations, pageId = '', live = false, readOnly = false, onSelect, onDropItem, onNavigate, depth = 0, recordFlow, dataSources, workflowPages, absoluteLayer, onWorkflowTrace }: CanvasProps) {
+export function StudioCanvas({ node, selectedId, decorations, pageId = '', live = false, readOnly = false, onSelect, onDropItem, onNavigate, depth = 0, recordFlow, dataSources, workflowPages, tableSelection, onTableSelection, absoluteLayer, onWorkflowTrace }: CanvasProps) {
   const [active, setActive] = useState(false);
   const [tab, setTab] = useState(0);
   const decoration = decorations[`${pageId}:${node.id}`] ?? decorations[node.id] ?? {};
@@ -67,7 +70,7 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
   const canDropInto = mayContain(node);
   const selected = editable && node.id === selectedId;
   const pattern = decoration.pattern ?? 'default';
-  const childProps = { decorations, selectedId, pageId, live, readOnly, onSelect, onDropItem, onNavigate, recordFlow, dataSources, workflowPages, absoluteLayer, onWorkflowTrace, depth: depth + 1 };
+  const childProps = { decorations, selectedId, pageId, live, readOnly, onSelect, onDropItem, onNavigate, recordFlow, dataSources, workflowPages, tableSelection, onTableSelection, absoluteLayer, onWorkflowTrace, depth: depth + 1 };
   const childElements = (list: CompositionNode[]) => list.map((item) => <StudioCanvas key={item.id} node={item} {...childProps}/>);
   const report = (event: DragEvent<HTMLElement>, where: 'inside' | 'before' | 'after') => {
     if (!editable || !onDropItem) return;
@@ -183,7 +186,7 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
         </div> : null}
         {recordFlow?.status === 'loading' ? <div role="status" className="pa-studio-record-hint">正在加载记录…</div> : recordFlow?.status === 'error' ? <div role="alert" className="pa-studio-record-error">{recordFlow.error}<Button size="small" onClick={() => recordFlow.retry()}>重试</Button></div> : recordFlow?.visibleRows.length ? <div className="pa-studio-record-rows">{recordFlow.visibleRows.map((row) => {
           const key = recordId(row, recordFlow.idField);
-          return <button type="button" key={key} className={key === recordFlow.selectedId ? 'active' : ''} aria-pressed={key === recordFlow.selectedId} onClick={(event) => { event.stopPropagation(); recordFlow.select(row); }}><span>{recordText(row[recordFlow.labelField]) || key}</span><small>{key}</small></button>;
+          return <button type="button" key={key} className={key === recordFlow.selectedId ? 'active' : ''} aria-pressed={key === recordFlow.selectedId} onClick={(event) => { event.stopPropagation(); onTableSelection?.(null); recordFlow.select(row); }}><span>{recordText(row[recordFlow.labelField]) || key}</span><small>{key}</small></button>;
         })}</div> : <div className="pa-studio-record-hint">暂无记录</div>}
       </>}
       {live && recordFlow?.detailStatus === 'loading' ? <div role="status" className="pa-studio-record-hint">正在读取选中记录的详情…</div> : null}
@@ -198,7 +201,7 @@ export function StudioCanvas({ node, selectedId, decorations, pageId = '', live 
     const linkedSource = sourceKey ? dataSources?.find((entry) => entry.id === sourceKey) : undefined;
     const resolvedProps = sourceKey ? { ...widgetProps, submitUrl: linkedSource?.saveUrl ?? '' } : widgetProps;
     visual = <WidgetPreview kind={decoration.widgetKind} props={resolvedProps} live={live}
-      recordSelection={recordFlow ? { selectedId: recordFlow.selectedId, selected: recordFlow.selected, detailStatus: recordFlow.detailStatus } : undefined} workflowPages={workflowPages} onWorkflowNavigate={onNavigate}/>;
+      recordSelection={tableSelection ?? (recordFlow ? { selectedId: recordFlow.selectedId, selected: recordFlow.selected, detailStatus: recordFlow.detailStatus } : undefined)} workflowPages={workflowPages} onWorkflowNavigate={onNavigate} onRecordSelect={onTableSelection ?? undefined}/>;
   } else {
     visual = <div className="pa-studio-placeholder"><strong>{text(props.title, '内容区域')}</strong><small>{text(props.description, '可以继续完善内容')}</small></div>;
   }

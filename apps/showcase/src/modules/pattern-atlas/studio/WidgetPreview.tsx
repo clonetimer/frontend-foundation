@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
-import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, overlaySubmitUrl, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
+import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, overlaySubmitUrl, parseRemoteTableColumns, parseRemoteTablePage, type RemoteTableRow, type RemoteTablePage, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
 import { normalizeStudioWorkflow, runStudioWorkflow, dispatchWorkflowComponentEvent, type StudioWorkflow } from './studio-workflows';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
@@ -109,6 +109,154 @@ function LineWidget({ items, series, title, unit }: { items: string[]; series: C
     <div className="pa-studio-plot-legend">{series.map((entry,i) => <span key={i}><i style={{backgroundColor:colors[i%colors.length]}}/>{entry.name}</span>)}</div>
   </div>;
 }
+/** Server-controlled table: pagination/filtering/sorting are never emulated locally. */
+function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<string, unknown>; live: boolean; onRecordSelect?: ((selection: OverlayRecordSelection) => void) | undefined }) {
+  const title = label(props.title, '数据表格');
+  const sourceUrl = apiUrl(props.dataUrl);
+  const columns = parseRemoteTableColumns(props.tableColumns);
+  const idField = label(props.idField, 'id');
+  const itemsPath = label(props.itemsPath, 'data.items');
+  const totalPath = label(props.totalPath, 'data.total');
+  const sortField = label(props.sortField, 'name');
+  const filterField = label(props.filterField);
+  const filterValues = label(props.filterValues).split(',').map((value) => value.trim()).filter(Boolean).slice(0, 16);
+  const pageSize = Math.max(1, Math.min(20, Number(props.pageSize) || 5));
+  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('');
+  const [direction, setDirection] = useState<'' | 'asc' | 'desc'>('');
+  const [revision, setRevision] = useState(0);
+  const [data, setData] = useState<RemoteTablePage | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [selectionError, setSelectionError] = useState('');
+  const detailRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => detailRequest.current?.abort(), []);
+  const chooseRecord = async (row: RemoteTableRow) => {
+    if (!onRecordSelect || !live) return;
+    detailRequest.current?.abort();
+    setSelectionError('');
+    const selectedId = row.key;
+    const snapshot: Record<string, unknown> = { ...row };
+    const detailTemplate = props.detailUrl;
+    if (!detailTemplate) {
+      onRecordSelect({ selectedId, selected: snapshot, detailStatus: 'idle' });
+      return;
+    }
+    const endpoint = overlaySubmitUrl(detailTemplate, 'edit-selected', selectedId);
+    if (!endpoint) {
+      setSelectionError('详情接口需要包含一个有效的 {id} 占位符');
+      onRecordSelect({ selectedId, selected: null, detailStatus: 'error' });
+      return;
+    }
+    const controller = new AbortController();
+    detailRequest.current = controller;
+    onRecordSelect({ selectedId, selected: snapshot, detailStatus: 'loading' });
+    try {
+      const response = await fetch(endpoint, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (Number(response.headers.get('content-length') || 0) > 262144) throw new Error('详情超过 256 KB');
+      const body = await response.text();
+      if (body.length > 262144) throw new Error('详情超过 256 KB');
+      const parsed = pathValue(JSON.parse(body) as unknown, label(props.detailPath,'data'));
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('详情响应不是记录对象');
+      const detail = parsed as Record<string, unknown>;
+      const remoteId = detail[idField];
+      if (remoteId !== undefined && String(remoteId) !== selectedId) throw new Error('详情记录主键不匹配');
+      const result: Record<string, unknown> = { ...snapshot };
+      for (const [key, value] of Object.entries(detail)) {
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(key) || ['constructor','prototype','__proto__'].includes(key)) continue;
+        if (value === null || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e12 ||
+          typeof value === 'string' && value.length <= 240) result[key] = value;
+      }
+      if (!controller.signal.aborted) onRecordSelect({ selectedId, selected: result, detailStatus: 'ready' });
+    } catch (reason) {
+      if (!controller.signal.aborted) {
+        setSelectionError(reason instanceof Error ? reason.message : '详情读取失败');
+        onRecordSelect({ selectedId, selected: null, detailStatus: 'error' });
+      }
+    }
+  };
+  useEffect(() => {
+    if (!sourceUrl || !live) { setData(null); setLoading(false); setError(''); return; }
+    const controller = new AbortController();
+    const load = async () => {
+      setLoading(true); setError('');
+      try {
+        if (!columns.length) throw new Error('表格列配置无效');
+        const address = new URL(sourceUrl, window.location.href);
+        address.searchParams.set('page', String(page));
+        address.searchParams.set('pageSize', String(pageSize));
+        if (search) address.searchParams.set('search', search);
+        if (filter && filterField) { address.searchParams.set('filterField', filterField); address.searchParams.set('filter', filter); }
+        if (direction && sortField) { address.searchParams.set('sort', sortField); address.searchParams.set('order', direction); }
+        const response = await fetch(address.href, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        if (Number(response.headers.get('content-length') || 0) > 262144) throw new Error('数据超过 256 KB');
+        const body = await response.text();
+        if (body.length > 262144) throw new Error('数据超过 256 KB');
+        const jsonBody: unknown = JSON.parse(body);
+        const records = pathValue(jsonBody, itemsPath);
+        const total = pathValue(jsonBody, totalPath);
+        const parsed = parseRemoteTablePage({ items: records, total }, idField, columns);
+        if (!parsed) throw new Error('远程表格数据格式无效');
+        if (!controller.signal.aborted) { setData(parsed); setError(''); }
+      } catch (caught) {
+        if (!controller.signal.aborted) { setData(null); setError(caught instanceof Error ? caught.message : '请求失败'); }
+      } finally { if (!controller.signal.aborted) setLoading(false); }
+    };
+    void load();
+    return () => controller.abort();
+  }, [sourceUrl, idField, itemsPath, totalPath, props.tableColumns, sortField, filterField, page, pageSize, search, filter, direction, revision, live]);
+  useEffect(() => {
+    if (!live || !sourceUrl) return;
+    const refresh = () => setRevision((previous) => previous + 1);
+    window.addEventListener('atlas:records-refresh', refresh);
+    return () => window.removeEventListener('atlas:records-refresh', refresh);
+  }, [live, sourceUrl]);
+  if (!sourceUrl || !live) return <div className="pa-studio-rich" data-atlas-table-source="static">
+    <strong>{title}</strong>
+    <Table size="small" rowKey="key" columns={[{ title: '事项', dataIndex: 'name' }, { title: '状态', dataIndex: 'status' }]}
+      dataSource={rows(props.items)} pagination={{ pageSize, showSizeChanger: false }}/>
+    {sourceUrl && !live ? <small>体验模式中加载服务端表格</small> : null}
+  </div>;
+  const displayColumns = columns.map(({key,title: heading}) => ({
+    title: heading, dataIndex: key, key, sorter: key === sortField,
+    sortOrder: key === sortField ? (direction === 'asc' ? 'ascend' as const : direction === 'desc' ? 'descend' as const : null) : null,
+    render: (value: unknown) => value === null || value === undefined ? '—' : String(value)
+  }));
+  const selectionColumn = onRecordSelect ? [{ title: '操作', key: 'action', render: (_: unknown, row: RemoteTableRow) =>
+    <Button size="small" onClick={() => { void chooseRecord(row); }}>选择</Button> }] : [];
+  return <div className="pa-studio-rich pa-studio-remote-table" data-atlas-table-source="remote">
+    <strong>{title}</strong>
+    <form className="pa-studio-widget-actions" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(searchInput.trim().slice(0,120)); }}>
+      <Input aria-label="表格搜索" placeholder="搜索记录" size="small" style={{ maxWidth: 210 }} maxLength={120} value={searchInput} onChange={(event)=>setSearchInput(event.target.value)} disabled={!live}/>
+      <Button size="small" htmlType="submit">查询</Button>
+      {filterField && filterValues.length > 0 ? <select aria-label="表格筛选" value={filter} onChange={(event) => {setFilter(event.target.value); setPage(1);}}>
+        <option value="">全部状态</option>
+        {filterValues.map((value) => <option key={value} value={value}>{value}</option>)}
+      </select> : null}
+      <Button size="small" onClick={()=>setRevision((value)=>value+1)} disabled={loading}>刷新</Button>
+    </form>
+    {error ? <small role="alert">表格加载失败：{error}</small> : null}
+    {selectionError ? <small role="alert">记录详情加载失败：{selectionError}</small> : null}
+    <Table<RemoteTableRow> size="small" rowKey="key" loading={loading} dataSource={data?.items ?? []}
+      columns={[...displayColumns, ...selectionColumn]}
+      pagination={{ current: page, pageSize, total: data?.total ?? 0, showSizeChanger: false }}
+      onChange={(pagination, _filters, sorter) => {
+        const rule = Array.isArray(sorter) ? sorter[0] : sorter;
+        if (rule?.field === sortField && rule.order) {
+          setDirection(rule.order === 'ascend' ? 'asc' : 'desc');
+          setPage(1);
+        } else if (rule?.field === sortField && !rule.order) {
+          setDirection(''); setPage(1);
+        } else if (pagination.current && pagination.current !== page) setPage(pagination.current);
+      }}/>
+    <small role="status">{error ? '服务器请求失败' : loading ? '正在加载…' : data ? ('共 ' + data.total + ' 条记录') : '尚无数据'}</small>
+  </div>;
+}
+
 /** GET data source is strictly opt-in; editor mode never sends requests. */
 function RemoteLineWidget({ props, live }: { props: Record<string, unknown>; live: boolean }) {
   const title = label(props.title, '趋势分析');
@@ -304,7 +452,7 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
   </div>;
 }
 /** Live Studio widgets are backed by the same source code as the standalone React export. */
-export function WidgetPreview({ kind, props, live, recordSelection, workflowPages, onWorkflowNavigate }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined; workflowPages?: readonly string[] | undefined; onWorkflowNavigate?: ((pageId: string) => void) | undefined }) {
+export function WidgetPreview({ kind, props, live, recordSelection, workflowPages, onWorkflowNavigate, onRecordSelect }: { kind: StudioWidgetKind; props: Record<string, unknown>; live: boolean; recordSelection?: OverlayRecordSelection | undefined; workflowPages?: readonly string[] | undefined; onWorkflowNavigate?: ((pageId: string) => void) | undefined; onRecordSelect?: ((selection: OverlayRecordSelection) => void) | undefined }) {
   const title = label(props.title, '组件');
   const items = widgetItems(props.items);
   const values = widgetValues(props.values);
@@ -320,7 +468,7 @@ export function WidgetPreview({ kind, props, live, recordSelection, workflowPage
     case 'image': { const url = safeWidgetImageUrl(props.src); return url ? <img className="pa-studio-rich-image" src={url} alt={title}/> : <div className="pa-studio-rich-image-placeholder">▧ {title}<small>{label(props.description)}</small></div>; }
     case 'steps': return <Steps responsive size="small" current={Math.max(0, Math.min(items.length, Math.floor(percent)))} items={items.map((item) => ({ title: item }))}/>;
     case 'timeline': return <Timeline items={items.map((item) => ({ children: item }))}/>;
-    case 'table': return <Table size="small" rowKey="key" columns={[{ title: '事项', dataIndex: 'name' }, { title: '状态', dataIndex: 'status' }]} dataSource={rows(props.items)} pagination={{ pageSize: Math.max(1, Math.min(20, Number(props.pageSize) || 5)), showSizeChanger: false }}/>;
+    case 'table': return <RemoteTableWidget props={props} live={live} onRecordSelect={onRecordSelect}/>;
     case 'chart': return <div className="pa-studio-rich"><strong>{title}</strong><div className="pa-studio-mini-chart">{values.map((value, index) => <div key={index} title={`${items[index] ?? `数据${index+1}`}：${value}`}><i style={{ height: `${Math.max(2,value)}%` }}/><small>{items[index] ?? index + 1}</small></div>)}</div></div>;
     case 'descriptions': return <Descriptions size="small" title={title} column={1} items={rows(props.items).map((row) => ({ key: row.key, label: row.name, children: row.status }))}/>;
     case 'list': return <div className="pa-studio-rich"><strong>{title}</strong><ul className="pa-studio-rich-list">{items.map((item, index) => <li key={index}>{item}</li>)}</ul></div>;

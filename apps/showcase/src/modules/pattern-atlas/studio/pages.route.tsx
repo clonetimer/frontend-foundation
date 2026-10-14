@@ -15,7 +15,7 @@ import { buildStudioListUrl, readStudioListPayload, validQueryParameter, type St
 import { validRecordField, validRecordPath, validRecordUrl, type StudioRecordFieldBinding, type StudioRecordListBinding, type StudioRecordSubmitBinding } from './record-bindings';
 import { studioEffectStyles } from './effect-styles';
 import { appendWorkflowTrace, defaultWorkflowStep, type WorkflowActionStep, type WorkflowStep, type WorkflowStepType, type WorkflowTrace } from './studio-workflows';
-import { studioWidgetKinds, widgetDefinition, normalizeWidgetProps, type StudioWidgetKind } from './widgets';
+import { studioWidgetKinds, widgetDefinition, normalizeWidgetProps, type StudioWidgetKind, type OverlayRecordSelection } from './widgets';
 import { displayApiValue, requestStudioApi, validApiUrl, validResponsePath, type StudioApiBinding } from './api';
 import { projectExportFiles, zipTextFiles } from './exporter';
 import { walkNodes, backupStudioDocument, clearStudioBackup, createNode, editNode, editPageDocument, findNode, firstPageId, freshNodeId, insertKinds, insertNode, mayContain, moveNode, nodeLabel, normalizeGeometry, paletteGroups, parentOf, parseStudioFile, readStudioBackup, readStudioDocument, removeStudioComponent, removeStudioPage, saveStudioDocument, setDecoration, takeStudioHandoff, type InsertKind, type StudioDecoration, type StudioDocument, type StudioInteraction, type StudioPattern, type StudioGeometry, type StudioNavigation } from './model';
@@ -63,6 +63,8 @@ export function Component() {
   const [pageId, setPageId] = useState(() => firstPageId(doc.blueprint));
   const [absoluteLayer, setAbsoluteLayer] = useState<HTMLDivElement | null>(null);
   const [selectedId, setSelectedId] = useState(() => doc.blueprint.pages[0]?.composition?.id ?? '');
+  const [tableSelection, setTableSelection] = useState<OverlayRecordSelection | null>(null);
+  useEffect(() => { setTableSelection(null); }, [pageId]);
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [live, setLive] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
@@ -304,7 +306,7 @@ export function Component() {
       void notice.success('页面及对应目录已删除，可使用撤销恢复。');
     } catch (error) { void notice.warning(error instanceof Error ? error.message : '删除页面失败'); }
   };
-  const selectPage = (id: string) => { setPageId(id); setSelectedId(doc.blueprint.pages.find((item) => item.id === id)?.composition?.id ?? ''); setReplayKey((key) => key + 1); };
+  const selectPage = (id: string) => { setTableSelection(null); setPageId(id); setSelectedId(doc.blueprint.pages.find((item) => item.id === id)?.composition?.id ?? ''); setReplayKey((key) => key + 1); };
   const append = (type: InsertKind, target?: string, where: 'inside' | 'before' | 'after' = 'inside') => {
     if (!root) return;
     if (type === 'records' && existingListId) { void notice.warning('每个页面目前只能配置一个记录列表。'); setSelectedId(existingListId); setInspector('组件数据'); return; }
@@ -383,9 +385,9 @@ export function Component() {
       {chosen.type === 'input' ? <TextSetting title="输入占位文字" value={String(chosen.props?.placeholder ?? '')} change={(value) => edit('placeholder', value)}/> : null}
       {chosen.type === 'select' ? <TextSetting title="下拉选项（每行一项）" multiline value={Array.isArray(chosen.props?.options) ? chosen.props.options.map((option) => String((option as {label?:string}).label ?? '')).join('\n') : ''} change={(value) => updateNode(chosen.id, (node) => { node.props = { ...node.props, options: value.split('\n').map((label, index) => ({ label: label.trim() || `选项${index + 1}`, value: `option-${index + 1}` })) }; })}/> : null}
       {meta.widgetKind ? <>
-        {['title', 'text', 'description', 'value', 'suffix', 'placeholder', 'src', 'values', 'series', 'unit', 'triggerText', 'okText', 'cancelText', 'formFields'].filter((field) => richProps[field] !== undefined).map((field) => <TextSetting key={`rich-${field}`} title={({ title: '名称', text: '文字', description: '说明', value: '数值', suffix: '单位', placeholder: '占位文字', src: '图片 URL', values: '旧版单序列数值', series: '多序列（名称:1,2;名称2:3,4）', unit: '坐标单位', triggerText: '触发按钮', okText: '确认按钮', cancelText: '取消按钮', formFields: '弹窗表单字段（每行：key|标签|text/email/number|required/optional）' } as Record<string,string>)[field] ?? field} value={String(richProps[field] ?? '')} change={(value) => updateRich(field, value)} multiline={field === 'description' || field === 'series' || field === 'formFields'}/>) }
+        {['title', 'text', 'description', 'value', 'suffix', 'placeholder', 'src', 'values', 'series', 'unit', 'triggerText', 'okText', 'cancelText', 'formFields', 'tableColumns', 'filterValues'].filter((field) => richProps[field] !== undefined).map((field) => <TextSetting key={`rich-${field}`} title={({ title: '名称', text: '文字', description: '说明', value: '数值', suffix: '单位', placeholder: '占位文字', src: '图片 URL', values: '旧版单序列数值', series: '多序列（名称:1,2;名称2:3,4）', unit: '坐标单位', triggerText: '触发按钮', okText: '确认按钮', cancelText: '取消按钮', formFields: '弹窗表单字段（每行：key|标签|text/email/number|required/optional）', tableColumns: '表格列（每行：字段|标题）', filterValues: '筛选候选值（逗号分隔）' } as Record<string,string>)[field] ?? field} value={String(richProps[field] ?? '')} change={(value) => updateRich(field, value)} multiline={field === 'description' || field === 'series' || field === 'formFields' || field === 'tableColumns'}/>) }
         {richProps.items !== undefined ? <TextSetting title="条目（每行一项，表格可用「名称|状态」）" multiline value={Array.isArray(richProps.items) ? richProps.items.join('\n') : ''} change={(value) => updateRich('items', value.split('\n').slice(0, 30).map((item) => item.slice(0, 160)))}/> : null}
-        {['accept','uploadUrl','statusUrl','statusPath','percentPath','dataUrl','dataPath','submitUrl'].filter((field) => richProps[field] !== undefined).map((field) => <TextSetting key={field} title={({ accept: '允许的文件类型', uploadUrl: '上传 POST 地址', statusUrl: '任务状态 GET 地址', statusPath: '响应中的状态路径', percentPath: '进度数值路径', dataUrl: '曲线数据 GET 地址', dataPath: '曲线 JSON 数据路径（默认 data）', submitUrl: '表单提交 POST 地址' } as Record<string,string>)[field] ?? field} value={String(richProps[field] ?? '')} change={(value) => updateRich(field, value)}/>)}
+        {['accept','uploadUrl','statusUrl','statusPath','percentPath','dataUrl','dataPath','submitUrl','itemsPath','totalPath','detailUrl','detailPath','idField','filterField','sortField'].filter((field) => richProps[field] !== undefined).map((field) => <TextSetting key={field} title={({ accept: '允许的文件类型', uploadUrl: '上传 POST 地址', statusUrl: '任务状态 GET 地址', statusPath: '响应中的状态路径', percentPath: '进度数值路径', dataUrl: '数据 GET 地址（表格或曲线）', dataPath: '曲线 JSON 数据路径（默认 data）', submitUrl: '表单提交 POST 地址', itemsPath: '表格记录路径（默认 data.items）', totalPath: '表格总数路径（默认 data.total）', detailUrl: '表格行详情 GET 地址（可选；含 {id}）', detailPath: '行详情响应路径（默认 data）', idField: '唯一记录 ID 字段', filterField: '筛选字段', sortField: '可排序列字段' } as Record<string,string>)[field] ?? field} value={String(richProps[field] ?? '')} change={(value) => updateRich(field, value)}/>)}
         {(meta.widgetKind === 'modal' || meta.widgetKind === 'drawer') ? <>
           <SettingSelect title="表单操作模式" value={String(richProps.formMode ?? 'create')} options={[{value:'create',label:'新增记录'},{value:'edit-selected',label:'编辑当前选中记录'}]} onChange={(value) => updateRich('formMode', value)}/>
           <SettingSelect title="保存请求方法" value={String(richProps.submitMethod ?? 'POST')} options={[{value:'POST',label:'POST'},{value:'PATCH',label:'PATCH'}]} onChange={(value) => updateRich('submitMethod',value)}/>
@@ -417,7 +419,10 @@ export function Component() {
           <label className="pa-studio-setting"><span>自动刷新（毫秒，0 为手动）</span><InputNumber min={0} max={60000} step={5000} value={Number(richProps.refreshMs) || 0} onChange={(value) => updateRich('refreshMs', value ?? 0)} style={{width:'100%'}}/></label>
           <div className="pa-studio-note">接口返回 JSON，指定路径内使用 <code>{'{"items":["一月","二月"],"series":[{"name":"销售额","values":[-2,120]}]}'}</code> 的结构；未配置接口时继续使用上面的静态序列。仅在体验模式及导出项目中发起 GET 请求，不存储密钥。</div>
         </> : null}
-        {meta.widgetKind === 'table' ? <label className="pa-studio-setting"><span>每页行数（本地分页）</span><InputNumber min={1} max={20} value={Number(richProps.pageSize) || 5} onChange={(value) => updateRich('pageSize', value ?? 5)} style={{ width: '100%' }}/></label> : null}
+        {meta.widgetKind === 'table' ? <>
+          <label className="pa-studio-setting"><span>每页行数（服务端/本地）</span><InputNumber min={1} max={20} value={Number(richProps.pageSize) || 5} onChange={(value) => updateRich('pageSize', value ?? 5)} style={{ width: '100%' }}/></label>
+          <div className="pa-studio-note">配置数据 GET 地址后，体验模式和独立导出才发起请求。查询参数固定为 page、pageSize、search、filterField、filter、sort 和 order，分页、搜索、筛选和排序全部交给服务端。响应示例：<code>{'{"data":{"items":[{"id":"R-1","name":"记录","status":"进行中"}],"total":1}}'}</code>。返回字段应匹配表格列配置；“选择”直接传递当前行记录至编辑弹窗，不要求同页存在记录列表；如需补充未展示的字段，可配置带 {'{id}'} 的详情 GET。</div>
+        </> : null}
       </> : null}
       {chosen.label !== undefined || root?.type === 'tabs' ? <TextSetting title="标签名称" value={chosen.label ?? ''} change={(value) => updateNode(chosen.id, (node) => { node.label = value || '标签'; })}/> : null}
     </>}
@@ -724,7 +729,7 @@ export function Component() {
           {doc.shell.navigation !== 'none' ? <nav aria-label="项目页面导航" className="pa-studio-preview-navigation"><div className="pa-studio-preview-brand">{doc.blueprint.project.title}</div><div className="pa-studio-preview-links">{orderedNavigation.map((entry) => <button type="button" key={entry.target} className={entry.target === page?.id ? 'active' : ''} onClick={() => selectPage(entry.target)}>{entry.label}</button>)}</div></nav> : null}
           <div className="pa-studio-screen" key={`${page?.id}-${replayKey}`} style={{ minHeight: Math.max(400, ...Object.entries(doc.decorations).filter(([key, meta]) => key.startsWith(`${page?.id}:`) && meta.geometry?.mode === 'absolute').map(([, meta]) => (meta.geometry?.y ?? 0) + (meta.geometry?.height ?? 150) + 52)) }}>
             <div ref={setAbsoluteLayer} className="pa-studio-absolute-layer" aria-label="页面绝对定位图层"/>
-            {root ? <StudioCanvas node={root} selectedId={chosen?.id} decorations={doc.decorations} pageId={page?.id} live={live} readOnly={live} onSelect={setSelectedId} onDropItem={drop} onNavigate={selectPage} recordFlow={recordFlow} dataSources={doc.dataSources} workflowPages={doc.blueprint.pages.map((entry) => entry.id)} absoluteLayer={absoluteLayer} onWorkflowTrace={(trace) => setWorkflowTraces((before) => appendWorkflowTrace(before, trace))}/> : <div>暂不支持编辑这一页的内容</div>}
+            {root ? <StudioCanvas node={root} selectedId={chosen?.id} decorations={doc.decorations} pageId={page?.id} live={live} readOnly={live} onSelect={setSelectedId} onDropItem={drop} onNavigate={selectPage} recordFlow={recordFlow} dataSources={doc.dataSources} tableSelection={tableSelection} onTableSelection={setTableSelection} workflowPages={doc.blueprint.pages.map((entry) => entry.id)} absoluteLayer={absoluteLayer} onWorkflowTrace={(trace) => setWorkflowTraces((before) => appendWorkflowTrace(before, trace))}/> : <div>暂不支持编辑这一页的内容</div>}
           </div>
         </div>
       </div></div></main>
