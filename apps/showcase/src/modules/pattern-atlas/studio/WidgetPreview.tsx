@@ -125,8 +125,24 @@ async function getRemoteTableDetail(row: RemoteTableRow, props: Record<string, u
   const detail = parsed as Record<string, unknown>;
   const remoteId = detail[idField];
   if (remoteId !== undefined && String(remoteId) !== row.key) throw new Error('详情记录主键不匹配');
+  // Shared data sources apply the same validated response field mappings to
+  // detail GETs as list GETs. Raw and mapped IDs are both checked before the
+  // selection can be used by an edit form.
+  const mapped: Record<string, unknown> = { ...detail };
+  if (props.sourceQueryMode === 'shared' && Array.isArray(props.fieldMappings)) {
+    for (const entry of props.fieldMappings.slice(0, 24)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      const mapping = entry as Record<string, unknown>;
+      if (typeof mapping.field !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(mapping.field)
+        || ['constructor', 'prototype', '__proto__'].includes(mapping.field) || typeof mapping.responsePath !== 'string') continue;
+      const value = pathValue(detail, mapping.responsePath);
+      if (value !== undefined) mapped[mapping.field] = value;
+    }
+  }
+  const mappedId = mapped[idField];
+  if (mappedId !== undefined && String(mappedId) !== row.key) throw new Error('详情映射后的记录主键不匹配');
   const result: Record<string, unknown> = { ...snapshot };
-  for (const [key, value] of Object.entries(detail)) {
+  for (const [key, value] of Object.entries(mapped)) {
     if (!/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(key) || ['constructor','prototype','__proto__'].includes(key)) continue;
     if (value === null || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1e12 ||
       typeof value === 'string' && value.length <= 240) result[key] = value;
