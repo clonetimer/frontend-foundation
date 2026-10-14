@@ -157,14 +157,19 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   const [selectionError, setSelectionError] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deletingId, setDeletingId] = useState('');
+  const [bulkSelectedKeys, setBulkSelectedKeys] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkOutcome, setBulkOutcome] = useState<{ successful: string[]; failed: { id: string; reason: string }[] } | null>(null);
   const [viewDetail, setViewDetail] = useState<{ id: string; status: 'loading' | 'ready' | 'error'; record: Record<string, unknown> | null; error: string } | null>(null);
   const detailRequest = useRef<AbortController | null>(null);
   const deleteRequest = useRef<AbortController | null>(null);
+  const batchRequest = useRef<AbortController | null>(null);
   const viewRequest = useRef<AbortController | null>(null);
   const currentTableSelection = useRef('');
   const deleteTemplate = label(props.deleteUrl);
   const deleteEnabled = Boolean(deleteTemplate);
-  useEffect(() => () => { detailRequest.current?.abort(); deleteRequest.current?.abort(); viewRequest.current?.abort(); }, []);
+  useEffect(() => () => { detailRequest.current?.abort(); deleteRequest.current?.abort(); batchRequest.current?.abort(); viewRequest.current?.abort(); }, []);
+  const clearBulkSelection = () => { setBulkSelectedKeys([]); setBulkOutcome(null); };
   const closeView = () => {
     viewRequest.current?.abort();
     viewRequest.current = null;
@@ -185,8 +190,60 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
       if (viewRequest.current === controller) viewRequest.current = null;
     }
   };
+  const deleteSelectedRecords = async () => {
+    if (!live || !deleteEnabled || !data || loading || bulkBusy || batchRequest.current || deleteRequest.current) return;
+    // Selection is scoped to the currently loaded server page, never hidden
+    // or unchecked records from earlier filters, searches or pagination.
+    const visible = new Set(data.items.map((row) => row.key));
+    const ids = bulkSelectedKeys.filter((id) => visible.has(id)).slice(0, 20);
+    if (!ids.length) return;
+    const endpoints = ids.map((id) => ({ id, url: overlaySubmitUrl(deleteTemplate, 'edit-selected', id) }));
+    if (endpoints.some((item) => !item.url)) {
+      setBulkOutcome({ successful: [], failed: ids.map((id) => ({ id, reason: '删除 URL 配置无效' })) });
+      return;
+    }
+    const controller = new AbortController();
+    batchRequest.current = controller;
+    setBulkBusy(true); setBulkOutcome(null);
+    const successful: string[] = [];
+    const failed: { id: string; reason: string }[] = [];
+    const timeout = setTimeout(() => controller.abort(), 60000);
+    try {
+      // Sequential requests prevent uncontrolled concurrency; each item has
+      // an independent server-authoritative result and can fail individually.
+      for (const { id, url } of endpoints) {
+        if (controller.signal.aborted) {
+          failed.push({ id, reason: '未执行，批量请求已取消或超时' });
+          continue;
+        }
+        try {
+          const response = await fetch(url!, { method: 'DELETE', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          successful.push(id);
+        } catch (problem) {
+          failed.push({ id, reason: controller.signal.aborted ? '请求中断，服务端结果待核对' : problem instanceof Error ? problem.message : '请求失败' });
+        }
+      }
+      if (successful.some((id) => id === viewDetail?.id)) closeView();
+      if (successful.includes(currentTableSelection.current)) {
+        detailRequest.current?.abort();
+        currentTableSelection.current = '';
+        onRecordSelect?.({ selectedId: '', selected: null, detailStatus: 'idle' });
+        setSelectionError('');
+      }
+      // Never rollback an acknowledged server DELETE: report partial success,
+      // retain only failures for an explicitly confirmed retry and refresh GET.
+      setBulkSelectedKeys(failed.map(({ id }) => id));
+      setBulkOutcome({ successful, failed });
+      window.dispatchEvent(new Event('atlas:records-refresh'));
+    } finally {
+      clearTimeout(timeout);
+      batchRequest.current = null;
+      setBulkBusy(false);
+    }
+  };
   const deleteRecord = async (id: string) => {
-    if (!live || !deleteEnabled || deleteRequest.current) return;
+    if (!live || !deleteEnabled || deleteRequest.current || batchRequest.current) return;
     const endpoint = overlaySubmitUrl(deleteTemplate, 'edit-selected', id);
     if (!endpoint) { setDeleteError('删除接口需要包含一个有效的 {id} 占位符'); return; }
     const controller = new AbortController();
@@ -197,6 +254,8 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
       const response = await fetch(endpoint, { method: 'DELETE', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       if (viewDetail?.id === id) closeView();
+      setBulkSelectedKeys((previous) => previous.filter((key) => key !== id));
+      setBulkOutcome(null);
       if (currentTableSelection.current === id) {
         detailRequest.current?.abort();
         currentTableSelection.current = '';
@@ -274,6 +333,10 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
             return;
           }
           setData(parsed); setError('');
+          // Server-authoritative page membership: never keep unchecked,
+          // deleted or cross-page IDs in a future bulk action.
+          const present = new Set(parsed.items.map((row) => row.key));
+          setBulkSelectedKeys((previous) => previous.filter((id) => present.has(id)));
         }
       } catch (caught) {
         if (!controller.signal.aborted) { setData(null); setError(caught instanceof Error ? caught.message : '请求失败'); }
@@ -299,29 +362,40 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     sortOrder: key === sortField ? (direction === 'asc' ? 'ascend' as const : direction === 'desc' ? 'descend' as const : null) : null,
     render: (value: unknown) => value === null || value === undefined ? '—' : String(value)
   }));
-  const selectionColumn = onRecordSelect || deleteEnabled ? [{ title: '操作', key: 'action', render: (_: unknown, row: RemoteTableRow) =>
+  const selectionColumn = [{ title: '操作', key: 'action', render: (_: unknown, row: RemoteTableRow) =>
     <Space size="small">
       {onRecordSelect ? <Button size="small" onClick={() => { void chooseRecord(row); }}>选择</Button> : null}
       <Button size="small" onClick={() => { void viewRecord(row); }}>查看</Button>
       {deleteEnabled ? <Popconfirm title="确认删除记录？" description={'删除记录 ' + row.key + ' 后不能撤销。'} okText="确认删除" cancelText="取消"
         onConfirm={() => { void deleteRecord(row.key); }}>
-        <Button size="small" danger disabled={!live || Boolean(deletingId)} loading={deletingId === row.key}>删除</Button>
+        <Button size="small" danger disabled={!live || Boolean(deletingId) || bulkBusy} loading={deletingId === row.key}>删除</Button>
       </Popconfirm> : null}
-    </Space> }] : [];
+    </Space> }];
   return <div className="pa-studio-rich pa-studio-remote-table" data-atlas-table-source="remote">
     <strong>{title}</strong>
-    <form className="pa-studio-widget-actions" onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(searchInput.trim().slice(0,120)); }}>
-      <Input aria-label="表格搜索" placeholder="搜索记录" size="small" style={{ maxWidth: 210 }} maxLength={120} value={searchInput} onChange={(event)=>setSearchInput(event.target.value)} disabled={!live}/>
-      <Button size="small" htmlType="submit">查询</Button>
-      {filterField && filterValues.length > 0 ? <select aria-label="表格筛选" value={filter} onChange={(event) => {setFilter(event.target.value); setPage(1);}}>
+    <form className="pa-studio-widget-actions" onSubmit={(event) => { event.preventDefault(); clearBulkSelection(); setPage(1); setSearch(searchInput.trim().slice(0,120)); }}>
+      <Input aria-label="表格搜索" placeholder="搜索记录" size="small" style={{ maxWidth: 210 }} maxLength={120} value={searchInput} onChange={(event)=>setSearchInput(event.target.value)} disabled={!live || bulkBusy}/>
+      <Button size="small" htmlType="submit" disabled={bulkBusy}>查询</Button>
+      {filterField && filterValues.length > 0 ? <select aria-label="表格筛选" value={filter} onChange={(event) => {clearBulkSelection(); setFilter(event.target.value); setPage(1);}} disabled={bulkBusy}>
         <option value="">全部状态</option>
         {filterValues.map((value) => <option key={value} value={value}>{value}</option>)}
       </select> : null}
-      <Button size="small" onClick={()=>setRevision((value)=>value+1)} disabled={loading}>刷新</Button>
+      <Button size="small" onClick={()=>{clearBulkSelection(); setRevision((value)=>value+1);}} disabled={loading || bulkBusy}>刷新</Button>
     </form>
     {error ? <small role="alert">表格加载失败：{error}</small> : null}
     {selectionError ? <small role="alert">记录详情加载失败：{selectionError}</small> : null}
     {deleteError ? <small role="alert">{deleteError}</small> : null}
+    {deleteEnabled ? <div className="pa-studio-widget-actions">
+      <small role="status">当前页已选择 {bulkSelectedKeys.length} 条（最多 {pageSize} 条；跨页不保留选择）</small>
+      <Popconfirm title="确认批量删除？" description={'将逐条请求删除当前页选中的 ' + bulkSelectedKeys.length + ' 条记录。部分失败不会回滚已经成功的删除。'}
+        okText="确认批量删除" cancelText="取消" onConfirm={() => { void deleteSelectedRecords(); }}>
+        <Button size="small" danger loading={bulkBusy} disabled={loading || bulkBusy || Boolean(deletingId) || !bulkSelectedKeys.length}>批量删除</Button>
+      </Popconfirm>
+      <Button size="small" disabled={bulkBusy || !bulkSelectedKeys.length} onClick={clearBulkSelection}>清空选择</Button>
+    </div> : null}
+    {bulkOutcome ? <Alert showIcon type={bulkOutcome.failed.length ? 'warning' : 'success'}
+      message={'批量删除：成功 ' + bulkOutcome.successful.length + ' 条，失败 ' + bulkOutcome.failed.length + ' 条'}
+      description={bulkOutcome.failed.length ? '失败记录（仅保留当前页可见项供再次确认）：' + bulkOutcome.failed.map((item) => item.id + '（' + item.reason + '）').join('；') + '。请求超时或断开时应核对后端状态，重复删除要求接口具备幂等语义。' : '已请求重新加载服务端列表。'}/> : null}
     <Drawer title={viewDetail ? '记录详情：' + viewDetail.id : '记录详情'} open={Boolean(viewDetail)} onClose={closeView} destroyOnHidden>
       {viewDetail?.status === 'loading' ? <Spin tip="正在加载详情"><div style={{ minHeight: 80 }}/></Spin> : null}
       {viewDetail?.status === 'error' ? <Alert type="error" showIcon message="记录详情加载失败" description={viewDetail.error}/> : null}
@@ -330,17 +404,26 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
           key, label: columns.find((column) => column.key === key)?.title ?? key, children: value === null || value === undefined ? '—' : String(value)
         }))}/> : null}
     </Drawer>
-    <Table<RemoteTableRow> size="small" rowKey="key" loading={loading} dataSource={data?.items ?? []}
+    <Table<RemoteTableRow> size="small" rowKey="key" loading={loading || bulkBusy} dataSource={data?.items ?? []}
+      {...(deleteEnabled ? { rowSelection: { selectedRowKeys: bulkSelectedKeys, onChange: (keys: (string | number | bigint)[]) => {
+        if (!bulkBusy && !loading) {
+          const visible = new Set(data?.items.map((item) => item.key) ?? []);
+          setBulkSelectedKeys(keys.map(String).filter((id) => visible.has(id)).slice(0, 20));
+          setBulkOutcome(null);
+        }
+      }, getCheckboxProps: () => ({ disabled: bulkBusy || loading || Boolean(deletingId) }) } } : {})}
       columns={[...displayColumns, ...selectionColumn]}
       pagination={{ current: page, pageSize, total: data?.total ?? 0, showSizeChanger: false }}
       onChange={(pagination, _filters, sorter) => {
+        if (bulkBusy) return;
         const rule = Array.isArray(sorter) ? sorter[0] : sorter;
         if (rule?.field === sortField && rule.order) {
+          clearBulkSelection();
           setDirection(rule.order === 'ascend' ? 'asc' : 'desc');
           setPage(1);
         } else if (rule?.field === sortField && !rule.order) {
-          setDirection(''); setPage(1);
-        } else if (pagination.current && pagination.current !== page) setPage(pagination.current);
+          clearBulkSelection(); setDirection(''); setPage(1);
+        } else if (pagination.current && pagination.current !== page) { clearBulkSelection(); setPage(pagination.current); }
       }}/>
     <small role="status">{error ? '服务器请求失败' : loading ? '正在加载…' : data ? ('共 ' + data.total + ' 条记录') : '尚无数据'}</small>
   </div>;
