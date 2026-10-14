@@ -521,6 +521,73 @@ export async function runExportedBrowserSmoke(directory) {
     assert.equal(tableRows.some((row) => row.id === 'T-2' || row.id === 'B-1'), false, 'Batch outcomes not applied by backend');
     assert(deleteHeaders.every((entry) => entry.etag === '"v1"'), 'Prior DELETE requests lacked configured If-Match strong ETag');
 
+    // B4: strong ETag stale precondition, definitive 412, authoritative
+    // refresh, then a new manual confirmation with the current version.
+    tableRows.push({id:'C-1',name:'并发冲突对象',status:'待开始',etag:'"v1"'});
+    const refreshRemoteTable = () => evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table .pa-studio-widget-actions button')].find(el=>el.textContent?.replace(/\\s/g,'')==='刷新');if(!b)return false;b.click();return true;})()");
+    const nextRemotePage = () => evaluate("(() => {const b=document.querySelector('.pa-studio-remote-table .ant-pagination-next button');if(!b)return false;b.click();return true;})()");
+    assert(await refreshRemoteTable(), 'B4 conflict fixture refresh unavailable');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 3 条记录')"), 'B4 conflict count unavailable');
+    assert(await nextRemotePage(), 'B4 conflict next page unavailable');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('并发冲突对象')"), 'B4 conflict target not loaded');
+    tableRows.find((row) => row.id === 'C-1').etag = '"v2"';
+    const conflictCallsStart = deleteCalls.length;
+    assert(await deleteRow('并发冲突对象'), 'B4 row delete button unavailable');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'B4 conflict confirmation unavailable');
+    assert(await confirmDelete(), 'B4 conflict confirmation cannot submit');
+    await until(() => deleteCalls.length === conflictCallsStart + 1, 'B4 conditional DELETE missing');
+    assert.deepEqual(deleteHeaders.at(-1), {url:'/api/delete/C-1',etag:'"v1"'}, 'B4 conditional request did not use loaded ETag');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table [role=alert]')?.textContent?.includes('HTTP 412')"), 'B4 conflict was not displayed');
+    assert(tableRows.some((row) => row.id === 'C-1'), 'B4 stale precondition removed server record');
+    // A real GET must refresh the guarded row with the new ETag.
+    await until(() => tableCalls.at(-1)?.page === '2', 'B4 conflict did not cause server refresh');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('并发冲突对象')"), 'B4 refreshed conflict target missing');
+    await pause(250);
+    assert(await deleteRow('并发冲突对象'), 'B4 conflict retry button missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'B4 new-version confirmation missing');
+    assert(await confirmDelete(), 'B4 new-version delete confirmation unavailable');
+    await until(() => deleteCalls.length === conflictCallsStart + 2, 'B4 explicit new-version DELETE missing');
+    assert.deepEqual(deleteHeaders.at(-1), {url:'/api/delete/C-1',etag:'"v2"'}, 'B4 retry did not use refreshed ETag');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 2 条记录')"), 'B4 success did not reconcile GET');
+    assert(!tableRows.some((row) => row.id === 'C-1'), 'B4 latest-version delete failed');
+
+    // Indeterminate result: mock server commits C-2, then proxy reports 503.
+    // The client must stop before writing C-3, report unknown + skipped, and
+    // never silently resend C-2.
+    tableRows.push({id:'C-2',name:'已执行但返回503',status:'待开始',etag:'"v1"'});
+    tableRows.push({id:'C-3',name:'未执行的下一条',status:'进行中',etag:'"v1"'});
+    assert(await refreshRemoteTable(), 'B4 uncertain fixture refresh unavailable');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'B4 uncertain fixture total missing');
+    assert(await nextRemotePage(), 'B4 uncertain next page unavailable');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('已执行但返回503')"), 'B4 unknown-result row missing');
+    assert(await selectBulkRow('已执行但返回503'), 'B4 unknown-result selection missing');
+    assert(await selectBulkRow('未执行的下一条'), 'B4 next-row selection missing');
+    await until(() => selectedCount(2), 'B4 selected two rows missing');
+    commitThen503Id = 'C-2';
+    const beforeUnknown = deleteCalls.length;
+    assert(await batchTrigger(), 'B4 uncertain bulk action missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'B4 unknown confirmation unavailable');
+    assert(await confirmBulk(), 'B4 unknown confirmation failed');
+    await until(() => deleteCalls.length === beforeUnknown + 1, 'B4 uncertain DELETE was not issued');
+    assert.deepEqual(deleteCalls.slice(beforeUnknown), ['/api/delete/C-2'], 'B4 sent later DELETE after uncertain write');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table .ant-alert')?.textContent?.includes('结果不确定 1 条，未执行 1 条')"), 'B4 unknown/skipped result not shown');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 3 条记录')"), 'B4 unknown response did not reconcile actual server GET');
+    await until(() => selectedCount(0), 'B4 unknown write was offered as automatic retry');
+    assert.equal(deleteCalls.length, beforeUnknown + 1, 'B4 unknown write was blindly retried');
+    assert(!tableRows.some((row) => row.id === 'C-2'), 'B4 simulated server-side commit missing');
+    assert(tableRows.some((row) => row.id === 'C-3'), 'B4 skipped write erroneously executed');
+
+    // Missing strong ETag must fail closed before the next destructive request.
+    tableRows.find((row) => row.id === 'C-3').etag = '';
+    assert(await refreshRemoteTable(), 'B4 missing ETag refresh missing');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('未执行的下一条')"), 'B4 missing ETag row unavailable');
+    const beforeMissingEtag = deleteCalls.length;
+    assert(await deleteRow('未执行的下一条'), 'B4 missing-version DELETE trigger missing');
+    await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'B4 missing-version confirmation missing');
+    assert(await confirmDelete(), 'B4 missing-version confirmation missing action');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table [role=alert]')?.textContent?.includes('强 ETag 前置条件无效')"), 'B4 missing strong ETag not blocked');
+    assert.equal(deleteCalls.length, beforeMissingEtag, 'B4 missing ETag issued an unguarded DELETE');
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -528,7 +595,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
