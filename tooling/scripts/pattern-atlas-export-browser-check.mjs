@@ -43,6 +43,9 @@ export async function runExportedBrowserSmoke(directory) {
   const followupCalls = [];
   const detailCalls = [];
   let listReads = 0;
+  // Deterministic fault injection for exported-table detail request races/recovery.
+  let slowNextDetailId = '';
+  let failNextDetailId = '';
   const api = createServer(async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:4189');
     response.setHeader('Access-Control-Allow-Methods', 'POST, PATCH, OPTIONS');
@@ -54,6 +57,8 @@ export async function runExportedBrowserSmoke(directory) {
       const id = decodeURIComponent(request.url.slice('/api/row/'.length));
       const row = tableRows.find((record) => record.id === id);
       if (!row) { response.writeHead(404); response.end('{}'); return; }
+      if (slowNextDetailId === id) { slowNextDetailId = ''; await pause(1200); }
+      if (failNextDetailId === id) { failNextDetailId = ''; response.writeHead(503); response.end('{"error":"temporary detail failure"}'); return; }
       response.writeHead(200);
       response.end(JSON.stringify({data: id === 'T-4'
         ? {id:'wrong-record',name:'非法错误详情'}
@@ -309,6 +314,41 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table [role=alert]')?.textContent?.includes('主键不匹配')"), 'Mismatched detail ID was not rejected');
     assert(await evaluate("([...document.querySelectorAll('button')].find(b=>b.textContent?.includes('编辑跨页记录'))?.disabled === true)"), 'Invalid detail record must block edit');
 
+    // Rapid row switching: an older, slower mismatched detail request must not
+    // overwrite the later successful selection or disable its edit control.
+    const chooseIsolatedRow = (name) => evaluate("(() => { const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes(" + JSON.stringify(name) + ")); const button=row?.querySelector('button'); if(!button)return false;button.click();return true;})()");
+    const editIsolatedEnabled = () => evaluate("([...document.querySelectorAll('button')].find(b=>b.textContent?.trim()==='编辑跨页记录')?.disabled === false)");
+    const detailCount = (id) => detailCalls.filter((path) => path === '/api/row/' + id).length;
+    slowNextDetailId = 'T-4';
+    const slowStart = detailCount('T-4');
+    assert(await chooseIsolatedRow('另一对象'), 'Slow detail row cannot be selected');
+    await until(() => detailCount('T-4') > slowStart, 'Slow detail request did not start');
+    assert.equal(await editIsolatedEnabled(), false, 'Edit enabled while detail is pending');
+    const freshStart = detailCount('T-3');
+    assert(await chooseIsolatedRow('独立表格修改'), 'New detail row cannot supersede pending selection');
+    await until(() => detailCount('T-3') > freshStart, 'Replacement detail request did not start');
+    await until(editIsolatedEnabled, 'Replacement detail did not enable editing');
+    await pause(1350);
+    assert.equal(await editIsolatedEnabled(), true, 'Cancelled stale response poisoned newer selection');
+    assert.equal(await evaluate("Boolean(document.querySelector('.pa-studio-remote-table [role=alert]'))"), false, 'Stale detail failure surfaced after replacement');
+    assert(await click('编辑跨页记录'), 'Replacement record edit trigger missing');
+    await until(() => evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.value === '详情独立表格修改'"), 'Rapid selection opened stale record');
+    await evaluate("document.querySelector('.ant-modal-footer button.ant-btn-default')?.click()");
+
+    // An explicit HTTP detail failure must block PATCH; a subsequent retry
+    // must recover without route reload or a record-list provider.
+    failNextDetailId = 'T-3';
+    const errorStart = detailCount('T-3');
+    assert(await chooseIsolatedRow('独立表格修改'), 'HTTP failure scenario row missing');
+    await until(() => detailCount('T-3') > errorStart, 'Failed detail GET did not start');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table [role=alert]')?.textContent?.includes('HTTP 503')"), 'HTTP failure not surfaced');
+    assert.equal(await editIsolatedEnabled(), false, 'HTTP failed detail enabled edit');
+    const retryStart = detailCount('T-3');
+    assert(await chooseIsolatedRow('独立表格修改'), 'Detail retry row missing');
+    await until(() => detailCount('T-3') > retryStart, 'Detail retry request missing');
+    await until(editIsolatedEnabled, 'Successful detail retry did not restore edit');
+    assert.equal(await evaluate("Boolean(document.querySelector('.pa-studio-remote-table [role=alert]'))"), false, 'Successful retry did not clear prior detail error');
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -316,7 +356,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit and mismatched-ID protection', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
