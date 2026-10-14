@@ -362,7 +362,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     sortOrder: key === sortField ? (direction === 'asc' ? 'ascend' as const : direction === 'desc' ? 'descend' as const : null) : null,
     render: (value: unknown) => value === null || value === undefined ? '—' : String(value)
   }));
-  const selectionColumn = onRecordSelect || deleteEnabled ? [{ title: '操作', key: 'action', render: (_: unknown, row: RemoteTableRow) =>
+  const selectionColumn = [{ title: '操作', key: 'action', render: (_: unknown, row: RemoteTableRow) =>
     <Space size="small">
       {onRecordSelect ? <Button size="small" onClick={() => { void chooseRecord(row); }}>选择</Button> : null}
       <Button size="small" onClick={() => { void viewRecord(row); }}>查看</Button>
@@ -370,7 +370,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
         onConfirm={() => { void deleteRecord(row.key); }}>
         <Button size="small" danger disabled={!live || Boolean(deletingId) || bulkBusy} loading={deletingId === row.key}>删除</Button>
       </Popconfirm> : null}
-    </Space> }] : [];
+    </Space> }];
   return <div className="pa-studio-rich pa-studio-remote-table" data-atlas-table-source="remote">
     <strong>{title}</strong>
     <form className="pa-studio-widget-actions" onSubmit={(event) => { event.preventDefault(); clearBulkSelection(); setPage(1); setSearch(searchInput.trim().slice(0,120)); }}>
