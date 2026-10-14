@@ -2,7 +2,7 @@
  * Never save tokens, cookies, passwords, authorization headers or executable expressions.
  */
 import { validRecordField, validRecordPath, validRecordUrl, type StudioRecord, type StudioRecordListBinding, type StudioRecordSubmitBinding } from './record-bindings';
-import { mapIncomingRecord, normalizeFieldMappings, validQueryParameter, type StudioFieldMapping } from './source-query';
+import { buildStudioListUrl, mapIncomingRecord, normalizeFieldMappings, validQueryParameter, type StudioFieldMapping } from './source-query';
 
 export interface StudioDataSource {
   id: string;
@@ -122,6 +122,36 @@ export function resolveRecordList(binding: StudioRecordListBinding | undefined, 
     ...(source.createUrl ? { createUrl: source.createUrl } : {}),
     ...(source.deleteUrl ? { deleteUrl: source.deleteUrl } : {}),
     ...(source.detailUrl ? { detailUrl: source.detailUrl, detailPath: source.detailPath } : { detailUrl: '', detailPath: '' }) };
+}
+/** Resolve one project-level server data contract into a self-contained table
+ *  runtime. Keep direct-URL table designs unchanged. Missing/invalid shared
+ *  sources fail closed and NEVER fall back to possibly stale local endpoints.
+ *  Used by both Studio live preview and the standalone page generator.
+ */
+export function resolveTableWidgetProps(props: Record<string, unknown>, sources: readonly StudioDataSource[]): Record<string, unknown> {
+  const id = typeof props.sourceId === 'string' ? props.sourceId : '';
+  if (!id) return props;
+  const source = sources.find((item) => item.id === id);
+  const base = { ...props, sourceId: '', sourceQueryMode: 'shared', dataUrl: '', detailUrl: '', deleteUrl: '', fieldMappings: [],
+    sourceError: '关联的数据源不存在或不支持服务端分页' };
+  if (!source || source.paginationMode !== 'server' || !source.listUrl || !validRecordUrl(source.listUrl)) return base;
+  // Preserve the existing query-builder validation contract, including
+  // duplicate parameter rejection. It is not safe to silently rename params.
+  try {
+    buildStudioListUrl({ ...source, url: source.listUrl }, 1);
+  } catch {
+    return { ...base, sourceError: '共享数据源的分页参数配置无效' };
+  }
+  return {
+    ...base, sourceError: '', dataUrl: source.listUrl, detailUrl: source.detailUrl, detailPath: source.detailPath || 'data',
+    deleteUrl: source.deleteUrl ?? '', itemsPath: source.itemsPath, totalPath: source.totalPath || 'data.total',
+    idField: source.idField, pageSize: Math.min(20, source.pageSize), filterField: source.filterField ?? '',
+    filterValues: source.filterValues?.join(',') ?? '', sortField: source.sortField ?? '',
+    fieldMappings: normalizeFieldMappings(source.fieldMappings),
+    pageParam: source.pageParam || 'page', sizeParam: source.sizeParam || 'pageSize',
+    searchParam: source.searchParam || 'search', filterParam: source.filterParam || 'status',
+    sortParam: source.sortParam || 'sortBy', sortDirectionParam: source.sortDirectionParam || 'sortOrder'
+  };
 }
 export function resolveRecordSubmit(binding: StudioRecordSubmitBinding | undefined, sources: readonly StudioDataSource[]): StudioRecordSubmitBinding | undefined {
   if (!binding) return undefined;

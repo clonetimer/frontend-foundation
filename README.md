@@ -66,6 +66,12 @@ pnpm dev:studio   # 仅启动新的 Showcase 设计工作台
 
 **安全与限制**：组件仅使用浏览器同源凭据策略（`credentials: same-origin`）；跨域接口需按部署环境配置 CORS/认证。**真正的权限验证、授权、并发版本冲突处理与数据完整性必须由后端承担**，不能把按钮隐藏当作权限控制。不要把 Token/密码放入 Studio 文档或 URL。B3 **不是**服务端事务性批量 API，不支持跨页选择、原子回滚或失败后自动重试；网络中断或超时存在结果不确定性，应从后端核对状态后再重试，生产接口应具有幂等语义。部分业务工作流和 API 能力仍需接入实际后端验收，独立 ZIP 构建 PASS 不等同于生产可用。
 
+### Phase 22-C1 · 项目级共享表格数据源
+
+表格现可复用与记录列表、编辑表单共用的**项目级接口数据源**：在 Studio「接口管理」中创建并配置来源，设置 `paginationMode=server` 和有效的列表 GET 地址，然后在表格右侧「共享表格数据源」中选择该来源。此模式会统一接管表格的 `listUrl`、`detailUrl`、`deleteUrl`、路径、主键、每页记录数以及安全字段映射；`tableColumns` 仍由表格单独决定显示哪些字段。`sourceId` 保留在可再次编辑的 `atlas.studio.json` 中，独立 React ZIP 则将来源解析为运行时接口配置，**不要求导出项目访问原设计工作台**。
+
+共享查询遵循数据源中设置的 `pageParam`、`sizeParam`、`searchParam`、`filterParam`、`sortParam` 和 `sortDirectionParam`（默认 `page/pageSize/search/status/sortBy/sortOrder`），与原独立表格的 `filterField/filter/sort/order` 兼容模式不同。字段映射使用经过验证的 `fieldMappings`，将服务端嵌套字段同时映射到**表格展示列和详情 GET 的只读/编辑记录**；详情响应原始或映射后的记录 ID 与当前选择不符时均会拒绝继续编辑。**缺失、非法或不支持服务端分页的共享数据源会拒绝回退旧 URL**，避免误访问旧服务器。旧的直接 `dataUrl` 配置不受影响；初版暂不将图表、文件或异步任务直接迁移到同一数据契约。
+
 ### 验证入口
 
 ```bash

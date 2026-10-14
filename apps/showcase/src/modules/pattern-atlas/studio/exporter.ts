@@ -3,7 +3,7 @@ import { designCssVariables } from '../effects/config';
 import { nodeLabel, serializeStudioDocument, walkNodes, type StudioDecoration, type StudioDocument } from './model';
 import { findRecordFields, type StudioRecordListBinding } from './record-bindings';
 import { exportedRecordRuntime } from './record-exporter';
-import { resolveRecordList, resolveRecordSubmit } from './data-sources';
+import { resolveRecordList, resolveRecordSubmit, resolveTableWidgetProps } from './data-sources';
 import { studioEffectStyles } from './effect-styles';
 import { exportedWidgetCatalog, exportedWidgetPreview } from './exported-widgets';
 import { exportedWorkflowRuntime } from './exported-workflows';
@@ -180,6 +180,9 @@ export function generateReactPage(document: StudioDocument, pageId: string): str
   // Resolve shared-source references when generating standalone code. The original
   // Studio file retains references so that editing one source updates every binding.
   const exportDecorations: Record<string, StudioDecoration> = Object.fromEntries(Object.entries(document.decorations).map(([key, value]) => {
+    if (value.widgetKind === 'table') {
+      return [key, { ...value, widgetProps: resolveTableWidgetProps(value.widgetProps ?? {}, document.dataSources) }];
+    }
     if (value.widgetKind === 'modal' || value.widgetKind === 'drawer') {
       const props = value.widgetProps ?? {};
       const sourceId = typeof props.sourceId === 'string' ? props.sourceId : '';
@@ -437,6 +440,10 @@ Studio 中选中「数据表格」，将 \`dataUrl\` 设为 \`/api/records\`、\
 可选配置 \`deleteEtagField=etag\`，要求表格列表的每条记录带合法强 ETag（例如 \`{"id":"A-1","etag":"\\"rev-2\\""}\`）。启用后，DELETE 会传递 \`If-Match: "rev-2"\`，并要求后端原子校验记录版本；缺失、不合法或弱 ETag 时前端拒绝发送删除请求。跨域部署需允许 \`If-Match\` 请求头。若后端不支持强 ETag，可留空该字段，但就没有并发删除保护。
 
 HTTP 401/403 是权限拒绝；404/409/412/428 视为版本或状态冲突，刷新 GET 核对后重新选择。HTTP 5xx、超时和网络中断均视为**执行结果不确定**，批量请求停止后续写入，不自动重试不确定项；后端必须实现鉴权、幂等和审计。前端提示/禁用按钮不构成服务端权限策略。
+
+### 项目级共享数据源（Phase 22-C1）
+
+如在 Studio 表格配置了 \`sourceId\`，本 ZIP 已将该项目数据源解析为本地页面所需的真实 \`dataUrl\`、详情、删除、参数字段和安全映射，无需连接设计工作台；原 \`atlas.studio.json\` 仍保留 \`sourceId\` 供再次编辑。仅支持服务端分页共享源，按共享源的 \`pageParam\` / \`sizeParam\` / \`searchParam\` / \`filterParam\` / \`sortParam\` / \`sortDirectionParam\` 传递查询条件。如源已失效会报错且不会回退之前填写的 URL。老的直接 URL 表格不受影响。服务端必须实现对应查询契约与鉴权。
 
 注意：绝对坐标以当前页面内容区左上角为原点，由 React portal 统一定位；响应式断点需自行检查组件是否溢出。原 Foundation Compiler 不读取 Studio 专有的尺寸偏移、交互、数据接口和特效元数据。要获得这部分行为，请使用此包的 React TSX/CSS 输出。不要只编译 Blueprint 后期待其包含所有动效与 API。
 ` },

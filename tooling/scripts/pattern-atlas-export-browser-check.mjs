@@ -67,7 +67,9 @@ export async function runExportedBrowserSmoke(directory) {
       response.writeHead(200);
       response.end(JSON.stringify({data: id === 'T-4'
         ? {id:'wrong-record',name:'非法错误详情'}
-        : {...row,name:'详情'+row.name,email:'detail@example.org'}}));
+        : id === 'T-3'
+          ? {...row,name:'不应显示的详情字段',alias:{name:'详情'+row.name},email:'detail@example.org'}
+          : {...row,name:'详情'+row.name,email:'detail@example.org'}}));
       return;
     }
     if (request.method === 'GET' && request.url?.startsWith('/api/table')) {
@@ -77,7 +79,9 @@ export async function runExportedBrowserSmoke(directory) {
       let records = [...tableRows];
       const search = (query.searchParams.get('search') ?? '').trim();
       if (search) records = records.filter((item) => item.name.includes(search));
-      if (query.searchParams.get('filterField') === 'status' && query.searchParams.get('filter')) {
+      if (query.searchParams.get('view') === 'shared' && query.searchParams.get('state')) {
+        records = records.filter((item) => item.status === query.searchParams.get('state'));
+      } else if (query.searchParams.get('filterField') === 'status' && query.searchParams.get('filter')) {
         records = records.filter((item) => item.status === query.searchParams.get('filter'));
       }
       if (query.searchParams.get('sort') === 'name' && query.searchParams.get('order')) {
@@ -86,7 +90,9 @@ export async function runExportedBrowserSmoke(directory) {
       const page = Math.max(1, Number(query.searchParams.get('page') || '1'));
       const pageSize = Math.max(1, Math.min(20, Number(query.searchParams.get('pageSize') || '2')));
       response.writeHead(200); response.end(JSON.stringify({data:{
-        items: records.slice((page - 1) * pageSize, page * pageSize), total: records.length
+        items: records.slice((page - 1) * pageSize, page * pageSize).map((record) =>
+          query.searchParams.get('view') === 'shared' ? {...record, name:'不应显示的原始字段', alias:{name:record.name}} : record),
+        total: records.length
       }})); return;
     }
     if (request.method === 'DELETE' && request.url?.startsWith('/api/delete/')) {
@@ -319,6 +325,15 @@ export async function runExportedBrowserSmoke(directory) {
     // selected on table page 2 must still feed detail GET and the edit modal.
     await evaluate("location.hash = '#/isolated'");
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('无列表远程表格')"), 'Isolated table-only route');
+    await until(() => tableCalls.some((entry) => entry.view === 'shared'), 'Shared project-level table source did not issue GET');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('更新姓名')"), 'Shared field mapping did not map alias.name to name');
+    assert.equal(await evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('不应显示的原始字段')"), false, 'Shared mapping failed to override raw name');
+    const priorSharedReads = tableCalls.length;
+    assert(await evaluate("(() => { const field=document.querySelector('.pa-studio-remote-table select[aria-label=表格筛选]'); if(!field)return false;field.value='待开始';field.dispatchEvent(new Event('change',{bubbles:true}));return true;})()"), 'Shared table filter control missing');
+    await until(() => tableCalls.slice(priorSharedReads).some((request) => request.view === 'shared' && request.state === '待开始' && !request.filterField && !request.filter), 'Shared table did not honor custom state query parameter');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 1 条记录')"), 'Custom shared filter was not applied by server');
+    assert(await evaluate("(() => { const field=document.querySelector('.pa-studio-remote-table select[aria-label=表格筛选]'); if(!field)return false;field.value='';field.dispatchEvent(new Event('change',{bubbles:true}));return true;})()"), 'Shared table filter reset missing');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Shared table filter reset not server-authoritative');
     assert(await evaluate("!document.querySelector('.atlas-record-list')"), 'Isolated page unexpectedly contains record list');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Isolated table data');
     assert(await evaluate("(() => { const button=document.querySelector('.pa-studio-remote-table .ant-pagination-next button'); if (!button) return false; button.click(); return true; })()"), 'Isolated table page 2 action');
@@ -328,6 +343,7 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.ant-modal') === null && [...document.querySelectorAll('button')].some(b=>b.textContent?.includes('编辑跨页记录') && !b.disabled)"), 'Editable detail loaded');
     assert(await click('编辑跨页记录'), 'Independent edit modal trigger');
     await until(() => evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.value === '详情可查对象'"), 'Detail GET did not prefill table-selected record');
+    assert.equal(await evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.value === '不应显示的详情字段'"), false, 'Shared detail field mappings were not applied');
     assert.equal(await evaluate("document.querySelector('.ant-modal input[aria-label=邮箱]')?.value"), 'detail@example.org', 'Hidden form field not hydrated from detail');
     await evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.focus()");
     await evaluate("document.querySelector('.ant-modal input[aria-label=姓名]')?.select()");

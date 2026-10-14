@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, normalizeWidgetProps, overlaySubmitUrl } from '../studio/widgets';
 import { createStudioDocument, createNode, insertNode, setDecoration, serializeStudioDocument, parseStudioFile } from '../studio/model';
+import { newServerDemoSource, resolveTableWidgetProps, normalizeDataSources } from '../studio/data-sources';
+import { buildStudioListUrl } from '../studio/source-query';
 import { generateReactPage, projectExportFiles } from '../studio/exporter';
 import { exportedWidgetCatalog, exportedWidgetPreview } from '../studio/exported-widgets';
 
@@ -88,6 +90,47 @@ describe('Phase 22 · remote business tables', () => {
     expect(files.find((item)=>item.name==='widgets.ts')?.text).toBe(exportedWidgetCatalog);
     expect(files.find((item)=>item.name==='studio-records.tsx')?.text).toContain('onRecordSelect');
     expect(files.find((item)=>item.name==='studio-widget-preview.tsx')?.text).toContain('确认删除记录？');
+  });
+  it('shares one project-level table contract with fail-closed missing references and standalone export', () => {
+    const server={...newServerDemoSource('shared-table'), listUrl:'/api/shared?scope=team'};
+    const original=normalizeWidgetProps('table',{sourceId:'shared-table',dataUrl:'/stale-get',
+      detailUrl:'/stale-detail/{id}',deleteUrl:'/stale-delete/{id}',tableColumns:'title|名称\\nstatus|状态'});
+    const linked=resolveTableWidgetProps(original,normalizeDataSources([server]));
+    expect(linked.dataUrl).toBe('/api/shared?scope=team');
+    expect(linked.deleteUrl).toBe('/api/studio-records-mapped/{id}');
+    expect(linked.itemsPath).toBe('data.entries');
+    expect(linked.totalPath).toBe('data.count');
+    expect(linked.sourceQueryMode).toBe('shared');
+    expect(linked.fieldMappings).toEqual(server.fieldMappings);
+    expect(buildStudioListUrl({ ...server,url:linked.dataUrl as string},2,'task',{filter:'ready',direction:'asc'}))
+      .toContain('scope=team');
+    expect(linked.filterParam).toBe('status');
+    const missing=resolveTableWidgetProps(original,[]);
+    expect(missing.dataUrl).toBe('');
+    expect(missing.deleteUrl).toBe('');
+    expect(missing.sourceError).toContain('不存在');
+    const invalid=resolveTableWidgetProps(original,[{...server, paginationMode:'client'}]);
+    expect(invalid.dataUrl).toBe('');
+    let doc=createStudioDocument();
+    const page=doc.blueprint.pages[0]!;
+    doc.dataSources=normalizeDataSources([server]);
+    page.composition=insertNode(page.composition!,page.composition!.id,createNode('table','sharedTable'),'inside');
+    doc=setDecoration(doc,page.id+':sharedTable',{widgetKind:'table',widgetProps:original});
+    const roundtrip=parseStudioFile(serializeStudioDocument(doc));
+    expect(roundtrip.decorations[page.id+':sharedTable']?.widgetProps?.sourceId).toBe('shared-table');
+    const pageCode=generateReactPage(roundtrip,page.id);
+    expect(pageCode).toContain('/api/shared?scope=team');
+    expect(pageCode).not.toContain('/stale-get');
+    expect(pageCode).not.toContain('/stale-delete/{id}');
+    expect(pageCode).toContain('fieldMappings');
+    expect(pageCode).toContain('subject');
+    expect(pageCode).toContain('saveField');
+    const orphan=parseStudioFile(serializeStudioDocument({...doc,dataSources:[]}));
+    const orphanCode=generateReactPage(orphan,page.id);
+    expect(orphanCode).toContain('关联的数据源不存在或不支持服务端分页');
+    expect(orphanCode).not.toContain('/api/shared?scope=team');
+    expect(orphanCode).not.toContain('/stale-get');
+    expect(orphanCode).not.toContain('/stale-delete/{id}');
   });
   it('keeps deletion opt-in and rejects invalid DELETE URL templates', () => {
     expect(normalizeWidgetProps('table', {}).deleteUrl).toBe('');

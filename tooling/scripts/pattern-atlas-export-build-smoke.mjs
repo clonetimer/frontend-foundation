@@ -44,7 +44,20 @@ function exec(program, args, cwd) {
     let document = createStudioDocument();
     if (browserAcceptance) {
       const pageId = document.blueprint.pages[0].id;
-      document.dataSources = [{ ...newDemoSource('overlay-edit'), saveUrl: 'http://127.0.0.1:4198/api/edit/{id}' }];
+      document.dataSources = [
+        { ...newDemoSource('overlay-edit'), saveUrl: 'http://127.0.0.1:4198/api/edit/{id}' },
+        { ...newDemoSource('isolated-table-shared'), name: '共享远程表格源',
+          listUrl: 'http://127.0.0.1:4198/api/table?view=shared',
+          detailUrl: 'http://127.0.0.1:4198/api/row/{id}',
+          deleteUrl: 'http://127.0.0.1:4198/api/delete/{id}',
+          itemsPath: 'data.items', totalPath: 'data.total', detailPath: 'data',
+          idField: 'id', labelField: 'name', pageSize: 2,
+          paginationMode: 'server', pageParam: 'page', sizeParam: 'pageSize', searchParam: 'search',
+          filterField: 'status', filterParam: 'state', filterValues: ['进行中','待开始','已完成'],
+          sortField: 'name', sortParam: 'sort', sortDirectionParam: 'order',
+          fieldMappings: [{field:'name',responsePath:'alias.name',saveField:'name'}]
+        }
+      ];
       const fixtures = [
         { id: 'browserModal', kind: 'modal', props: { title: '验收弹窗', triggerText: '打开验收弹窗', description: '验收弹窗内容', okText: '确认', cancelText: '取消' } },
         { id: 'browserDrawer', kind: 'drawer', props: { title: '验收抽屉', triggerText: '打开验收抽屉', description: '验收抽屉内容', placement: 'right', width: 420 } },
@@ -82,11 +95,10 @@ function exec(program, args, cwd) {
       document.blueprint.pages.push(isolated);
       document = setDecoration(document, 'isolated:isolatedTable22', {
         widgetKind: 'table',
-        widgetProps: { title: '无列表远程表格', dataUrl: 'http://127.0.0.1:4198/api/table', itemsPath: 'data.items', totalPath: 'data.total',
-          idField: 'id', detailUrl: 'http://127.0.0.1:4198/api/row/{id}', detailPath: 'data',
-          deleteUrl: 'http://127.0.0.1:4198/api/delete/{id}',
-          deleteEtagField: 'etag',
-          tableColumns: 'name|名称\nstatus|状态', pageSize: 2, sortField: 'name', filterField: 'status', filterValues: '进行中,待开始,已完成' }
+        widgetProps: { title: '无列表远程表格', sourceId: 'isolated-table-shared',
+          dataUrl: '/should-never-be-used', detailUrl: '/should-never-delete/{id}',
+          deleteUrl: '/should-never-delete/{id}', deleteEtagField: 'etag',
+          tableColumns: 'name|名称\nstatus|状态' }
       });
       document = setDecoration(document, 'isolated:isolatedEdit22', {
         widgetKind: 'modal',
