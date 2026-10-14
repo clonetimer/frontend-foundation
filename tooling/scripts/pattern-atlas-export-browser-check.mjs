@@ -368,6 +368,7 @@ export async function runExportedBrowserSmoke(directory) {
     const deleteRow = (name) => evaluate("(() => { const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes(" + JSON.stringify(name) + "));const button=[...(row?.querySelectorAll('button')??[])].find(el=>el.textContent?.trim()==='删除');if(!button)return false;button.click();return true;})()");
     const confirmDelete = () => evaluate("(() => { const button=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(el=>el.textContent?.trim()==='确认删除');if(!button)return false;button.click();return true;})()");
     const cancelDelete = () => evaluate("(() => { const button=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(el=>el.textContent?.trim()==='取消');if(!button)return false;button.click();return true;})()");
+    console.log('DELETE DOM diagnostics:', await evaluate("JSON.stringify([...document.querySelectorAll('.pa-studio-remote-table tbody tr')].map(row=>({text:row.textContent?.slice(0,160),buttons:[...row.querySelectorAll('button')].map(b=>({text:b.textContent?.trim(),html:b.outerHTML.slice(0,280)}))})))"));
     assert(await deleteRow('独立表格修改'), 'Row delete action not rendered');
     await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'Row delete confirmation missing');
     assert.equal(deleteCalls.length, 0, 'DELETE sent before explicit confirmation');
