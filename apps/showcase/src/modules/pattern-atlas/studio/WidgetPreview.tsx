@@ -155,6 +155,9 @@ async function requestRemoteDelete(endpoint: string, signal: AbortSignal, etag?:
 function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<string, unknown>; live: boolean; onRecordSelect?: ((selection: OverlayRecordSelection) => void) | undefined }) {
   const title = label(props.title, '数据表格');
   const sourceUrl = apiUrl(props.dataUrl);
+  const sourceError = label(props.sourceError);
+  const sharedQuery = props.sourceQueryMode === 'shared';
+  const mappingsKey = JSON.stringify(props.fieldMappings ?? []);
   const columns = parseRemoteTableColumns(props.tableColumns);
   const idField = label(props.idField, 'id');
   const itemsPath = label(props.itemsPath, 'data.items');
@@ -337,11 +340,31 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
       try {
         if (!columns.length) throw new Error('表格列配置无效');
         const address = new URL(sourceUrl, window.location.href);
-        address.searchParams.set('page', String(page));
-        address.searchParams.set('pageSize', String(pageSize));
-        if (search) address.searchParams.set('search', search);
-        if (filter && filterField) { address.searchParams.set('filterField', filterField); address.searchParams.set('filter', filter); }
-        if (direction && sortField) { address.searchParams.set('sort', sortField); address.searchParams.set('order', direction); }
+        if (sharedQuery) {
+          const keys = [label(props.pageParam, 'page'), label(props.sizeParam, 'pageSize'),
+            label(props.searchParam, 'search'), ...(filterField ? [label(props.filterParam, 'status')] : []),
+            ...(sortField ? [label(props.sortParam, 'sortBy'), label(props.sortDirectionParam, 'sortOrder')] : [])];
+          if (keys.some((key) => !/^[A-Za-z][\\w-]{0,39}$/.test(key)) || new Set(keys).size !== keys.length) {
+            throw new Error('共享数据源查询参数存在无效或重复字段');
+          }
+          address.searchParams.set(keys[0]!, String(page));
+          address.searchParams.set(keys[1]!, String(pageSize));
+          if (search) address.searchParams.set(keys[2]!, search);
+          else address.searchParams.delete(keys[2]!);
+          if (filterField && filter && filterValues.includes(filter)) address.searchParams.set(keys[3]!, filter);
+          else if (filterField) address.searchParams.delete(keys[3]!);
+          if (sortField) {
+            const sortKey = keys[filterField ? 4 : 3]!, orderKey = keys[filterField ? 5 : 4]!;
+            if (direction) { address.searchParams.set(sortKey, sortField); address.searchParams.set(orderKey, direction); }
+            else { address.searchParams.delete(sortKey); address.searchParams.delete(orderKey); }
+          }
+        } else {
+          address.searchParams.set('page', String(page));
+          address.searchParams.set('pageSize', String(pageSize));
+          if (search) address.searchParams.set('search', search);
+          if (filter && filterField) { address.searchParams.set('filterField', filterField); address.searchParams.set('filter', filter); }
+          if (direction && sortField) { address.searchParams.set('sort', sortField); address.searchParams.set('order', direction); }
+        }
         const response = await fetch(address.href, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
         if (!response.ok) throw new Error('HTTP ' + response.status);
         if (Number(response.headers.get('content-length') || 0) > 262144) throw new Error('数据超过 256 KB');
@@ -350,7 +373,21 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
         const jsonBody: unknown = JSON.parse(body);
         const records = pathValue(jsonBody, itemsPath);
         const total = pathValue(jsonBody, totalPath);
-        const parsed = parseRemoteTablePage({ items: records, total }, idField, columns, deleteEtagField);
+        const rawMappings = Array.isArray(props.fieldMappings) ? props.fieldMappings.slice(0, 24) : [];
+        const mapped = sharedQuery && Array.isArray(records) ? records.map((item: unknown) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+          const row: Record<string, unknown> = { ...(item as Record<string, unknown>) };
+          for (const entry of rawMappings) {
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+            const mapping = entry as Record<string, unknown>;
+            if (typeof mapping.field !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(mapping.field)
+              || ['constructor', 'prototype', '__proto__'].includes(mapping.field) || typeof mapping.responsePath !== 'string') continue;
+            const resolved = pathValue(item, mapping.responsePath);
+            if (resolved !== undefined) row[mapping.field] = resolved;
+          }
+          return row;
+        }) : records;
+        const parsed = parseRemoteTablePage({ items: mapped, total }, idField, columns, deleteEtagField);
         if (!parsed) throw new Error('远程表格数据格式无效');
         if (!controller.signal.aborted) {
           // A successful DELETE (or concurrent server change) may remove the last
@@ -374,13 +411,14 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     };
     void load();
     return () => controller.abort();
-  }, [sourceUrl, idField, itemsPath, totalPath, props.tableColumns, sortField, filterField, page, pageSize, search, filter, direction, revision, live, deleteEtagField]);
+  }, [sourceUrl, idField, itemsPath, totalPath, props.tableColumns, sortField, filterField, page, pageSize, search, filter, direction, revision, live, deleteEtagField, sharedQuery, mappingsKey, props.pageParam, props.sizeParam, props.searchParam, props.filterParam, props.sortParam, props.sortDirectionParam]);
   useEffect(() => {
     if (!live || !sourceUrl) return;
     const refresh = () => setRevision((previous) => previous + 1);
     window.addEventListener('atlas:records-refresh', refresh);
     return () => window.removeEventListener('atlas:records-refresh', refresh);
   }, [live, sourceUrl]);
+  if (sourceError) return <Alert type="error" showIcon message="共享表格数据源不可用" description={sourceError}/>;
   if (!sourceUrl || !live) return <div className="pa-studio-rich" data-atlas-table-source="static">
     <strong>{title}</strong>
     <Table size="small" rowKey="key" columns={[{ title: '事项', dataIndex: 'name' }, { title: '状态', dataIndex: 'status' }]}
