@@ -417,7 +417,7 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
 - **StudioApp.tsx**：多页面入口组件，支持左侧目录、顶部菜单或隐藏菜单；通过 #/页面ID 切换，无需额外路由依赖。将它作为目标 React 项目的 App。
 - **pages/*.tsx + studio-effects.css**：React 19 / Ant Design 6 页面与特效源码。
 - **studio-records.tsx**：记录列表 GET、分页与表单联动；表格组件由 **studio-widget-preview.tsx** 处理独立的服务端分页、搜索、筛选、排序、行级「查看」只读详情抽屉与可选详情 GET、选中记录编辑 PATCH、二次确认的行级 DELETE。编辑提交后重新获取后端数据；删除成功后刷新列表与表格、清除被删除记录的选中上下文并在越页时回到有效页。删除失败时不伪造成功。
-- **studio-widget-preview.tsx + widgets.ts**：与设计器同源的组件，包括文件上传/文件列表、异步任务/执行日志、折线/环形/热力图等。文件上传需配置真实 POST 接口；任务进度需配置 GET 状态接口；文件列表、日志、图表当前为静态或本地交互，不会自动接入后端。
+- **studio-widget-preview.tsx + widgets.ts**：与设计器同源的组件，包括文件上传/文件列表、异步任务/执行日志、折线/环形/热力图等。文件上传需配置真实 POST 接口；任务进度需配置 GET 状态接口；多序列折线图可通过 dataUrl/dataPath 接入真实 GET；文件列表、日志与未配置接口的图表保持静态或本地交互。
 - **studio-workflows.ts**：按钮工作流执行器；支持双分支判断、请求返回变量、组件事件、执行日志以及旧有确认、保存、刷新、导航步骤。
 - **studio-api.tsx**：独立 GET 数值/文字读取和按钮 POST 请求示例。浏览器直接请求接口；项目级共享记录源则在导出时解析为实际地址。需后端允许 CORS 或部署同源 API，不支持在设计文件中安全存储凭据。请勿将 Token、密码或密钥放入设计文件或接口 URL。
 - **atlas.studio.json**：可重新导入本设计器，恢复全部页面、导航设置、项目数据源目录、页面绝对坐标、数值尺寸、动效与 API 配置。
