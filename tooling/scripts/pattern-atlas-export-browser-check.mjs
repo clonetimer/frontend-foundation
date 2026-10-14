@@ -164,7 +164,11 @@ export async function runExportedBrowserSmoke(directory) {
       if (legacySaveCalls.length === 2) {
         response.writeHead(503); response.end('{"error":"already committed but gateway failed"}'); return;
       }
-      response.writeHead(403); response.end('{"error":"denied"}'); return;
+      if (legacySaveCalls.length === 3) {
+        response.writeHead(403); response.end('{"error":"denied"}'); return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      response.writeHead(200); response.end('{"saved":true}'); return;
     }
     if (request.method === 'POST' && request.url === '/api/followup') {
       followupCalls.push(JSON.parse(body));
@@ -299,6 +303,16 @@ export async function runExportedBrowserSmoke(directory) {
     assert(await click('保存修改C4'), 'C4 legacy 403 submit missing');
     await until(() => legacySaveCalls.length === 3, 'C4 permission request missing');
     await until(() => evaluate("document.querySelector('.atlas-record-list')?.textContent?.includes('HTTP 403')"), 'C4 403 permission feedback missing');
+    // C5: both clicks happen synchronously before React can re-render. The
+    // provider's shared synchronous write lock must prevent duplicate POSTs.
+    await evaluate("window.__c5Refreshes=0;window.addEventListener('atlas:records-refresh',()=>window.__c5Refreshes++);");
+    const readsBeforeC5 = listReads;
+    assert(await evaluate("(() => { const b=[...document.querySelectorAll('button')].find(el=>el.textContent?.trim()==='保存修改C4'); if(!b)return false; b.click(); b.click(); return true; })()"), 'C5 rapid double-click target unavailable');
+    await until(() => legacySaveCalls.length === 4, 'C5 expected one new legacy write');
+    await pause(500);
+    assert.equal(legacySaveCalls.length, 4, 'C5 rapid double click produced duplicate POSTs');
+    await until(() => evaluate("window.__c5Refreshes >= 1"), 'C5 mutation success did not broadcast shared refresh event');
+    await until(() => listReads > readsBeforeC5, 'C5 shared refresh event did not trigger server GET');
     await evaluate("window.confirm = window.__atlasConfirm;");
 
 
@@ -705,7 +719,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'legacy RecordProvider 422 field, committed 503 draft safety and 403 permission', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'legacy RecordProvider 422 field, committed 503 draft safety and 403 permission', 'shared mutation single-flight rapid double click and record GET broadcast', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
