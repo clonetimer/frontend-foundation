@@ -285,18 +285,18 @@ export async function runExportedBrowserSmoke(directory) {
     // It must show bounded 422 field errors, preserve draft on committed-then-
     // 503, and report 403 as permission denial without any implicit retry.
     await evaluate("window.__atlasConfirm = window.confirm; window.confirm = () => true;");
-    assert(await evaluate("(() => {const node=document.querySelector('input[aria-label=输入框]');if(!node)return false;node.focus();node.select();return true;})()"), 'C4 legacy record edit input unavailable');
+    assert(await evaluate("(() => {const node=document.querySelector('input[aria-label=记录姓名C4]');if(!node)return false;node.focus();node.select();return true;})()"), 'C4 legacy record edit input unavailable');
     await call('Input.insertText', { text:'C4记录草稿' });
-    assert(await click('保存修改'), 'C4 legacy save button unavailable');
+    assert(await click('保存修改C4'), 'C4 legacy save button unavailable');
     await until(() => legacySaveCalls.length === 1, 'C4 legacy 422 request missing');
     assert.deepEqual(legacySaveCalls[0], {name:'C4记录草稿'}, 'C4 legacy payload incorrect');
     await until(() => evaluate("document.querySelector('.atlas-record-error')?.textContent?.includes('记录字段服务端校验错误') || [...document.querySelectorAll('.atlas-record-error')].some(el=>el.textContent?.includes('记录字段服务端校验错误'))"), 'C4 record-specific 422 field error absent');
-    assert(await click('保存修改'), 'C4 legacy retry confirmation missing');
+    assert(await click('保存修改C4'), 'C4 legacy retry confirmation missing');
     await until(() => legacySaveCalls.length === 2, 'C4 uncertain 503 request missing');
     await until(() => evaluate("document.querySelector('.atlas-record-list')?.textContent?.includes('写入结果不确定')"), 'C4 committed-then-503 classified incorrectly');
-    await until(() => evaluate("document.querySelector('input[aria-label=输入框]')?.value === 'C4记录草稿'"), 'C4 uncertain save discarded draft');
+    await until(() => evaluate("document.querySelector('input[aria-label=记录姓名C4]')?.value === 'C4记录草稿'"), 'C4 uncertain save discarded draft');
     assert.equal(legacySaveCalls.length, 2, 'C4 uncertain record write was automatically retried');
-    assert(await click('保存修改'), 'C4 legacy 403 submit missing');
+    assert(await click('保存修改C4'), 'C4 legacy 403 submit missing');
     await until(() => legacySaveCalls.length === 3, 'C4 permission request missing');
     await until(() => evaluate("document.querySelector('.atlas-record-list')?.textContent?.includes('HTTP 403')"), 'C4 403 permission feedback missing');
     await evaluate("window.confirm = window.__atlasConfirm;");
