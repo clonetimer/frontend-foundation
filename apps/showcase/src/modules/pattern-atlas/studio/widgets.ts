@@ -12,7 +12,7 @@ export const studioWidgetDefinitions = [
   { kind: 'image', label: '图片', icon: '▧', group: '内容', defaults: { title: '项目图片', src: '', description: '填写图片地址进行预览' } },
   { kind: 'steps', label: '步骤条', icon: '➀', group: '内容', defaults: { title: '业务流程', items: ['提交', '审核', '完成'], percent: 1 } },
   { kind: 'timeline', label: '时间轴', icon: '┆', group: '内容', defaults: { title: '进度记录', items: ['需求确认', '开发实现', '验收交付'] } },
-  { kind: 'table', label: '数据表格', icon: '▦', group: '数据', defaults: { title: '任务表格', items: ['方案设计|进行中', '接口联调|待开始', '发布验收|已完成'], pageSize: 5, dataUrl: '', itemsPath: 'data.items', totalPath: 'data.total', detailUrl: '', detailPath: 'data', idField: 'id', tableColumns: 'name|名称\nstatus|状态', filterField: 'status', filterValues: '进行中,待开始,已完成', sortField: 'name' } },
+  { kind: 'table', label: '数据表格', icon: '▦', group: '数据', defaults: { title: '任务表格', items: ['方案设计|进行中', '接口联调|待开始', '发布验收|已完成'], pageSize: 5, dataUrl: '', itemsPath: 'data.items', totalPath: 'data.total', detailUrl: '', detailPath: 'data', deleteUrl: '', idField: 'id', tableColumns: 'name|名称\nstatus|状态', filterField: 'status', filterValues: '进行中,待开始,已完成', sortField: 'name' } },
   { kind: 'chart', label: '柱状图', icon: '▥', group: '数据', defaults: { title: '趋势分析', items: ['一月', '二月', '三月', '四月'], values: '32,58,44,77' } },
   { kind: 'descriptions', label: '描述列表', icon: '☷', group: '数据', defaults: { title: '项目属性', items: ['负责人|张三', '状态|进行中', '版本|v1.0'] } },
   { kind: 'list', label: '普通列表', icon: '☰', group: '数据', defaults: { title: '待办事项', items: ['讨论界面结构', '确认接口', '提交验收'] } },
