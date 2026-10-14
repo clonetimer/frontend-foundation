@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, normalizeWidgetProps, overlaySubmitUrl, mapOverlaySubmitPayload } from '../studio/widgets';
+import { parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, normalizeWidgetProps, overlaySubmitUrl, mapOverlaySubmitPayload, classifyMutationHttpFailure, classifyMutationTransportFailure, parseMutationFieldErrors } from '../studio/widgets';
 import { createStudioDocument, createNode, insertNode, setDecoration, serializeStudioDocument, parseStudioFile } from '../studio/model';
 import { newServerDemoSource, resolveTableWidgetProps, resolveOverlayWidgetProps, normalizeDataSources } from '../studio/data-sources';
 import { buildStudioListUrl } from '../studio/source-query';
@@ -160,6 +160,29 @@ describe('Phase 22 · remote business tables', () => {
     expect(exported).toContain('/api/create-real');
     expect(exported).toContain('subject');
     expect(exported).not.toContain('/stale-write');
+  });
+  it('normalizes mutation errors across POST/PATCH and table DELETE without unsafe retries', () => {
+    for (const code of [401, 403]) {
+      const result = classifyMutationHttpFailure(code);
+      expect(result).toMatchObject({status:code,kind:'denied',refresh:false,safeToRetry:false});
+    }
+    for (const code of [404, 409, 412, 428]) {
+      const result = classifyMutationHttpFailure(code);
+      expect(result).toMatchObject({status:code,kind:'conflict',refresh:true,safeToRetry:false});
+    }
+    for (const code of [400, 422]) expect(classifyMutationHttpFailure(code))
+      .toMatchObject({status:code,kind:'invalid',refresh:false,safeToRetry:false});
+    for (const code of [500, 503]) expect(classifyMutationHttpFailure(code))
+      .toMatchObject({status:code,kind:'uncertain',refresh:true,safeToRetry:false});
+    expect(classifyMutationTransportFailure(true)).toMatchObject({kind:'uncertain',status:null,refresh:true,safeToRetry:false});
+    expect(classifyMutationTransportFailure(false).message).toContain('网络异常');
+
+    const mappings = [{field:'name',responsePath:'alias.name',saveField:'subject'}];
+    const server = JSON.parse('{"errors":{"subject":["服务器要求更正姓名"],"__proto__":"unsafe","tooLong":"' + 'x'.repeat(300) + '"}}') as unknown;
+    expect(parseMutationFieldErrors(server,mappings)).toEqual({name:'服务器要求更正姓名',tooLong:'x'.repeat(240)});
+    expect(parseMutationFieldErrors({errors:{subject:{malicious:true}}},mappings)).toEqual({});
+    expect(parseMutationFieldErrors({errors:{subject:'拒绝'}},[{field:'name',saveField:'subject'},{field:'other',saveField:'subject'}])).toEqual({});
+    expect(parseMutationFieldErrors(null,mappings)).toEqual({});
   });
   it('keeps deletion opt-in and rejects invalid DELETE URL templates', () => {
     expect(normalizeWidgetProps('table', {}).deleteUrl).toBe('');
