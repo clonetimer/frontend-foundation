@@ -41,4 +41,6 @@ node tooling/create-app/project.mjs compile ./my-app/foundation.project.json
 - Studio 支持可配置的远程 GET 表格（服务端分页/筛选/搜索/排序）、GET 只读行详情、PATCH 编辑以及二次确认的 DELETE 行操作；部分弹窗和工作流也能请求实际 API。详见仓库根目录 README 的 HTTP 契约与独立 ZIP 启动说明。
 - 当前项目草稿主要存储于本地浏览器；跨用户、多端协同及托管部署尚未实现。虽然已支持部分真实业务数据接口，但后端鉴权、CORS、版本冲突和审计仍需实际应用提供；Phase 22-B3 支持**当前服务端页面内**最多 20 项的多选批量 DELETE、部分失败提示及失败项人工确认重试，暂不支持跨页选择、事务性原子提交、服务端回滚。
 
+- Phase 22-B4 增加可选 `deleteEtagField`，从列表数据提取带引号的强 ETag，并在 DELETE 时发送 `If-Match`；HTTP 409/412 按并发冲突处理，HTTP 5xx/超时按结果不确定处理并禁止盲目重试。真正的版本原子校验、幂等和审计须由后端实现。
+
 详见 [Phase 7 统一设计器技术说明](PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md)。
