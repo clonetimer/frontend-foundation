@@ -98,8 +98,8 @@ function exec(program, args, cwd) {
       });
       // The legacy Record Provider is deliberately exercised independently of
       // enhanced overlay forms: server errors must use the same C3 contract.
-      page.composition = insertNode(page.composition, page.composition.id, createNode('input', 'legacyRecordFieldC4'), 'inside');
-      page.composition = insertNode(page.composition, page.composition.id, createNode('button', 'legacyRecordSaveC4'), 'inside');
+      page.composition = insertNode(page.composition, page.composition.id, { ...createNode('input', 'legacyRecordFieldC4'), props:{ label:'记录姓名C4',placeholder:'填写记录姓名' } }, 'inside');
+      page.composition = insertNode(page.composition, page.composition.id, { ...createNode('button', 'legacyRecordSaveC4'), props:{ label:'保存修改C4',type:'primary' } }, 'inside');
       document = setDecoration(document, pageId + ':legacyRecordFieldC4', { recordField: {field:'name'} });
       document = setDecoration(document, pageId + ':legacyRecordSaveC4', {
         recordSubmit: { url: 'http://127.0.0.1:4198/api/legacy-record-save', includeId:false }
