@@ -46,6 +46,10 @@ function exec(program, args, cwd) {
       const pageId = document.blueprint.pages[0].id;
       document.dataSources = [
         { ...newDemoSource('overlay-edit'), saveUrl: 'http://127.0.0.1:4198/api/edit/{id}' },
+        { ...newDemoSource('overlay-shared-create'), name: '共享写入接口',
+          createUrl: 'http://127.0.0.1:4198/api/mapped-create',
+          saveUrl: 'http://127.0.0.1:4198/api/mapped-edit/{id}',
+          fieldMappings: [{field:'name',responsePath:'alias.name',saveField:'subject'}] },
         { ...newDemoSource('isolated-table-shared'), name: '共享远程表格源',
           listUrl: 'http://127.0.0.1:4198/api/table?view=shared',
           detailUrl: 'http://127.0.0.1:4198/api/row/{id}',
@@ -68,6 +72,10 @@ function exec(program, args, cwd) {
               onTrue:[{id:'named-success',type:'notify',text:'条件命中：{{draft.name}}'}],onFalse:[{id:'not-named',type:'notify',text:'未命中'}]},
             {id:'highlight-list',type:'emit',targetId:'formList21',action:'highlight'}
           ]}) } },
+        { id:'mappedCreateC2', kind:'modal', props:{
+          title:'共享写入表单',triggerText:'共享写入新增',formMode:'create',sourceId:'overlay-shared-create',
+          formFields:'name|姓名|text|required',submitUrl:'/stale-write-must-not-run',
+          okText:'提交共享写入',cancelText:'取消' } },
         { id: 'followupModal21c', kind: 'modal', props: { title: '接口联动表单', triggerText: '提交并执行后续请求', formFields:'name|姓名|text|required', submitUrl:'http://127.0.0.1:4198/api/save', okText:'提交',
           successWorkflow: JSON.stringify({steps:[{id:'confirm-extra',type:'confirm',text:'允许执行后续业务请求？'},
             {id:'call-extra',type:'request',method:'POST',url:'http://127.0.0.1:4198/api/followup',body:'{"name":"{{draft.name}}"}'},
