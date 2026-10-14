@@ -149,7 +149,7 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
       }
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
-      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
+      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
   const create = async (title: string) => {
@@ -165,7 +165,7 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
       if (failure.refresh) setRevision((old) => old + 1);
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
-      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
+      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
   const remove = async () => {
@@ -180,7 +180,7 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
       if (failure.refresh) setRevision((old) => old + 1);
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message);
-      throw new Error(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message);
+      throw new Error(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
   const applySearch = () => { setPage(1); setSelectedId(''); setSearch(searchInput.trim().slice(0, 120)); setSaveStatus('idle'); };
