@@ -83,8 +83,13 @@ export async function requestStudioApi(config: StudioApiBinding, signal?: AbortS
     ...(signal ? { signal } : {})
   });
   if (!response.ok) {
-    let payload: unknown;
-    try { payload = await response.json() as unknown; } catch { payload = null; }
+    let payload: unknown = null;
+    try {
+      // An API error body is untrusted. Never parse or retain unbounded
+      // validation details merely to display a short message in Studio.
+      const raw = await response.text();
+      if (raw.length <= 16384) payload = JSON.parse(raw) as unknown;
+    } catch { /* malformed responses use the status-only fallback */ }
     const parsed = readServerError(payload);
     throw new StudioRequestError(parsed.message ? `请求失败（HTTP ${response.status}）：${parsed.message}` : `请求失败：HTTP ${response.status}`, response.status, parsed.fields);
   }
