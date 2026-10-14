@@ -233,7 +233,7 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
       }
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
-      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
+      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
   const create = async (title: string) => {
@@ -248,7 +248,7 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
       if (failure.refresh) setRevision((n) => n + 1);
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
-      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
+      throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
   const remove = async () => {
@@ -263,7 +263,7 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
       if (failure.refresh) setRevision((n) => n + 1);
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message);
-      throw new Error(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message);
+      throw new Error(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
   return <Context.Provider value={{ source, visibleRows, loading, error, selected, selectedId, draft, errors, detailStatus, detailError, tableSelection, chooseTable: setTableSelection, saveStatus, saveError,
