@@ -74,9 +74,21 @@ describe('phase 12 server paging, declarative mapping and request states', () =>
   });
   it('translates HTTP 422 field errors into a typed, bounded failure', async () => {
     const previous = globalThis.fetch;
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 422, json: async () => ({ error: '校验失败', errors: { subject: ['标题过短'] } }) }) as typeof fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: '校验失败', errors: { subject: ['标题过短'] }
+    }), { status: 422, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
     try {
       await expect(requestStudioApi({ method: 'POST', url: '/api/studio-records-mapped', body: '{}' })).rejects.toMatchObject({ status: 422, fieldErrors: { subject: '标题过短' } });
+    } finally { globalThis.fetch = previous; }
+  });
+  it('does not parse an oversized server validation error body', async () => {
+    const previous = globalThis.fetch;
+    const untrusted = JSON.stringify({ errors: { subject: ['x'.repeat(17000)] } });
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(untrusted, { status: 422 })) as typeof fetch;
+    try {
+      await expect(requestStudioApi({ method: 'POST', url: '/api/save', body: '{}' })).rejects.toMatchObject({
+        status: 422, fieldErrors: {}
+      });
     } finally { globalThis.fetch = previous; }
   });
   it('exercises actual GET page 2 / search / detail / mapped POST / refresh requests', async () => {
