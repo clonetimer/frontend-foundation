@@ -32,6 +32,7 @@ export async function runExportedBrowserSmoke(directory) {
   let socket;
   const posts = [];
   const mappedPosts = [];
+  const legacySaveCalls = [];
   let mappedCommitThen503 = false;
   const savedRecords = [{ id:'R/1 ?', name:'旧姓名', email:'old@example.org', amount:3 }];
   const tableCalls = [];
@@ -155,6 +156,16 @@ export async function runExportedBrowserSmoke(directory) {
       }
       response.writeHead(201); response.end('{"saved":true}'); return;
     }
+    if (request.method === 'POST' && request.url === '/api/legacy-record-save') {
+      legacySaveCalls.push(JSON.parse(body));
+      if (legacySaveCalls.length === 1) {
+        response.writeHead(422); response.end('{"errors":{"name":["记录字段服务端校验错误"],"__proto__":"unsafe"}}'); return;
+      }
+      if (legacySaveCalls.length === 2) {
+        response.writeHead(503); response.end('{"error":"already committed but gateway failed"}'); return;
+      }
+      response.writeHead(403); response.end('{"error":"denied"}'); return;
+    }
     if (request.method === 'POST' && request.url === '/api/followup') {
       followupCalls.push(JSON.parse(body));
       response.writeHead(200); response.end('{"ok":true}'); return;
@@ -270,6 +281,26 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.body.textContent.includes('保存成功，记录已刷新')"), 'Business form success feedback');
     await until(() => evaluate("document.body.textContent.includes('条件命中：张三')"), 'Conditional success branch notification');
     await until(() => evaluate("document.querySelector('[data-studio-component=formList21]')?.classList.contains('atlas-workflow-highlight')"), 'Success workflow component highlight');
+    // C4: record-list/provider save is a separate historical implementation.
+    // It must show bounded 422 field errors, preserve draft on committed-then-
+    // 503, and report 403 as permission denial without any implicit retry.
+    await evaluate("window.__atlasConfirm = window.confirm; window.confirm = () => true;");
+    assert(await evaluate("(() => {const node=document.querySelector('input[aria-label=输入框]');if(!node)return false;node.focus();node.select();return true;})()"), 'C4 legacy record edit input unavailable');
+    await call('Input.insertText', { text:'C4记录草稿' });
+    assert(await click('保存修改'), 'C4 legacy save button unavailable');
+    await until(() => legacySaveCalls.length === 1, 'C4 legacy 422 request missing');
+    assert.deepEqual(legacySaveCalls[0], {name:'C4记录草稿'}, 'C4 legacy payload incorrect');
+    await until(() => evaluate("document.querySelector('.atlas-record-error')?.textContent?.includes('记录字段服务端校验错误') || [...document.querySelectorAll('.atlas-record-error')].some(el=>el.textContent?.includes('记录字段服务端校验错误'))"), 'C4 record-specific 422 field error absent');
+    assert(await click('保存修改'), 'C4 legacy retry confirmation missing');
+    await until(() => legacySaveCalls.length === 2, 'C4 uncertain 503 request missing');
+    await until(() => evaluate("document.querySelector('.atlas-record-list')?.textContent?.includes('写入结果不确定')"), 'C4 committed-then-503 classified incorrectly');
+    await until(() => evaluate("document.querySelector('input[aria-label=输入框]')?.value === 'C4记录草稿'"), 'C4 uncertain save discarded draft');
+    assert.equal(legacySaveCalls.length, 2, 'C4 uncertain record write was automatically retried');
+    assert(await click('保存修改'), 'C4 legacy 403 submit missing');
+    await until(() => legacySaveCalls.length === 3, 'C4 permission request missing');
+    await until(() => evaluate("document.querySelector('.atlas-record-list')?.textContent?.includes('HTTP 403')"), 'C4 403 permission feedback missing');
+    await evaluate("window.confirm = window.__atlasConfirm;");
+
 
 
     // Phase 22-C2: the shared source's createUrl wins over the legacy
@@ -674,7 +705,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'legacy RecordProvider 422 field, committed 503 draft safety and 403 permission', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
