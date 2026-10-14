@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRemoteTableColumns, parseRemoteTablePage, normalizeWidgetProps, overlaySubmitUrl } from '../studio/widgets';
+import { parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, normalizeWidgetProps, overlaySubmitUrl } from '../studio/widgets';
 import { createStudioDocument, createNode, insertNode, setDecoration, serializeStudioDocument, parseStudioFile } from '../studio/model';
 import { generateReactPage, projectExportFiles } from '../studio/exporter';
 import { exportedWidgetCatalog, exportedWidgetPreview } from '../studio/exported-widgets';
@@ -27,6 +27,21 @@ describe('Phase 22 · remote business tables', () => {
     expect(parseRemoteTablePage(input,'__proto__',columns)).toBeNull();
     expect(parseRemoteTablePage({items:Array.from({length:101},(_,n)=>({id:String(n)})),total:101},'id',columns)).toBeNull();
   });
+  it('keeps strong ETag conditional DELETE metadata separate from displayed columns and identity', () => {
+    const input = {items:[{id:'X-1',name:'任务',status:'进行中',etag:'"rev-2"'}],total:1};
+    expect(strongRecordEtag('"rev-2"')).toBe('"rev-2"');
+    expect(strongRecordEtag('W/"weak"')).toBeNull();
+    expect(strongRecordEtag('not-quoted')).toBeNull();
+    expect(strongRecordEtag('"line\\nfeed"')).toBeNull();
+    expect(strongRecordEtag(null)).toBeNull();
+    expect(parseRemoteTablePage(input,'id',columns,'etag')).toEqual({items:[{
+      key:'X-1',id:'X-1',name:'任务',status:'进行中',amount:null,etag:'"rev-2"'
+    }],total:1});
+    expect(parseRemoteTablePage(input,'id',columns,'key')).toBeNull();
+    expect(parseRemoteTablePage(input,'id',columns,'id')).toBeNull();
+    expect(parseRemoteTablePage(input,'id',columns,'__proto__')).toBeNull();
+    expect(parseRemoteTablePage({items:[{...input.items[0],etag:'bad'}],total:1},'id',columns,'etag')?.items[0]?.etag).toBeNull();
+  });
   it('can export a table-only page without a record-list source while retaining editable row context', () => {
     let doc=createStudioDocument();
     const page=doc.blueprint.pages[0]!;
@@ -53,7 +68,7 @@ describe('Phase 22 · remote business tables', () => {
     expect(runtime).toContain('setTableSelection(null)');
   });
   it('roundtrips remote configuration, bounded page size and exact exported implementation', () => {
-    const remote={dataUrl:'/api/table',itemsPath:'data.items',totalPath:'data.total',detailUrl:'/api/record/{id}',detailPath:'data',deleteUrl:'/api/delete/{id}',idField:'id',tableColumns:'name|名称\nstatus|状态',filterField:'status',filterValues:'进行中,已完成',sortField:'name',pageSize:500};
+    const remote={dataUrl:'/api/table',itemsPath:'data.items',totalPath:'data.total',detailUrl:'/api/record/{id}',detailPath:'data',deleteUrl:'/api/delete/{id}',deleteEtagField:'etag',idField:'id',tableColumns:'name|名称\nstatus|状态',filterField:'status',filterValues:'进行中,已完成',sortField:'name',pageSize:500};
     let doc=createStudioDocument();
     const page=doc.blueprint.pages[0]!;
     page.composition=insertNode(page.composition!,page.composition!.id,createNode('table','remoteTable22'),'inside');
@@ -62,6 +77,7 @@ describe('Phase 22 · remote business tables', () => {
     const props=restored.decorations[page.id+':remoteTable22']?.widgetProps;
     expect(props?.dataUrl).toBe('/api/table');
     expect(props?.deleteUrl).toBe('/api/delete/{id}');
+    expect(props?.deleteEtagField).toBe('etag');
     expect(props?.pageSize).toBe(20);
     expect(props?.tableColumns).toContain('status|状态');
     const output=generateReactPage(restored,page.id);
@@ -75,6 +91,7 @@ describe('Phase 22 · remote business tables', () => {
   });
   it('keeps deletion opt-in and rejects invalid DELETE URL templates', () => {
     expect(normalizeWidgetProps('table', {}).deleteUrl).toBe('');
+    expect(normalizeWidgetProps('table', {}).deleteEtagField).toBe('');
     expect(overlaySubmitUrl('/api/delete/{id}', 'edit-selected', 'R/1 ?')).toBe('/api/delete/R%2F1%20%3F');
     expect(overlaySubmitUrl('/api/delete/{id}/{id}', 'edit-selected', '1')).toBeUndefined();
     expect(overlaySubmitUrl('javascript:alert({id})', 'edit-selected', '1')).toBeUndefined();
