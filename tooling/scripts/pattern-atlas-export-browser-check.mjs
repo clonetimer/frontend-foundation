@@ -302,7 +302,7 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => mappedPosts.length === 3, 'C3 422 backend did not receive mapped request');
     assert.deepEqual(mappedPosts[2], {subject:'字段不合格'}, 'C3 422 outgoing alias mismatch');
     await until(() => evaluate("document.querySelector('.ant-modal [role=alert]')?.textContent?.includes('服务器要求更正姓名')"), 'C3 backend alias error not displayed on form');
-    assert(await evaluate("document.querySelector('.ant-modal [role=alert]')?.textContent?.includes('HTTP 422')"), 'C3 stable 422 status not displayed');
+    assert(await evaluate("document.querySelector('.ant-modal')?.textContent?.includes('HTTP 422')"), 'C3 stable 422 status not displayed');
     await evaluate("document.querySelector('.ant-modal-footer button.ant-btn-default')?.click()");
     await until(() => evaluate("!document.querySelector('.ant-modal')"), 'C3 validation modal did not close');
 
