@@ -122,9 +122,13 @@ describe('Phase 22 · remote business tables', () => {
     expect(pageCode).toContain('/api/shared?scope=team');
     expect(pageCode).not.toContain('/stale-get');
     expect(pageCode).not.toContain('/stale-delete/{id}');
-    expect(pageCode).toContain('alias');
+    expect(pageCode).toContain('fieldMappings');
+    expect(pageCode).toContain('subject');
+    expect(pageCode).toContain('saveField');
     const orphan=parseStudioFile(serializeStudioDocument({...doc,dataSources:[]}));
     const orphanCode=generateReactPage(orphan,page.id);
+    expect(orphanCode).toContain('关联的数据源不存在或不支持服务端分页');
+    expect(orphanCode).not.toContain('/api/shared?scope=team');
     expect(orphanCode).not.toContain('/stale-get');
     expect(orphanCode).not.toContain('/stale-delete/{id}');
   });
