@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -38,7 +39,7 @@ const server = spawn(windows ? (process.env.ComSpec || 'cmd.exe') : process.exec
   { cwd: directory, env: { ...process.env, ATLAS_STUDIO_PORT: String(serverPort) },
     stdio: 'inherit' });
 const profile = mkdtempSync(join(tmpdir(), 'studio-rc-smoke-'));
-let browser, socket;
+let browser, socket, aasFixtureServer, aasBridge;
 try {
   await until(async () => (await fetch(origin + '/studio')).ok, 'candidate static server');
   for (const path of ['/create', '/studio']) {
@@ -194,6 +195,68 @@ try {
   await until(() => evaluate("document.querySelector('.pa-studio h1')?.textContent === " + JSON.stringify(edited)), 'P0 reimport');
   await until(async () => JSON.stringify(await stored()) === JSON.stringify(expected), 'P0 import semantic parity');
   pass('clear-storage-and-exact-studio-reimport');
+
+  // Cross-app browser contract path: production Studio -> Python bridge ->
+  // actual HTTP server implementing AAS model API SHAPE (synthetic, not user source).
+  // The separately tested user-supplied native AAS+SQLite is NOT shipped in CI.
+  let nativeListCalls = 0;
+  const aasRows = [
+    { id: 10, model_name: 'AAS-CI-Model-10', status: 'published', algorithm: 'dummy_detector', experiment_id: 'p0_case_10' },
+    { id: 11, model_name: 'AAS-CI-Model-11', status: 'draft', algorithm: 'dummy_detector', experiment_id: 'p0_case_11' },
+    { id: 12, model_name: 'AAS-CI-Model-12', status: 'published', algorithm: 'dummy_detector', experiment_id: 'p0_case_12' }
+  ];
+  aasFixtureServer = createServer((request, response) => {
+    const path = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
+    if (request.method !== 'GET' || path !== '/api/models') {
+      response.writeHead(404, { 'Content-Type': 'application/json' });
+      response.end('{"error":"No such native fixture"}');
+      return;
+    }
+    nativeListCalls++;
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ models: aasRows, total: aasRows.length }));
+  });
+  await new Promise((done) => aasFixtureServer.listen(0, '127.0.0.1', done));
+  const aasPort = aasFixtureServer.address().port;
+  const bridgePort = 5498;
+  const bridgeOrigin = 'http://127.0.0.1:' + bridgePort;
+  const python = process.platform === 'win32' ? 'python' : 'python3';
+  aasBridge = spawn(python, [
+    'tooling/scripts/aas_p0/bridge.py', '--upstream', 'http://127.0.0.1:' + aasPort + '/',
+    '--origin', origin + '/', '--port', String(bridgePort)
+  ], { cwd: resolve(import.meta.dirname, '../..'), stdio: 'ignore' });
+  let aasBridgeStartupError;
+  aasBridge.on('error', (error) => { aasBridgeStartupError = error; });
+  await until(async () => {
+    if (aasBridgeStartupError) throw aasBridgeStartupError;
+    if (aasBridge.exitCode !== null) throw new Error('Python AAS fixture bridge exited early');
+    const response = await fetch(bridgeOrigin + '/api/records?page=1&pageSize=3');
+    return response.status === 200;
+  }, 'Python bridge for actual browser');
+
+  assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-palette-item')].find(x=>x.querySelector('strong')?.textContent?.includes('数据表格'));if(!e)return false;e.click();return true;})()"), 'P0 table palette action');
+  await until(async () => {
+    const saved = await stored();
+    return Object.values(saved?.decorations ?? {}).some((value) => value?.widgetKind === 'table');
+  }, 'P0 table component inserted');
+  assert(await evaluate("(() => {const b=document.querySelector('.pa-studio-inspector-rail button[title=内容]');if(!b)return false;if(b.getAttribute('aria-pressed')!=='true')b.click();return true;})()"), 'P0 table content Inspector');
+  await until(() => evaluate("!![...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('数据 GET 地址'))?.querySelector('input')"), 'P0 table GET address control');
+  assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('数据 GET 地址'))?.querySelector('input');if(!e)return false;e.focus();e.select();return true;})()"));
+  await call('Input.insertText', { text: bridgeOrigin + '/api/records' });
+  await until(async () => Object.values((await stored())?.decorations ?? {}).some((value) => value?.widgetProps?.dataUrl === bridgeOrigin + '/api/records'), 'P0 table bridge URL saved');
+  assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-toolbar label')].find(x=>x.textContent?.trim()==='体验');if(!e)return false;e.click();return true;})()"), 'P0 AAS-shaped bridge live mode');
+  await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('AAS-CI-Model-10')"), 'AAS-shaped native HTTP through bridge -> production Studio UI');
+  assert(nativeListCalls > 0, 'Production Studio did not cause any native AAS-shaped HTTP call');
+  const aasShot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+  writeFileSync(join(evidenceDir, 'aas-shaped-http-integration.png'), Buffer.from(aasShot.data, 'base64'));
+  writeFileSync(join(evidenceDir, 'aas-shaped-http-integration.json'), JSON.stringify({
+    status: 'SYNTHETIC_NATIVE_SHAPE_BROWSER_PASS', platform: process.platform,
+    sourceCommit: manifest.sourceCommit, nativeListCalls,
+    chain: ['production Chromium Studio /studio', 'Python stdlib AAS P0 bridge', 'synthetic native AAS-shaped HTTP fixture'],
+    limitations: ['Native user-supplied AAS source is not in GitHub CI', 'No AAS authentication, CAS/ETag or production user signoff']
+  }, null, 2) + '\n');
+  pass('production-Studio-Python-bridge-AAS-shaped-HTTP');
+
   writeFileSync(join(evidenceDir, 'p0-automated.json'), JSON.stringify({
     status: 'AUTOMATED_PASS', sourceCommit: manifest.sourceCommit, platform: process.platform,
     checks: accepted, limitations: [
@@ -212,6 +275,13 @@ try {
       windows ? 'Windows start-studio.cmd launcher' : 'POSIX node launcher'] }));
 } finally {
   if (socket?.readyState === WebSocket.OPEN) socket.close();
+  if (aasBridge) {
+    if (windows && aasBridge.pid) {
+      try { execFileSync('taskkill', ['/PID', String(aasBridge.pid), '/T', '/F'], { stdio: 'ignore' }); }
+      catch { aasBridge.kill(); }
+    } else { aasBridge.kill(); }
+  }
+  if (aasFixtureServer) await new Promise((done) => aasFixtureServer.close(done));
   if (windows && server.pid) {
     // cmd.exe owns the spawned Node process; kill its whole Windows job tree.
     try { execFileSync('taskkill', ['/PID', String(server.pid), '/T', '/F'], { stdio: 'ignore' }); }

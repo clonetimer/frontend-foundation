@@ -47,3 +47,26 @@ node tooling/scripts/pattern-atlas-aas-readonly-probe.mjs --selftest
 - 此次收到**真实全栈源工程，确实运行了真实 Python 后端**。不再归为“仅有模拟后端”。
 - 但 AAS 与 Studio 的互操作仍需限定桥接，且**权限、CAS 并发、超过 500 条分页、大规模数据、真正浏览器到 AAS 的端到端互操作**仍未经过正式 P0 签收。
 - 继续使用独立 Studio 1.0.0 RC1 Release 草稿；不要修改 Foundation 0.21.0，不发布未经验收的正式 Studio Stable。
+
+## Phase 22-P0-B · 受限协议桥接与第二轮真实后端验证
+
+- 在 **AAS 代码的独立拷贝**（不包含用户原始数据库或模型文件）上，使用合成 `p0_measurements` SQLite 表和 DummyDetector 模型，运行真正的 AAS Python HTTP 服务；新适配器按 Studio `/api/records` 协议转发，取得 **14/14 实际 HTTP 检查 PASS**。测试包含无效分页、非 fixture 写入拒绝、只允许进程创建的模型更改、真实 POST 模型发布、筛选、详情 GET、对非 status 字段返回 422、`PATCH status`→原生 `PUT`、原生 SQLite 状态回读及实际 DELETE 后再查询得到 404。
+- 新公共测试工具：`tooling/scripts/aas_p0/bridge.py`（**仅用于本机合成模型联调**）和 `test_bridge.py`（只使用 Python 标准库创建独立 AAS 形状的 HTTP fixture 服务，无需依赖或上传真实 AAS 源码）。Windows/Linux 候选工作流均执行 `python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*.py' -v`；修改桥接器同时触发两平台完整 Stable Gate。
+- **硬性边界**：默认不接受任何写请求；显式 `--allow-synthetic-writes` 只能修改桥接器当前进程登记的 fixture 模型 ID；仅允许连接和监听 loopback。不是生产权限模型。AAS Native `GET /api/models?limit=500` 的 `total` 只等于已截断列表行数；当返回 500 行或行数不一致时，桥接器返回 **409**，不伪造完整分页。
+- 真实 AAS 与独立桥接层的 14/14 是**后端 HTTP 层**验收；公共仓库中可重复执行的 Python 单元集成测试属于**合成 AAS 上游**；不能把任何一项写作“Studio 真实浏览器↔原生 AAS 全链路成功”。容器的浏览器导航被管理员策略阻止，证据边界维持不变。
+- 后续 P0 阻塞：可信用户身份与授权、审计和 CSRF、真实分页不截断、强 ETag 原子冲突检测、生产浏览器与真实后端联调、操作人员正式试用签收。**不得用本地测试桥接器作为权限层，也不得把本轮结果提升为正式 Studio Stable。**
+
+只在**确认不是原始用户数据的独立合成 AAS 环境**使用下列危险开关：
+
+```bash
+python tooling/scripts/aas_p0/bridge.py --upstream http://127.0.0.1:8765/ --origin http://127.0.0.1:5188/ --port 8791
+# 开启合成模型写测试（不得连接生产 DB）：
+python tooling/scripts/aas_p0/bridge.py --upstream http://127.0.0.1:8765/ --origin http://127.0.0.1:5188/ --port 8791 --allow-synthetic-writes
+python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*.py' -v
+```
+
+## Phase 22-P0-C · 生产编辑器的 AAS 形状 HTTP 端到端验收
+
+`tooling/scripts/pattern-atlas-studio-rc-smoke.mjs` 中增加可复现的候选编辑器生产态浏览器验证：测试在 Windows/Linux GitHub Runner 中启动真实 Chrome/Chromium、生产构建 Studio、公共仓库内的 `bridge.py` Python HTTP 进程和**合成的 AAS 形状 HTTP 上游 fixture**。浏览器使用组件库添加「数据表格」，通过 Inspector 填写桥接器的 GET 地址、切换到「体验」模式，并要求真实 HTTP 请求从浏览器经 Python bridge 到合成 AAS 上游，最终在页面渲染 `AAS-CI-Model-10`。测试截图和 `aas-shaped-http-integration.json` 随候选制品保存。**这不是在 GitHub Runner 中运行用户提供的私有 AAS 后端源码**；私有 AAS 源码只在隔离环境里以 14/14 原生 SQLite HTTP 检查验证。
+
+只有 CI 工作流实际全绿后，上述浏览器验收才可以认定 PASS。即使全绿，真实 AAS + Studio UI 的同一条浏览器到 SQLite 链路和身份鉴权、用户正式签收仍独立标记未通过，不能提前发布正式 Stable。
