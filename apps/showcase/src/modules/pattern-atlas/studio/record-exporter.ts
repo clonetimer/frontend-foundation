@@ -15,7 +15,7 @@ interface RecordContextValue {
   selected: Row | null; selectedId: string; draft: Record<string, string>; errors: Record<string,string>;
   tableSelection: OverlayRecordSelection | null; chooseTable: (selection: OverlayRecordSelection) => void;
   detailStatus: 'idle' | 'loading' | 'ready' | 'error'; detailError: string;
-  saveStatus: 'idle' | 'loading' | 'success' | 'error'; saveError: string;
+  saveStatus: 'idle' | 'loading' | 'success' | 'error'; saveError: string; writing: boolean;
   page: number; pageSize: number; totalPages: number; totalRows: number;
   searchInput: string; setSearchInput: (value: string) => void; applySearch: () => void; retry: () => void;
   filter: string; setFilter: (value: string) => void; direction: '' | 'asc' | 'desc'; setDirection: (value: '' | 'asc' | 'desc') => void;
@@ -127,6 +127,16 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
   const [saveStatus, setSaveStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [saveError, setSaveError] = useState('');
   const [revision, setRevision] = useState(0);
+  const writeLock = useRef(false);
+  const [writing, setWriting] = useState(false);
+  const announceMutation = () => window.dispatchEvent(new Event('atlas:records-refresh'));
+  // Synchronous mutual exclusion: a rapid double click cannot issue two writes.
+  const exclusiveWrite = async (operation: () => Promise<void>): Promise<void> => {
+    if (writeLock.current) throw new Error('已有写入请求正在执行，请勿重复提交');
+    writeLock.current = true; setWriting(true);
+    try { await operation(); }
+    finally { writeLock.current = false; setWriting(false); }
+  };
   const retainedDraft = useRef<{ id: string; values: Record<string,string> } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
@@ -194,7 +204,7 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
     retainedDraft.current = null;
     setDraft(next); setErrors({});
   }, [selected, names]);
-  const save = async (config: RecordSubmit) => {
+  const performSave = async (config: RecordSubmit) => {
     if (!source || !selected) throw new Error('请先选择记录');
     if (source.detailUrl && (detailStatus !== 'ready' || detail?.id !== selectedId)) throw new Error(detailError || '请等待详情加载完成');
     if (!validUrl(config.url)) throw new Error('保存接口地址无效');
@@ -218,7 +228,7 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
     setSaveStatus('loading'); setSaveError('');
     try {
       await request(config.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(savePayload(payload, config.fieldMappings)) });
-      setSaveStatus('success'); setRevision((value) => value + 1);
+      setSaveStatus('success'); announceMutation();
     } catch (reason) {
       const failure = classifyMutationException(reason);
       if (failure.kind === 'invalid' && reason && typeof reason === 'object') {
@@ -229,44 +239,47 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
       }
       if (failure.refresh) {
         retainedDraft.current = { id: selectedId, values: { ...draft } };
-        setRevision((value) => value + 1);
+        announceMutation();
       }
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
       throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
-  const create = async (title: string) => {
+  const performCreate = async (title: string) => {
     if (!source?.createUrl) throw new Error('未配置新增接口');
     if (title.trim().length < 2 || title.length > 120) throw new Error('标题需要 2–120 个字符');
     setSaveStatus('loading'); setSaveError('');
     try {
       await request(source.createUrl, { method: 'POST', headers: { 'Content-Type':'application/json' }, body:JSON.stringify(savePayload({ title:title.trim(), status:'draft' }, source.fieldMappings)) });
-      setSaveStatus('success'); setPage(1); setRevision((n) => n + 1);
+      setSaveStatus('success'); setPage(1); announceMutation();
     } catch (reason) {
       const failure = classifyMutationException(reason);
-      if (failure.refresh) setRevision((n) => n + 1);
+      if (failure.refresh) announceMutation();
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message);
       throw new Error(failure.kind === 'uncertain' ? '写入结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
-  const remove = async () => {
+  const performRemove = async () => {
     if (!source?.deleteUrl || !selectedId) throw new Error('未选中记录或未配置删除接口');
     const template = source.deleteUrl;
     if (template.split('{id}').length !== 2 || /[{}]/.test(template.replace('{id}', ''))) throw new Error('删除接口需要一个 {id}');
     const url = template.replace('{id}', encodeURIComponent(selectedId));
     setSaveStatus('loading'); setSaveError('');
-    try { await request(url, { method:'DELETE' }); setSelectedId(''); setDetail(null); setSaveStatus('success'); setRevision((n) => n + 1); }
+    try { await request(url, { method:'DELETE' }); setSelectedId(''); setDetail(null); setSaveStatus('success'); announceMutation(); }
     catch (reason) {
       const failure = classifyMutationException(reason);
-      if (failure.refresh) setRevision((n) => n + 1);
+      if (failure.refresh) announceMutation();
       setSaveStatus('error');
       setSaveError(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message);
       throw new Error(failure.kind === 'uncertain' ? '删除结果不确定：' + failure.message : failure.message, { cause: reason });
     }
   };
-  return <Context.Provider value={{ source, visibleRows, loading, error, selected, selectedId, draft, errors, detailStatus, detailError, tableSelection, chooseTable: setTableSelection, saveStatus, saveError,
+  const save = (config: RecordSubmit): Promise<void> => exclusiveWrite(() => performSave(config));
+  const create = (title: string): Promise<void> => exclusiveWrite(() => performCreate(title));
+  const remove = (): Promise<void> => exclusiveWrite(performRemove);
+  return <Context.Provider value={{ source, visibleRows, loading, error, selected, selectedId, draft, errors, detailStatus, detailError, tableSelection, chooseTable: setTableSelection, saveStatus, saveError, writing,
     page: currentPage, pageSize, totalPages, totalRows: count, searchInput, setSearchInput, applySearch: () => { setPage(1); setSelectedId(''); setSearch(searchInput.trim().slice(0, 120)); }, retry: () => setRevision((value) => value + 1),
     filter, setFilter: (value) => { setFilter(value); setPage(1); setSelectedId(''); }, direction, setDirection: (value) => { setDirection(value); setPage(1); setSelectedId(''); }, create, remove,
     changePage: (value) => { setSelectedId(''); setPage(Math.max(1, Math.min(totalPages, value))); },
@@ -296,8 +309,8 @@ export function StudioRecordList({ title }: { title: string }) {
       {state.source?.filterField && state.source.filterValues?.length ? <Select size="small" aria-label="筛选状态" value={state.filter || '__all__'} options={[{ value:'__all__', label:'全部状态' }, ...state.source.filterValues.map((value) => ({ value, label:value }))]} onChange={(value) => state.setFilter(value === '__all__' ? '' : value)}/> : null}
       {state.source?.sortField ? <Select size="small" aria-label="排序方式" value={state.direction || 'none'} options={[{ value:'none', label:'默认顺序' }, { value:'asc', label:'升序 ↑' }, { value:'desc', label:'降序 ↓' }]} onChange={(value: 'none' | 'asc' | 'desc') => state.setDirection(value === 'none' ? '' : value)}/> : null}
       {state.source?.createUrl ? <Button type="primary" size="small" onClick={() => { setNewTitle(''); setCreateOpen(true); }}>＋新增</Button> : null}
-      {state.source?.deleteUrl ? <Popconfirm title="确定删除选中记录？" description="将向后端发送 DELETE 请求，操作不可撤销。" okText="删除" cancelText="取消" okButtonProps={{danger:true}} onConfirm={() => void state.remove().then(() => message.success('删除成功')).catch((reason:unknown) => message.error(reason instanceof Error ? reason.message : '删除失败'))}><Button size="small" danger disabled={!state.selected}>删除选中</Button></Popconfirm> : null}
-      <Modal title="新增记录" open={createOpen} okText="提交到后端" cancelText="取消" confirmLoading={creating} onCancel={() => setCreateOpen(false)} onOk={() => { setCreating(true); void state.create(newTitle).then(() => { setCreateOpen(false); void message.success('新增成功'); }).catch((reason:unknown) => message.error(reason instanceof Error ? reason.message : '新增失败')).finally(() => setCreating(false)); }}><label className="atlas-export-field">记录标题<Input value={newTitle} maxLength={120} onChange={(event) => setNewTitle(event.target.value)} placeholder="至少两个字符"/></label></Modal>
+      {state.source?.deleteUrl ? <Popconfirm title="确定删除选中记录？" description="将向后端发送 DELETE 请求，操作不可撤销。" okText="删除" cancelText="取消" okButtonProps={{danger:true}} onConfirm={() => void state.remove().then(() => message.success('删除成功')).catch((reason:unknown) => message.error(reason instanceof Error ? reason.message : '删除失败'))}><Button size="small" danger disabled={!state.selected || state.writing}>删除选中</Button></Popconfirm> : null}
+      <Modal title="新增记录" open={createOpen} okText="提交到后端" cancelText="取消" confirmLoading={creating || state.writing} onCancel={() => setCreateOpen(false)} onOk={() => { if (creating || state.writing) return; setCreating(true); void state.create(newTitle).then(() => { setCreateOpen(false); void message.success('新增成功'); }).catch((reason:unknown) => message.error(reason instanceof Error ? reason.message : '新增失败')).finally(() => setCreating(false)); }}><label className="atlas-export-field">记录标题<Input value={newTitle} maxLength={120} onChange={(event) => setNewTitle(event.target.value)} placeholder="至少两个字符"/></label></Modal>
     </div> : null}
     {state.loading ? <div role="status">加载中…</div> : state.error ? <div role="alert" className="atlas-record-error">{state.error}<Button size="small" onClick={state.retry}>重试</Button></div> : !state.visibleRows.length ? <div>暂无记录</div> :
       <div className="atlas-record-rows">{state.visibleRows.map((row) => {
@@ -357,6 +370,6 @@ export function StudioRecordSave({ binding, label, buttonType, disabled }: { bin
     catch (error) { void message.error(error instanceof Error ? error.message : '保存失败'); }
     finally { setPending(false); }
   };
-  return <Button type={buttonType} loading={pending} disabled={disabled || !state.selected || pending || state.detailStatus === 'loading' || state.detailStatus === 'error'} onClick={() => void submit()}>{label}</Button>;
+  return <Button type={buttonType} loading={pending} disabled={disabled || !state.selected || pending || state.writing || state.detailStatus === 'loading' || state.detailStatus === 'error'} onClick={() => void submit()}>{label}</Button>;
 }
 `;

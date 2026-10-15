@@ -185,6 +185,15 @@ describe('Phase 22 · remote business tables', () => {
     expect(parseMutationFieldErrors({errors:{subject:'拒绝'}},[{field:'name',saveField:'subject'},{field:'other',saveField:'subject'}])).toEqual({});
     expect(parseMutationFieldErrors(null,mappings)).toEqual({});
   });
+  it('serializes legacy record writes and emits the cross-widget refresh contract in both runtimes', () => {
+    expect(exportedRecordRuntime).toContain('const exclusiveWrite = async');
+    expect(exportedRecordRuntime).toContain('writeLock.current');
+    expect(exportedRecordRuntime).toContain("atlas:records-refresh");
+    expect(exportedRecordRuntime).toContain('writing: boolean');
+    expect(exportedRecordRuntime).toContain('state.writing');
+    // Prevent accidental reintroduction of a local-only revision refresh.
+    expect(exportedRecordRuntime).toContain("setSaveStatus('success'); announceMutation();");
+  });
   it('keeps hosted and generated Record Providers on the same write failure taxonomy', () => {
     expect(classifyMutationException({status:422,message:'bad'})).toMatchObject({kind:'invalid',refresh:false,status:422});
     expect(classifyMutationException({status:403,message:'denied'})).toMatchObject({kind:'denied',refresh:false,status:403});
