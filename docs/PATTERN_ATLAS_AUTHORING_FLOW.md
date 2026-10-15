@@ -53,4 +53,14 @@ node tooling/create-app/project.mjs compile ./my-app/foundation.project.json
 
 - Phase 22-C5：旧 Record Provider 的保存、新增、删除加入单 Provider 实例内的同步在途锁，防止跨按钮快速双击重复提交；成功、冲突或结果不确定时，通过 `atlas:records-refresh` 通知同页旧记录列表与增强表格重新 GET。该事件不会同步其他浏览器/终端，也不替代后端幂等与原子版本检查。
 
-详见 [Phase 7 统一设计器技术说明](PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md)。
+- Phase 22-C6：Record Provider 的服务端 GET 刷新保持当前非首行记录的选中 ID；若后端返回页中该 ID 消失，则清除选中，并在后续连续刷新中保持清空，直到用户重新选择或主动改变查询，避免把后续编辑静默指向首行。切换分页/筛选/来源仍按既有逻辑处理。独立 ZIP Chromium 验收包含非首行保存、真实 GET 与服务端删除后的取消选中。
+
+### Stable 收口后能力边界：Blueprint / Registry / Action DSL
+
+Studio 是唯一主要拖拽式产品；Foundation 0.21.0 契约冻结维护，原 Designer 仅作兼容。**不计划把三套底层 DSL 的完整编辑器复制到 Studio**：
+
+- **Blueprint（必需的兼容内核）**：继续导入/导出 `foundation.project.json`，保持页面、布局与基础 Composition 的可迁移性；复杂原生字段保留在 JSON/Compiler 路径，不要求 Studio 提供逐字段可视化编辑。`atlas.studio.json` 仍是 Studio 视觉与特效的完整可编辑来源；两份导出不能误称等价。
+- **Registry（需要应用层扩展点）**：优先允许用户在 Palette 中选择已注册的业务组件，并通过声明式属性/事件配置与编译时映射导出；不要在设计器内执行未知项目代码。完整 Domain SDK 开发与 Registry 合并仍在 Foundation 工具链完成，先用真实第三方组件试用验证需求，再决定最小适配。
+- **Action DSL（需要可视化的业务动作子集）**：重点支持按钮/表单触发、HTTP 请求、条件、确认、成功/失败提示、联动和页面跳转。沿用 Studio 已有安全的结构化 workflow，不引入独立的底层 DSL 编辑系统；只有实际业务流程无法表达时，再映射到既有 Action DSL。
+
+发布验收按用户操作的“创建→编辑→交互→预览→独立 ZIP→重导入”闭环，不把底层高级 DSL 覆盖率作为 Stable 硬指标。保留旧项目兼容是硬约束，任意未覆盖的高级字段不得静默丢失。参见 [Phase 7 统一设计器技术说明](PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md)。

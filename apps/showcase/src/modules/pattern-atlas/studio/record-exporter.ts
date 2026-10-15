@@ -122,6 +122,8 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState('');
+  // Explicitly invalidated IDs may not auto-select a different row on a later GET.
+  const selectionInvalidated = useRef(false);
   const [tableSelection, setTableSelection] = useState<OverlayRecordSelection | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -153,12 +155,13 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
     return () => window.removeEventListener('atlas:records-refresh', refresh);
   }, [source?.url]);
   const signature = JSON.stringify(source ?? null);
-  useEffect(() => { setPage(1); setSearch(''); setSearchInput(''); setFilter(''); setDirection(''); setSelectedId(''); }, [source?.url]);
+  useEffect(() => { setPage(1); setSearch(''); setSearchInput(''); setFilter(''); setDirection(''); selectionInvalidated.current = false; setSelectedId(''); }, [source?.url]);
   useEffect(() => {
-    if (!source) { setRows([]); setTotalRows(0); setSelectedId(''); setError(''); setLoading(false); return; }
+    if (!source) { selectionInvalidated.current = false; setRows([]); setTotalRows(0); setSelectedId(''); setError(''); setLoading(false); return; }
     const controller = new AbortController();
     setLoading(true); setError('');
-    if (serverPaging) { setRows([]); setSelectedId(''); setDetail(null); }
+    // A refresh must preserve the active edit target. Page/filter/source changes
+    // clear selection explicitly; clearing it here silently switches records.
     let url: string;
     try { url = listUrl(source, serverPaging ? page : 1, serverPaging ? search : '', filter, direction); }
     catch (reason) { setLoading(false); setError(reason instanceof Error ? reason.message : '列表地址无效'); return; }
@@ -168,7 +171,14 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
       setRows(result.rows); setTotalRows(result.total);
       const lastPage = Math.max(1, Math.ceil(result.total / pageSize));
       if (serverPaging && page > lastPage) { setPage(lastPage); return; }
-      setSelectedId((current) => result.rows.some((row) => idOf(row, source) === current) ? current : result.rows[0] ? idOf(result.rows[0], source) : '');
+      setSelectedId((current) => {
+        if (current) {
+          if (result.rows.some((row) => idOf(row, source) === current)) return current;
+          selectionInvalidated.current = true;
+          return '';
+        }
+        return selectionInvalidated.current ? '' : (result.rows[0] ? idOf(result.rows[0], source) : '');
+      });
     }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : '接口读取失败'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -267,7 +277,7 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
     if (template.split('{id}').length !== 2 || /[{}]/.test(template.replace('{id}', ''))) throw new Error('删除接口需要一个 {id}');
     const url = template.replace('{id}', encodeURIComponent(selectedId));
     setSaveStatus('loading'); setSaveError('');
-    try { await request(url, { method:'DELETE' }); setSelectedId(''); setDetail(null); setSaveStatus('success'); announceMutation(); }
+    try { await request(url, { method:'DELETE' }); selectionInvalidated.current = true; setSelectedId(''); setDetail(null); setSaveStatus('success'); announceMutation(); }
     catch (reason) {
       const failure = classifyMutationException(reason);
       if (failure.refresh) announceMutation();
@@ -280,10 +290,10 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
   const create = (title: string): Promise<void> => exclusiveWrite(() => performCreate(title));
   const remove = (): Promise<void> => exclusiveWrite(performRemove);
   return <Context.Provider value={{ source, visibleRows, loading, error, selected, selectedId, draft, errors, detailStatus, detailError, tableSelection, chooseTable: setTableSelection, saveStatus, saveError, writing,
-    page: currentPage, pageSize, totalPages, totalRows: count, searchInput, setSearchInput, applySearch: () => { setPage(1); setSelectedId(''); setSearch(searchInput.trim().slice(0, 120)); }, retry: () => setRevision((value) => value + 1),
-    filter, setFilter: (value) => { setFilter(value); setPage(1); setSelectedId(''); }, direction, setDirection: (value) => { setDirection(value); setPage(1); setSelectedId(''); }, create, remove,
-    changePage: (value) => { setSelectedId(''); setPage(Math.max(1, Math.min(totalPages, value))); },
-    choose: (row) => { setTableSelection(null); if (source) setSelectedId(idOf(row, source)); },
+    page: currentPage, pageSize, totalPages, totalRows: count, searchInput, setSearchInput, applySearch: () => { selectionInvalidated.current = false; setPage(1); setSelectedId(''); setSearch(searchInput.trim().slice(0, 120)); }, retry: () => setRevision((value) => value + 1),
+    filter, setFilter: (value) => { selectionInvalidated.current = false; setFilter(value); setPage(1); setSelectedId(''); }, direction, setDirection: (value) => { selectionInvalidated.current = false; setDirection(value); setPage(1); setSelectedId(''); }, create, remove,
+    changePage: (value) => { selectionInvalidated.current = false; setSelectedId(''); setPage(Math.max(1, Math.min(totalPages, value))); },
+    choose: (row) => { setTableSelection(null); if (source) { selectionInvalidated.current = false; setSelectedId(idOf(row, source)); } },
     edit: (field, value) => { setDraft((old) => ({ ...old, [field]: value })); setSaveStatus('idle'); setErrors((old) => { const next = { ...old }; delete next[field]; return next; }); }, save }}>{children}</Context.Provider>;
 }
 function useRecord(): RecordContextValue { const value = useContext<RecordContextValue | null>(Context); if (!value) throw new Error('缺少记录数据容器'); return value; }

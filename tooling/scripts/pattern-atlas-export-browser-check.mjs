@@ -167,6 +167,8 @@ export async function runExportedBrowserSmoke(directory) {
       if (legacySaveCalls.length === 3) {
         response.writeHead(403); response.end('{"error":"denied"}'); return;
       }
+      // C6: persist the non-first record to exercise server-authoritative refresh.
+      if (legacySaveCalls.length >= 5 && savedRecords[1]) Object.assign(savedRecords[1], legacySaveCalls.at(-1));
       await new Promise((resolve) => setTimeout(resolve, 350));
       response.writeHead(200); response.end('{"saved":true}'); return;
     }
@@ -213,7 +215,13 @@ export async function runExportedBrowserSmoke(directory) {
     });
     const call = (method, params = {}) => new Promise((resolve, reject) => {
       const id = ++seq;
-      pending.set(id, { resolve, reject });
+      // A stalled DevTools response must fail the gate rather than hang until
+      // the outer CI job timeout, which hides the actual browser assertion.
+      const timer = setTimeout(() => { pending.delete(id); reject(new Error('Chrome CDP ' + method + ' timed out on ' + String(params.expression ?? params.url ?? '').slice(0, 280))); }, 30000);
+      pending.set(id, {
+        resolve(value) { clearTimeout(timer); resolve(value); },
+        reject(reason) { clearTimeout(timer); reject(reason); }
+      });
       socket.send(JSON.stringify({ id, method, params }));
     });
     const evaluate = async (expression) => {
@@ -712,6 +720,43 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table [role=alert]')?.textContent?.includes('强 ETag 前置条件无效')"), 'B4 missing strong ETag not blocked');
     assert.equal(deleteCalls.length, beforeMissingEtag, 'B4 missing ETag issued an unguarded DELETE');
 
+    // Prior workflow scenarios can navigate away from the exported overview.
+    // Re-enter it and wait for an authoritative list GET before this scenario.
+    console.log('C6: restoring exported overview for record reconciliation');
+    await call('Page.navigate', { url: root + '/#/overview' });
+    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('张三')"), 'C6 restored overview records GET');
+    console.log('C6: overview and second record confirmed');
+    console.log('C6: before selecting second record');
+    // C6: a server-page refresh must not jump from a non-first selected
+    // record back to the first one. A disappeared target must fail closed.
+    assert(await evaluate("(() => { const b=[...document.querySelectorAll('.atlas-record-rows button')].find(el=>el.textContent?.includes('张三'));if(!b)return false;b.click();return true;})()"), 'C6 second-row record unavailable');
+    console.log('C6: second record click returned');
+    await until(() => evaluate("document.querySelector('.atlas-record-rows button.active')?.textContent?.includes('张三')"), 'C6 second row did not become active');
+    console.log('C6: active second record confirmed');
+    assert(await evaluate("(() => {const el=document.querySelector('input[aria-label=记录姓名C4]');if(!el)return false;el.focus();el.select();return true;})()"), 'C6 non-first input unavailable');
+    await call('Input.insertText', { text: 'C6第二行' });
+    const c6ReadsBeforeSave = listReads;
+    // The intentional full-page navigation above resets earlier test mocks.
+    // Headless Chrome's native confirm dialog would block Runtime.evaluate.
+    await evaluate("window.confirm = () => true");
+    assert(await click('保存修改C4'), 'C6 save target missing');
+    await until(() => legacySaveCalls.length === 5, 'C6 selected-record write missing');
+    assert.equal(legacySaveCalls[4]?.name, 'C6第二行', 'C6 submitted a stale or wrong record draft');
+    await until(() => listReads > c6ReadsBeforeSave, 'C6 save did not reconcile with server GET');
+    await until(() => evaluate("document.querySelector('.atlas-record-rows button.active')?.textContent?.includes('C6第二行')"), 'C6 refresh silently selected another record');
+    assert(await evaluate("document.querySelector('input[aria-label=记录姓名C4]')?.value === 'C6第二行'"), 'C6 refresh lost the selected record context');
+    savedRecords.splice(1, 1);
+    const c6ReadsBeforeExternalChange = listReads;
+    await evaluate("window.dispatchEvent(new Event('atlas:records-refresh'))");
+    await until(() => listReads > c6ReadsBeforeExternalChange, 'C6 external-change GET missing');
+    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('更新姓名') && !document.querySelector('.atlas-record-rows button.active')"), 'C6 disappeared record silently switched to the first item');
+    assert.equal(legacySaveCalls.length, 5, 'C6 reconciliation issued an unexpected write');
+    const c6ReadsBeforeRepeatedRefresh = listReads;
+    await evaluate("window.dispatchEvent(new Event('atlas:records-refresh'))");
+    await until(() => listReads > c6ReadsBeforeRepeatedRefresh, 'C6 repeated authoritative GET missing');
+    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('更新姓名') && !document.querySelector('.atlas-record-rows button.active')"), 'C6 repeated refresh reselected another record');
+    assert.equal(legacySaveCalls.length, 5, 'C6 repeated refresh wrote another record');
+
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
@@ -719,11 +764,14 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'legacy RecordProvider 422 field, committed 503 draft safety and 403 permission', 'shared mutation single-flight rapid double click and record GET broadcast', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'legacy RecordProvider 422 field, committed 503 draft safety and 403 permission', 'shared mutation single-flight rapid double click and record GET broadcast', 'non-first record refresh retention and disappeared-target safety', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
     vite.kill();
+    // Terminate lingering Chrome keep-alive sockets before waiting for close;
+    // otherwise a failing assertion can conceal itself behind CI's 15m timeout.
+    api.closeAllConnections();
     await new Promise((resolve) => api.close(resolve));
     await pause(450);
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 200 }); }
