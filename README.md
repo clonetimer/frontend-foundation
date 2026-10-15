@@ -24,6 +24,8 @@ pnpm dev:studio   # 仅启动新的 Showcase 设计工作台
 
 详见 [`docs/PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md`](docs/PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md) 和 [`docs/PATTERN_ATLAS_AUTHORING_FLOW.md`](docs/PATTERN_ATLAS_AUTHORING_FLOW.md)。
 
+**Windows 自动化试用验收**：Studio RC 候选包同时由 Ubuntu 和 Windows GitHub Runner 从源码构建并分别验收；Windows 真实执行 `start-studio.cmd` 并在 Chrome 验证 `/create`、`/studio`。GitHub Actions 分别提供对应 OS 的候选制品。验收通过不等于用户本机人工验收或 Stable 发布。
+
 **Studio 编辑器候选包**：在 GitHub Actions 的 `Pattern Atlas Studio RC Artifact` 工作流，可获得带 SHA-256 清单、本地服务器和 Windows 启动脚本的生产构建试用包。生产 Chromium 测试覆盖 `/create` 与 `/studio`；这与 Studio 导出的业务 React ZIP 不同。当前仅为 Candidate，不包含后端或正式 Stable Release。详见 [Studio RC 规范](docs/PATTERN_ATLAS_STABLE_RC.md)。
 
 **Studio Stable RC 路线**：Pattern Atlas Studio 是后续唯一主要开发的可视化产品；Foundation 0.21.0 核心契约冻结维护，原 Designer 仅提供历史兼容。Studio 的 Stable 准入独立于 Foundation npm Registry 发布：PR 与合并后的 `main` 都必须运行跨平台 Studio 全门禁；正式发布仍需独立编辑器试用、可重导入工程、独立 ZIP 交互验收、固定源码与制品哈希。当前状态不是已发布 Stable。详见 [`docs/PATTERN_ATLAS_STABLE_RC.md`](docs/PATTERN_ATLAS_STABLE_RC.md)。

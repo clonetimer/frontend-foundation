@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /** Production Studio editor trial package: checksum, SPA routing and real Chromium. */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -26,8 +26,17 @@ async function until(check, label, limit = 25000) {
   }
   throw new Error(label + ' timed out' + (last ? ': ' + String(last) : ''));
 }
-const server = spawn(process.execPath, ['serve.mjs'], { cwd: directory,
-  env: { ...process.env, ATLAS_STUDIO_PORT: String(serverPort) }, stdio: 'inherit' });
+// On real Windows, launch the *shipped .cmd file*, not just the Node server.
+const windows = process.platform === 'win32';
+if (windows) {
+  const launcher = join(directory, 'start-studio.cmd');
+  assert(existsSync(launcher), 'Missing Windows trial launcher');
+  assert.match(readFileSync(launcher, 'utf8'), /node serve\.mjs/, 'Windows launcher no longer starts Studio');
+}
+const server = spawn(windows ? (process.env.ComSpec || 'cmd.exe') : process.execPath,
+  windows ? ['/d', '/c', 'start-studio.cmd'] : ['serve.mjs'],
+  { cwd: directory, env: { ...process.env, ATLAS_STUDIO_PORT: String(serverPort) },
+    stdio: 'inherit' });
 const profile = mkdtempSync(join(tmpdir(), 'studio-rc-smoke-'));
 let browser, socket;
 try {
@@ -91,11 +100,20 @@ try {
   assert.deepEqual(errors, [], 'Unexpected editor JavaScript exceptions');
   console.log(JSON.stringify({ result: 'PASS', revision: manifest.sourceCommit,
     scenario: 'packaged editor / production React / Chromium',
-    checks: ['SHA-256', 'static JS', 'SPA route', '404 fallback', '/create', '/studio', 'runtime errors'] }));
+    platform: process.platform,
+    checks: ['SHA-256', 'static JS', 'SPA route', '404 fallback', '/create', '/studio', 'runtime errors',
+      windows ? 'Windows start-studio.cmd launcher' : 'POSIX node launcher'] }));
 } finally {
   if (socket?.readyState === WebSocket.OPEN) socket.close();
-  browser?.kill();
-  server.kill();
+  if (windows && server.pid) {
+    // cmd.exe owns the spawned Node process; kill its whole Windows job tree.
+    try { execFileSync('taskkill', ['/PID', String(server.pid), '/T', '/F'], { stdio: 'ignore' }); }
+    catch { server.kill(); }
+  } else { server.kill(); }
+  if (windows && browser?.pid) {
+    try { execFileSync('taskkill', ['/PID', String(browser.pid), '/T', '/F'], { stdio: 'ignore' }); }
+    catch { browser.kill(); }
+  } else { browser?.kill(); }
   await pause(400);
   try { rmSync(profile, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 }); }
   catch { /* temporary profile cleanup is best-effort */ }

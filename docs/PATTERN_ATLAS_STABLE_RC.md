@@ -59,3 +59,7 @@ Foundation `0.21.0` 的 npm `candidate → latest` 属于 **另一个发布轨�
 新增 `Pattern Atlas Studio RC Artifact` GitHub Actions：对 `apps/showcase` 的**生产构建**单独打包，校验候选包每个文件的 SHA-256，并用 Chromium 真正加载 `/create` 和 `/studio`。下载 Actions artifact 后执行 `node serve.mjs`（Windows 可双击 `start-studio.cmd`），浏览器访问 `http://127.0.0.1:5188/studio`。
 
 这与已有的**Studio 导出 React ZIP**是两条独立验证线：后者验证生成的用户业务应用；本条验证编辑器自身。候选包保留了 Showcase 其他页面，尚未构造成 Studio 专用桌面安装包，也不含 Vite 开发模拟 API、后端或数据库。此阶段的 Actions artifact 只是试用材料，未通过人工端到端试用、版本冻结与正式发布门禁前不可称为 Stable。
+
+## Phase 22-D3 · Windows 原生候选包回归
+
+`Pattern Atlas Studio RC Artifact` 在 **Ubuntu / Node 22** 和 **Windows / Node 24** 分别构建、打包与校验独立候选目录。Windows 验收用 `cmd.exe` 实际执行候选包中的 `start-studio.cmd`，在本地监听地址启动产品，并在 Windows Chrome 中自动访问 `/create`、`/studio`，验证生产脚本、路由回退、资源 MIME/404、运行时错误与每个候选文件的 SHA-256。**每个系统上传自己的不可混淆制品**，文件名包含 OS、Node 版本和 Git SHA。该项是 Windows 自动化验收，不等价于用户设备上的人工可用性测试。
