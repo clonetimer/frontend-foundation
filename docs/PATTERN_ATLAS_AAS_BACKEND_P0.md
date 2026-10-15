@@ -70,3 +70,18 @@ python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*.py' -v
 `tooling/scripts/pattern-atlas-studio-rc-smoke.mjs` 中增加可复现的候选编辑器生产态浏览器验证：测试在 Windows/Linux GitHub Runner 中启动真实 Chrome/Chromium、生产构建 Studio、公共仓库内的 `bridge.py` Python HTTP 进程和**合成的 AAS 形状 HTTP 上游 fixture**。浏览器使用组件库添加「数据表格」，通过 Inspector 填写桥接器的 GET 地址、切换到「体验」模式，并要求真实 HTTP 请求从浏览器经 Python bridge 到合成 AAS 上游，最终在页面渲染 `AAS-CI-Model-10`。测试截图和 `aas-shaped-http-integration.json` 随候选制品保存。**这不是在 GitHub Runner 中运行用户提供的私有 AAS 后端源码**；私有 AAS 源码只在隔离环境里以 14/14 原生 SQLite HTTP 检查验证。
 
 只有 CI 工作流实际全绿后，上述浏览器验收才可以认定 PASS。即使全绿，真实 AAS + Studio UI 的同一条浏览器到 SQLite 链路和身份鉴权、用户正式签收仍独立标记未通过，不能提前发布正式 Stable。
+
+
+## Phase 22-P0-D · Native SQLite 权限、分页和条件更新试验（2026-10-15）
+
+新增实验性本地网关：tooling/scripts/aas_p0/secure_records.py。它**直接连接隔离的 AAS 原生 models SQLite 表**，不上传、不改动原用户的数据库。Python 标准库验证程序为 tooling/scripts/aas_p0/test_secure_records.py；新源代码随既有 Windows/Linux Studio RC 工作流的 Python unittest 自动发现执行。
+
+- **真正 COUNT/OFFSET/LIMIT**：在同一 SQLite 读事务里执行 COUNT 和可排序、搜索、筛选的分页；测试数据库为 805 个模型，第 41 页正确返回 5 条，total=805。原始 AAS HTTP /api/models?limit=500 只返回 500 条且 total=500。
+- **最小角色隔离**：不同且至少 32 字符的只读/写令牌；无凭据 401、读角色提交 403、非允许的 Origin 403、默认禁用写入。显式开启 synthetic-only 写入后，仅 experiment_id 为 p0_case_N 的合成模型可更新。
+- **强内容 ETag + 写入冲突检测**：GET 根据 AAS 完整原始行生成 SHA-256 ETag；PATCH 只允许 status 枚举并要求 If-Match；SQLite BEGIN IMMEDIATE 中检查 ETag。陈旧版本 412；8 个并发同 ETag 请求仅一个成功。原生 AAS PUT 修改记录后旧 ETag 失效。
+- **拒绝不安全行为**：POST/DELETE 均返回 405，因为模型发布需要原生训练产物校验，删除包含模型文件副作用；不以单独 SQL 伪造其语义。
+- **直接对用户提供 AAS 原始源码复核**：从 20261015_1.zip 提取仅源码、静态资源和配置到临时目录，不读取、复制或修改原始 datasets、models、outputs、logs。启动未经修改的 AAS visualization_server.py，接合成模型数据库后对原生 HTTP 和安全网关做 14 项检查，全部 PASS。详见独立交付包 studio_aas_native_security_p0_prototype.zip。
+
+**必须保留发布阻塞：** AAS 原始 HTTP 端口仍未鉴权，可绕过本试验网关；Studio 的用户登录、令牌存储、权限和 CSRF 生命周期、完整审计与文件系统侧效应、原生服务统一受控入口及最终用户签收均未完成。实验网关只能监听 127.0.0.1，不能被宣称为生产 API 网关或 Studio Stable 已完成安全验收。
+
+可复测：python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*.py' -v。执行程序时需通过 STUDIO_AAS_P0_READ_TOKEN 和 STUDIO_AAS_P0_WRITE_TOKEN 注入两个独立生成的随机长令牌，启动参数 --db /path/to/isolated/models/model.db --origin http://127.0.0.1:5188/ --port 8792。默认只读；不要在生产数据库使用 --allow-synthetic-status-writes。

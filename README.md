@@ -28,6 +28,8 @@ pnpm dev:studio   # 仅启动新的 Showcase 设计工作台
 
 **Studio 编辑器候选包**：在 GitHub Actions 的 `Pattern Atlas Studio RC Artifact` 工作流，可获得带 SHA-256 清单、本地服务器和 Windows 启动脚本的生产构建试用包。生产 Chromium 测试覆盖 `/create` 与 `/studio`；这与 Studio 导出的业务 React ZIP 不同。当前仅为 Candidate，不包含后端或正式 Stable Release。详见 [Studio RC 规范](docs/PATTERN_ATLAS_STABLE_RC.md)。
 
+**AAS 原生 SQLite 安全协议试验**：提供 Python 标准库本地 P0 网关（secure_records.py）和跨平台合成数据库测试（test_secure_records.py），验证真实 COUNT/OFFSET 分页、Bearer 读写角色、合成模型强 If-Match/412 与 SQLite 并发条件更新。该工具默认只读且仅供隔离测试；不会为未经授权的 AAS 原生 HTTP API 提供生产级保护。具体限制参见 [AAS P0 验收](docs/PATTERN_ATLAS_AAS_BACKEND_P0.md)。
+
 **AAS 本地合成模型受限适配器**：`tooling/scripts/aas_p0/bridge.py` 和 `test_bridge.py` 将 Studio 的 `/api/records` 规范转为 AAS 模型注册 HTTP API，Python 标准库跨平台测试。默认只读，写入仅供隔离合成模型；达到 AAS 500 行上限会拒绝伪造完整分页。仅用于 P0 验证，**无生产级身份权限及 ETag/CAS**。参见 [AAS 后端 P0 验收](docs/PATTERN_ATLAS_AAS_BACKEND_P0.md)。
 
 **真实 AAS 后端互操作性验证**：新增 [AAS 原生后端 P0 证据及限制](docs/PATTERN_ATLAS_AAS_BACKEND_P0.md)，基于隔离、合成数据运行用户提供的 Python HTTP+SQLite 后端；提供严格只读、仅本地环回地址的探针 `node tooling/scripts/pattern-atlas-aas-readonly-probe.mjs --base http://127.0.0.1:8765/`。原生 POST/GET/PUT/DELETE 已有实测，但 Studio 通用 PATCH、强 ETag、真实鉴权和浏览器端到端集成尚未验收，因此不应宣称正式 Stable。
