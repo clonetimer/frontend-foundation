@@ -64,11 +64,13 @@ jobs:
           STUDIO_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Smoke installed production editor in Chromium
         run: node tooling/scripts/pattern-atlas-studio-rc-smoke.mjs
-      - name: Preserve candidate trial package and checksum manifest
+      - name: Preserve candidate package and P0 browser evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: pattern-atlas-studio-rc-editor-${{ matrix.os }}-node-${{ matrix.node }}-${{ github.event.pull_request.head.sha || github.sha }}
-          path: artifacts/pattern-atlas/studio-rc/
+          path: |
+            artifacts/pattern-atlas/studio-rc/
+            artifacts/pattern-atlas/studio-p0-evidence/
           if-no-files-found: warn
           retention-days: 30
