@@ -11,7 +11,7 @@ async function probe(base) {
       url.username || url.password || url.pathname !== '/' || url.search || url.hash)
     throw new Error('Only loopback HTTP targets are allowed');
   async function read(path, status) {
-    const res = await fetch(new URL(path, url), { redirect: 'error', signal: AbortSignal.timeout(10000) });
+    const res = await fetch(new URL(path, url), { redirect: 'error', signal: globalThis.AbortSignal.timeout(10000) });
     assert.equal(res.status, status, path + ' status');
     assert.match(res.headers.get('content-type') || '', /application\/json/, path + ' content type');
     return res.json();
