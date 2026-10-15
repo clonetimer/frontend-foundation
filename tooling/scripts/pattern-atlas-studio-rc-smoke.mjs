@@ -118,7 +118,7 @@ try {
   const before = await stored();
   assert(before?.blueprint?.pages?.[0]?.composition, 'P0 initial autosave absent');
   const originalCount = countNodes(before.blueprint.pages[0].composition);
-  assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-palette-item')].find(x=>x.querySelector('strong')?.textContent?.trim()==='文字');if(!e)return false;e.click();return true;})()"), 'P0 text widget missing');
+  assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-palette-item')].find(x=>x.querySelector('strong')?.textContent?.trim()==='文字标题');if(!e)return false;e.click();return true;})()"), 'P0 text widget missing');
   await until(async () => {
     const saved = await stored();
     return saved?.blueprint?.pages?.[0]?.composition && countNodes(saved.blueprint.pages[0].composition) === originalCount + 1;
