@@ -85,3 +85,21 @@ python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*.py' -v
 **必须保留发布阻塞：** AAS 原始 HTTP 端口仍未鉴权，可绕过本试验网关；Studio 的用户登录、令牌存储、权限和 CSRF 生命周期、完整审计与文件系统侧效应、原生服务统一受控入口及最终用户签收均未完成。实验网关只能监听 127.0.0.1，不能被宣称为生产 API 网关或 Studio Stable 已完成安全验收。
 
 可复测：python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*.py' -v。执行程序时需通过 STUDIO_AAS_P0_READ_TOKEN 和 STUDIO_AAS_P0_WRITE_TOKEN 注入两个独立生成的随机长令牌，启动参数 --db /path/to/isolated/models/model.db --origin http://127.0.0.1:5188/ --port 8792。默认只读；不要在生产数据库使用 --allow-synthetic-status-writes。
+
+
+## Phase 22-P0-D · AAS 原生 HTTP 旁路封堵（受限试用模式）
+
+**问题**：此前 `secure_records.py` 的 Bearer/If-Match/SQLite CAS 虽已通过测试，但未经修改的 AAS `DashboardHandler` 仍可直接被访问。只要原生 API 可用，就不能将独立网关描述为真正封闭的安全边界。
+
+**新增方案**：`tooling/scripts/aas_p0/native_guard.py` 是**可选择使用的受保护原生 AAS 启动器**。它动态导入用户机器上已有的 `scripts.visualization_server.DashboardHandler`（公共仓库不含 AAS 私有源码）。主机强制绑定 `127.0.0.1`，所有原生 `/api/**` 读取都需要 >=32 字符且彼此不同的 reader/writer Bearer 令牌，检查 Origin，并允许同源预检。**原生 POST/PUT/PATCH/DELETE 全部拒绝，含 writer 令牌也不例外**；合成模型的可控状态更改仅交由另一实验性 `secure_records.py` 处理。未实施安全控制的旧启动方式不可与该启动器同时暴露。此方案是**只读原生 API 的工程验证**，不是生产认证服务。
+
+在独立、无真实用户记录的 AAS 工作目录下运行（强令牌从环境变量读取，不要保存在工程内）：
+
+```bash
+python tooling/scripts/aas_p0/native_guard.py --aas-root /path/to/AAS --origin http://127.0.0.1:5188 --port 8765
+python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*.py' -v
+```
+
+原始 AAS 源码隔离副本的 HTTP 验收：**14/14** 检查 PASS，包括原生 GET 401/200、跨源拒绝、OPTIONS 检查、带 writer 令牌的模型发布/状态 PUT/DELETE 被拒绝、其它原生 API 写入被拒绝与静态资源可读取。本仓库 `test_native_guard.py` 提供不依赖用户私有源码的 5 类合成测试，Windows/Linux Studio RC 门禁自动发现执行。
+
+**仍未通过的 P0**：真实用户身份与会话管理、Studio 前端通过安全 BFF 传递授权（不在设计稿保存令牌）、精细化业务权限与不可篡改审计、原生 AAS 经保护后全功能正常运行、实际浏览器→真实 AAS SQLite 同链路、人的操作签收。原生只读模式会阻断 AAS 既有前端的全部 API 写操作及无令牌 API 读取；必须作为单独受限试用入口验收，不能替换正常产品入口。不得发布正式 Studio Stable。
