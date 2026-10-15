@@ -58,6 +58,8 @@ jobs:
       - name: Install Chinese font coverage for Linux visual evidence
         if: runner.os == 'Linux'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+      - name: Check AAS local read-only probe contract (synthetic protocol only)
+        run: node tooling/scripts/pattern-atlas-aas-readonly-probe.mjs --selftest
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:packages
       - run: pnpm --filter @foundation/showcase build
