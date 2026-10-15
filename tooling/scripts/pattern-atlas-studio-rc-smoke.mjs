@@ -133,6 +133,8 @@ try {
   await until(async () => (await stored())?.blueprint?.project?.title === edited, 'P0 inspector property persistence');
   pass('inspector-property-edit');
 
+  // Capture the whole three-panel desktop UI, not the CDP default 800px viewport.
+  await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   for (const [label, device] of [['手机', 'mobile'], ['平板', 'tablet'], ['桌面', 'desktop']]) {
     const expression = "(() => {const x=[...document.querySelectorAll('.pa-studio-toolbar .ant-segmented-item')].find(e=>e.textContent?.trim()===" + JSON.stringify(label) + ");if(!x)return false;x.click();return true;})()";
     assert(await evaluate(expression), 'P0 responsive control ' + label);
