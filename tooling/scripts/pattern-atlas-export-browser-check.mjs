@@ -714,6 +714,10 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table [role=alert]')?.textContent?.includes('强 ETag 前置条件无效')"), 'B4 missing strong ETag not blocked');
     assert.equal(deleteCalls.length, beforeMissingEtag, 'B4 missing ETag issued an unguarded DELETE');
 
+    // Prior workflow scenarios can navigate away from the exported overview.
+    // Re-enter it and wait for an authoritative list GET before this scenario.
+    await call('Page.navigate', { url: root + '/#/overview' });
+    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('张三')"), 'C6 restored overview records GET');
     // C6: a server-page refresh must not jump from a non-first selected
     // record back to the first one. A disappeared target must fail closed.
     assert(await evaluate("(() => { const b=[...document.querySelectorAll('.atlas-record-rows button')].find(el=>el.textContent?.includes('张三'));if(!b)return false;b.click();return true;})()"), 'C6 second-row record unavailable');
