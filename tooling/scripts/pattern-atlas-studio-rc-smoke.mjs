@@ -239,7 +239,7 @@ try {
     const saved = await stored();
     return Object.values(saved?.decorations ?? {}).some((value) => value?.widgetKind === 'table');
   }, 'P0 table component inserted');
-  assert(await evaluate("(() => {const b=document.querySelector('.pa-studio-inspector-rail button[title=内容]');if(!b)return false;b.click();return true;})()"), 'P0 table content Inspector');
+  assert(await evaluate("(() => {const b=document.querySelector('.pa-studio-inspector-rail button[title=内容]');if(!b)return false;if(b.getAttribute('aria-pressed')!=='true')b.click();return true;})()"), 'P0 table content Inspector');
   await until(() => evaluate("!![...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('数据 GET 地址'))?.querySelector('input')"), 'P0 table GET address control');
   assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('数据 GET 地址'))?.querySelector('input');if(!e)return false;e.focus();e.select();return true;})()"));
   await call('Input.insertText', { text: bridgeOrigin + '/api/records' });
