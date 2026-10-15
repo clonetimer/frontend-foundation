@@ -46,6 +46,9 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
   const [status, setStatus] = useState<StudioRecordFlow['status']>('idle');
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState('');
+  // Once a server refresh invalidates an explicit target, never silently
+  // select another row until the user selects one or changes the query.
+  const selectionInvalidated = useRef(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<StudioRecordFlow['saveStatus']>('idle');
   const [saveError, setSaveError] = useState('');
@@ -76,9 +79,9 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
     return () => window.removeEventListener('atlas:records-refresh', refresh);
   }, [live, source?.url]);
   // Switching to another page or endpoint starts a fresh query, without retaining the prior record.
-  useEffect(() => { setPage(1); setSearch(''); setSearchInput(''); setFilter(''); setDirection(''); setSelectedId(''); setSaveStatus('idle'); }, [pageId, source?.url]);
+  useEffect(() => { setPage(1); setSearch(''); setSearchInput(''); setFilter(''); setDirection(''); selectionInvalidated.current = false; setSelectedId(''); setSaveStatus('idle'); }, [pageId, source?.url]);
   useEffect(() => {
-    if (!live || !source?.url) { setRows([]); setTotalRows(0); setStatus('idle'); setSelectedId(''); setDraft({}); setErrors({}); return; }
+    if (!live || !source?.url) { selectionInvalidated.current = false; setRows([]); setTotalRows(0); setStatus('idle'); setSelectedId(''); setDraft({}); setErrors({}); return; }
     const controller = new AbortController();
     setStatus('loading'); setError('');
     // A refresh must preserve the active edit target. Page/filter/source changes
@@ -93,9 +96,14 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
           setPage(Math.max(1, Math.ceil(result.total / pageSize)));
           return;
         }
-        setSelectedId((previous) => previous
-          ? (result.rows.some((row) => recordId(row, source.idField) === previous) ? previous : '')
-          : (result.rows[0] ? recordId(result.rows[0], source.idField) : ''));
+        setSelectedId((previous) => {
+          if (previous) {
+            if (result.rows.some((row) => recordId(row, source.idField) === previous)) return previous;
+            selectionInvalidated.current = true;
+            return '';
+          }
+          return selectionInvalidated.current ? '' : (result.rows[0] ? recordId(result.rows[0], source.idField) : '');
+        });
         setStatus('ready');
       }).catch((reason: unknown) => {
         if (!controller.signal.aborted) { setError(reason instanceof Error ? reason.message : '列表读取失败'); setStatus('error'); }
@@ -187,7 +195,7 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
     setSaveStatus('loading'); setSaveError('');
     try {
       await requestStudioApi({ method: 'DELETE', url });
-      setSelectedId(''); setDetail(null); setSaveStatus('success'); announceMutation();
+      selectionInvalidated.current = true; setSelectedId(''); setDetail(null); setSaveStatus('success'); announceMutation();
     } catch (reason) {
       const failure = classifyMutationException(reason);
       if (failure.refresh) announceMutation();
@@ -199,13 +207,13 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
   const save = (config: StudioRecordSubmitBinding): Promise<void> => exclusiveWrite(() => performSave(config));
   const create = (title: string): Promise<void> => exclusiveWrite(() => performCreate(title));
   const remove = (): Promise<void> => exclusiveWrite(performRemove);
-  const applySearch = () => { setPage(1); setSelectedId(''); setSearch(searchInput.trim().slice(0, 120)); setSaveStatus('idle'); };
+  const applySearch = () => { selectionInvalidated.current = false; setPage(1); setSelectedId(''); setSearch(searchInput.trim().slice(0, 120)); setSaveStatus('idle'); };
   return { status, detailStatus, detailError, saveStatus, saveError, idField: source?.idField ?? 'id', labelField: source?.labelField ?? 'title', sourceUrl: source?.url ?? '', rows, visibleRows, selected, selectedId, error, draft, saving: writing, errors,
     page: currentPage, pageSize, totalPages, totalRows: filteredTotal, serverPaging, searchInput, setSearchInput, applySearch, retry: () => setRevision((old) => old + 1),
-    filter, setFilter: (value) => { setFilter(value); setPage(1); setSelectedId(''); },
-    direction, setDirection: (value) => { setDirection(value); setPage(1); setSelectedId(''); },
+    filter, setFilter: (value) => { selectionInvalidated.current = false; setFilter(value); setPage(1); setSelectedId(''); },
+    direction, setDirection: (value) => { selectionInvalidated.current = false; setDirection(value); setPage(1); setSelectedId(''); },
     filterOptions: source?.filterValues ?? [], sortField: source?.sortField ?? '', canCreate: Boolean(source?.createUrl), canDelete: Boolean(source?.deleteUrl), create, remove,
-    changePage: (next) => { setSelectedId(''); setPage(Math.max(1, Math.min(totalPages, next))); setSaveStatus('idle'); },
-    select: (row) => { setSelectedId(recordId(row, source?.idField ?? 'id')); setSaveStatus('idle'); },
+    changePage: (next) => { selectionInvalidated.current = false; setSelectedId(''); setPage(Math.max(1, Math.min(totalPages, next))); setSaveStatus('idle'); },
+    select: (row) => { selectionInvalidated.current = false; setSelectedId(recordId(row, source?.idField ?? 'id')); setSaveStatus('idle'); },
     edit: (field, value) => { setDraft((old) => ({ ...old, [field]: value })); setSaveStatus('idle'); setErrors((old) => { const next = { ...old }; delete next[field]; return next; }); }, save };
 }

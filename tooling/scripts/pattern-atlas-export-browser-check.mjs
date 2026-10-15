@@ -215,7 +215,13 @@ export async function runExportedBrowserSmoke(directory) {
     });
     const call = (method, params = {}) => new Promise((resolve, reject) => {
       const id = ++seq;
-      pending.set(id, { resolve, reject });
+      // A stalled DevTools response must fail the gate rather than hang until
+      // the outer CI job timeout, which hides the actual browser assertion.
+      const timer = setTimeout(() => { pending.delete(id); reject(new Error('Chrome CDP ' + method + ' timed out')); }, 30000);
+      pending.set(id, {
+        resolve(value) { clearTimeout(timer); resolve(value); },
+        reject(reason) { clearTimeout(timer); reject(reason); }
+      });
       socket.send(JSON.stringify({ id, method, params }));
     });
     const evaluate = async (expression) => {
@@ -716,8 +722,10 @@ export async function runExportedBrowserSmoke(directory) {
 
     // Prior workflow scenarios can navigate away from the exported overview.
     // Re-enter it and wait for an authoritative list GET before this scenario.
+    console.log('C6: restoring exported overview for record reconciliation');
     await call('Page.navigate', { url: root + '/#/overview' });
     await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('张三')"), 'C6 restored overview records GET');
+    console.log('C6: overview and second record confirmed');
     // C6: a server-page refresh must not jump from a non-first selected
     // record back to the first one. A disappeared target must fail closed.
     assert(await evaluate("(() => { const b=[...document.querySelectorAll('.atlas-record-rows button')].find(el=>el.textContent?.includes('张三'));if(!b)return false;b.click();return true;})()"), 'C6 second-row record unavailable');
@@ -735,8 +743,13 @@ export async function runExportedBrowserSmoke(directory) {
     const c6ReadsBeforeExternalChange = listReads;
     await evaluate("window.dispatchEvent(new Event('atlas:records-refresh'))");
     await until(() => listReads > c6ReadsBeforeExternalChange, 'C6 external-change GET missing');
-    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('旧姓名') && !document.querySelector('.atlas-record-rows button.active')"), 'C6 disappeared record silently switched to the first item');
+    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('更新姓名') && !document.querySelector('.atlas-record-rows button.active')"), 'C6 disappeared record silently switched to the first item');
     assert.equal(legacySaveCalls.length, 5, 'C6 reconciliation issued an unexpected write');
+    const c6ReadsBeforeRepeatedRefresh = listReads;
+    await evaluate("window.dispatchEvent(new Event('atlas:records-refresh'))");
+    await until(() => listReads > c6ReadsBeforeRepeatedRefresh, 'C6 repeated authoritative GET missing');
+    await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('更新姓名') && !document.querySelector('.atlas-record-rows button.active')"), 'C6 repeated refresh reselected another record');
+    assert.equal(legacySaveCalls.length, 5, 'C6 repeated refresh wrote another record');
 
     assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
@@ -750,6 +763,9 @@ export async function runExportedBrowserSmoke(directory) {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
     vite.kill();
+    // Terminate lingering Chrome keep-alive sockets before waiting for close;
+    // otherwise a failing assertion can conceal itself behind CI's 15m timeout.
+    api.closeAllConnections();
     await new Promise((resolve) => api.close(resolve));
     await pause(450);
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 200 }); }

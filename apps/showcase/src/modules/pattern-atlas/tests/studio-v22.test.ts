@@ -197,8 +197,9 @@ describe('Phase 22 · remote business tables', () => {
   it('preserves a non-first edit selection on refresh and clears vanished targets', () => {
     expect(exportedRecordRuntime).toContain('A refresh must preserve the active edit target');
     expect(exportedRecordRuntime).not.toContain('if (serverPaging) { setRows([]); setSelectedId(\'\'); setDetail(null); }');
-    expect(exportedRecordRuntime).toContain('setSelectedId((current) => current');
-    expect(exportedRecordRuntime).toContain("result.rows.some((row) => idOf(row, source) === current) ? current : ''");
+    expect(exportedRecordRuntime).toContain('selectionInvalidated.current = true');
+    expect(exportedRecordRuntime).toContain("return selectionInvalidated.current ? ''");
+    expect(exportedRecordRuntime).toContain('if (result.rows.some((row) => idOf(row, source) === current)) return current;');
   });
   it('keeps hosted and generated Record Providers on the same write failure taxonomy', () => {
     expect(classifyMutationException({status:422,message:'bad'})).toMatchObject({kind:'invalid',refresh:false,status:422});
