@@ -145,6 +145,9 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
   }, [selected, keys]);
   const performSave = async (config: StudioRecordSubmitBinding) => {
     if (!source) throw new Error('请在本页面先配置记录列表。');
+    // Workflows can call save without a visible save button. Never POST if
+    // the previously edited row disappeared during server reconciliation.
+    if (!selected || !selectedId) throw new Error('当前没有可保存的选中记录，请重新选择。');
     if (source.detailUrl && (detailStatus !== 'ready' || detail?.id !== selectedId)) throw new Error(detailError || '请等待详情加载完成。');
     const problems = validateRecordDraft(draft, rules);
     setErrors(problems);
