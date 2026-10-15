@@ -1,0 +1,57 @@
+name: Pattern Atlas Studio RC Artifact
+on:
+  pull_request:
+    paths:
+      - 'apps/showcase/**'
+      - 'packages/**'
+      - 'tooling/scripts/pattern-atlas-studio-rc-*'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/pattern-atlas-studio-rc.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/showcase/**'
+      - 'packages/**'
+      - 'tooling/scripts/pattern-atlas-studio-rc-*'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/pattern-atlas-studio-rc.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  editor-candidate:
+    name: Studio editor package + production Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages
+      - run: pnpm --filter @foundation/showcase build
+      - name: Package Studio editor candidate
+        run: node tooling/scripts/pattern-atlas-studio-rc-package.mjs
+        env:
+          STUDIO_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Smoke installed production editor in Chromium
+        run: node tooling/scripts/pattern-atlas-studio-rc-smoke.mjs
+        env:
+          CHROMIUM_BIN: google-chrome
+      - name: Preserve candidate trial package and checksum manifest
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pattern-atlas-studio-rc-editor-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/pattern-atlas/studio-rc/
+          if-no-files-found: warn
+          retention-days: 30

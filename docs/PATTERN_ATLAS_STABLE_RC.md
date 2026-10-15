@@ -53,3 +53,9 @@ Foundation `0.21.0` 的 npm `candidate → latest` 属于 **另一个发布轨�
 - **Registry**：后续优先提供受信任领域组件元数据的 Palette / 属性 / 导出闭环；不在 Studio 中执行未受信任源码。
 - **Action DSL**：沿用现有 Studio 工作流的请求、条件、确认、通知、导航、联动子集；按真实业务缺口增强可视化配置。
 - 多用户协作、后端权限与审计、跨浏览器实时一致性、托管服务均不属于现阶段已交付能力。
+
+## Phase 22-D2 · Studio 编辑器可下载试用包
+
+新增 `Pattern Atlas Studio RC Artifact` GitHub Actions：对 `apps/showcase` 的**生产构建**单独打包，校验候选包每个文件的 SHA-256，并用 Chromium 真正加载 `/create` 和 `/studio`。下载 Actions artifact 后执行 `node serve.mjs`（Windows 可双击 `start-studio.cmd`），浏览器访问 `http://127.0.0.1:5188/studio`。
+
+这与已有的**Studio 导出 React ZIP**是两条独立验证线：后者验证生成的用户业务应用；本条验证编辑器自身。候选包保留了 Showcase 其他页面，尚未构造成 Studio 专用桌面安装包，也不含 Vite 开发模拟 API、后端或数据库。此阶段的 Actions artifact 只是试用材料，未通过人工端到端试用、版本冻结与正式发布门禁前不可称为 Stable。
