@@ -225,8 +225,11 @@ try {
     'tooling/scripts/aas_p0/bridge.py', '--upstream', 'http://127.0.0.1:' + aasPort + '/',
     '--origin', origin + '/', '--port', String(bridgePort)
   ], { cwd: resolve(import.meta.dirname, '../..'), stdio: 'ignore' });
-  aasBridge.on('error', (error) => { throw error; });
+  let aasBridgeStartupError;
+  aasBridge.on('error', (error) => { aasBridgeStartupError = error; });
   await until(async () => {
+    if (aasBridgeStartupError) throw aasBridgeStartupError;
+    if (aasBridge.exitCode !== null) throw new Error('Python AAS fixture bridge exited early');
     const response = await fetch(bridgeOrigin + '/api/records?page=1&pageSize=3');
     return response.status === 200;
   }, 'Python bridge for actual browser');
