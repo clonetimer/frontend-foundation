@@ -64,3 +64,9 @@ python tooling/scripts/aas_p0/bridge.py --upstream http://127.0.0.1:8765/ --orig
 python tooling/scripts/aas_p0/bridge.py --upstream http://127.0.0.1:8765/ --origin http://127.0.0.1:5188/ --port 8791 --allow-synthetic-writes
 python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*.py' -v
 ```
+
+## Phase 22-P0-C · 生产编辑器的 AAS 形状 HTTP 端到端验收
+
+`tooling/scripts/pattern-atlas-studio-rc-smoke.mjs` 中增加可复现的候选编辑器生产态浏览器验证：测试在 Windows/Linux GitHub Runner 中启动真实 Chrome/Chromium、生产构建 Studio、公共仓库内的 `bridge.py` Python HTTP 进程和**合成的 AAS 形状 HTTP 上游 fixture**。浏览器使用组件库添加「数据表格」，通过 Inspector 填写桥接器的 GET 地址、切换到「体验」模式，并要求真实 HTTP 请求从浏览器经 Python bridge 到合成 AAS 上游，最终在页面渲染 `AAS-CI-Model-10`。测试截图和 `aas-shaped-http-integration.json` 随候选制品保存。**这不是在 GitHub Runner 中运行用户提供的私有 AAS 后端源码**；私有 AAS 源码只在隔离环境里以 14/14 原生 SQLite HTTP 检查验证。
+
+只有 CI 工作流实际全绿后，上述浏览器验收才可以认定 PASS。即使全绿，真实 AAS + Studio UI 的同一条浏览器到 SQLite 链路和身份鉴权、用户正式签收仍独立标记未通过，不能提前发布正式 Stable。
