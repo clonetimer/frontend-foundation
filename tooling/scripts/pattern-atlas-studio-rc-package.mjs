@@ -34,9 +34,11 @@ function visit(dir) {
   }
 }
 visit(output);
-const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+const checkoutCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+const sourceCommit = (process.env.STUDIO_SOURCE_SHA || checkoutCommit).trim();
+assert.match(sourceCommit, /^[a-f0-9]{40}$/, 'Invalid Studio source commit SHA');
 const manifest = { schemaVersion: 1, releaseTrack: 'pattern-atlas-studio',
   status: 'candidate-unpromoted', foundationContract: '0.21.0-frozen',
-  sourceCommit, node: process.version, platform: process.platform, files: listed };
+  sourceCommit, checkoutCommit, node: process.version, platform: process.platform, files: listed };
 writeFileSync(join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 console.log(JSON.stringify({ output, sourceCommit, files: listed.length, status: manifest.status }));
