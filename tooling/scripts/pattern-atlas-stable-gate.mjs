@@ -114,13 +114,14 @@ try {
 } catch (error) { steps.push({ id: 'gate-internal', status: 'failed', detail: error instanceof Error ? error.message : String(error) }); }
 const decision = summarizeAtlasGates(mode, steps);
 const report = {
-  schemaVersion: 1, project: 'Pattern Atlas Studio', phase: 16,
+  schemaVersion: 1, project: 'Pattern Atlas Studio', phase: 22,
+  releaseTrack: 'pattern-atlas-studio', foundationContract: '0.21.0-frozen',
   mode, startedAt, finishedAt: stamp(), platform: process.platform,
   node: process.version, pnpmActual: pnpmVersion(), pnpmExpected: '11.7.0',
   lockfileSha256: sha256('pnpm-lock.yaml'),
   workflowRuntimeSha256: sha256('apps/showcase/src/modules/pattern-atlas/studio/studio-workflows.ts'),
   revision: gitRevision(), decision, steps,
-  notice: 'Local report only. Foundation registry release and external Stable promotion are separate procedures.'
+  notice: 'Studio gate evidence only; not a Studio release. Manual UX acceptance and immutable Studio artifact are still required. Foundation registry promotion is independent.'
 };
 mkdirSync(join(root, 'artifacts', 'pattern-atlas'), { recursive: true });
 writeFileSync(reportFile, JSON.stringify(report, null, 2) + '\n');
