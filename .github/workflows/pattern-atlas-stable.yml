@@ -1,21 +1,36 @@
 name: Pattern Atlas Stable
 
-# Manual admission gate for an exact candidate commit; does not publish or promote packages.
+# Studio source changes require full Linux/Windows admission on PR and merged main.
+# Manual exact-SHA candidate admission remains available; no automatic release.
 on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'apps/showcase/src/modules/pattern-atlas/studio/studio-workflows.ts'
-      - 'apps/showcase/src/modules/pattern-atlas/studio/exported-workflows.ts'
-      - 'apps/showcase/src/modules/pattern-atlas/studio/WidgetPreview.tsx'
-      - 'apps/showcase/src/modules/pattern-atlas/studio/widgets.ts'
-      - 'tooling/scripts/pattern-atlas-stable-gate.mjs'
-      - 'tooling/scripts/pattern-atlas-stable-policy.mjs'
-      - 'tooling/scripts/pattern-atlas-stable-gate.test.mjs'
-      - 'tooling/scripts/pattern-atlas-export-browser-check.mjs'
-      - 'tooling/scripts/pattern-atlas-export-build-smoke.mjs'
+      - 'apps/showcase/src/modules/pattern-atlas/**'
+      - 'apps/showcase/package.json'
+      - 'packages/design-model/**'
+      - 'tooling/create-app/**'
+      - 'tooling/scripts/pattern-atlas-*'
+      - 'tooling/scripts/sync-studio-*'
+      - 'tooling/scripts/dev-studio-launch.mjs'
+      - 'tooling/scripts/offline-verify.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/pattern-atlas-stable.yml'
-
+  push:
+    branches: [main]
+    paths:
+      - 'apps/showcase/src/modules/pattern-atlas/**'
+      - 'apps/showcase/package.json'
+      - 'packages/design-model/**'
+      - 'tooling/create-app/**'
+      - 'tooling/scripts/pattern-atlas-*'
+      - 'tooling/scripts/sync-studio-*'
+      - 'tooling/scripts/dev-studio-launch.mjs'
+      - 'tooling/scripts/offline-verify.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/pattern-atlas-stable.yml'
 permissions:
   contents: read
 

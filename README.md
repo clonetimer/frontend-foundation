@@ -24,6 +24,8 @@ pnpm dev:studio   # 仅启动新的 Showcase 设计工作台
 
 详见 [`docs/PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md`](docs/PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md) 和 [`docs/PATTERN_ATLAS_AUTHORING_FLOW.md`](docs/PATTERN_ATLAS_AUTHORING_FLOW.md)。
 
+**Studio Stable RC 路线**：Pattern Atlas Studio 是后续唯一主要开发的可视化产品；Foundation 0.21.0 核心契约冻结维护，原 Designer 仅提供历史兼容。Studio 的 Stable 准入独立于 Foundation npm Registry 发布：PR 与合并后的 `main` 都必须运行跨平台 Studio 全门禁；正式发布仍需独立编辑器试用、可重导入工程、独立 ZIP 交互验收、固定源码与制品哈希。当前状态不是已发布 Stable。详见 [`docs/PATTERN_ATLAS_STABLE_RC.md`](docs/PATTERN_ATLAS_STABLE_RC.md)。
+
 ## Pattern Atlas Studio · 真实业务表格与独立 React ZIP（Phase 21–22）
 
 **适用范围**：以下是 Showcase `/studio` 的应用层能力，不修改冻结的 Foundation 0.21.0 Blueprint / Compiler / Designer 契约。独立 ZIP 可以在 Foundation monorepo 之外直接构建；它不会自带后端、数据库、业务权限或部署环境。
