@@ -158,7 +158,8 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
     if (!source) { setRows([]); setTotalRows(0); setSelectedId(''); setError(''); setLoading(false); return; }
     const controller = new AbortController();
     setLoading(true); setError('');
-    if (serverPaging) { setRows([]); setSelectedId(''); setDetail(null); }
+    // A refresh must preserve the active edit target. Page/filter/source changes
+    // clear selection explicitly; clearing it here silently switches records.
     let url: string;
     try { url = listUrl(source, serverPaging ? page : 1, serverPaging ? search : '', filter, direction); }
     catch (reason) { setLoading(false); setError(reason instanceof Error ? reason.message : '列表地址无效'); return; }
@@ -168,7 +169,9 @@ export function StudioRecordProvider({ source, fields, rules, children }: { sour
       setRows(result.rows); setTotalRows(result.total);
       const lastPage = Math.max(1, Math.ceil(result.total / pageSize));
       if (serverPaging && page > lastPage) { setPage(lastPage); return; }
-      setSelectedId((current) => result.rows.some((row) => idOf(row, source) === current) ? current : result.rows[0] ? idOf(result.rows[0], source) : '');
+      setSelectedId((current) => current
+        ? (result.rows.some((row) => idOf(row, source) === current) ? current : '')
+        : (result.rows[0] ? idOf(result.rows[0], source) : ''));
     }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : '接口读取失败'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();

@@ -81,7 +81,8 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
     if (!live || !source?.url) { setRows([]); setTotalRows(0); setStatus('idle'); setSelectedId(''); setDraft({}); setErrors({}); return; }
     const controller = new AbortController();
     setStatus('loading'); setError('');
-    if (serverPaging) { setRows([]); setDetail(null); setSelectedId(''); }
+    // A refresh must preserve the active edit target. Page/filter/source changes
+    // clear selection explicitly; clearing it here silently switches records.
     try {
       const url = buildStudioListUrl(source, serverPaging ? page : 1, serverPaging ? search : '', { filter, direction });
       void requestStudioApi({ method: 'GET', url }, controller.signal).then((payload) => {
@@ -92,7 +93,9 @@ export function useStudioRecordFlow(root: CompositionNode | undefined, decoratio
           setPage(Math.max(1, Math.ceil(result.total / pageSize)));
           return;
         }
-        setSelectedId((previous) => result.rows.some((row) => recordId(row, source.idField) === previous) ? previous : (result.rows[0] ? recordId(result.rows[0], source.idField) : ''));
+        setSelectedId((previous) => previous
+          ? (result.rows.some((row) => recordId(row, source.idField) === previous) ? previous : '')
+          : (result.rows[0] ? recordId(result.rows[0], source.idField) : ''));
         setStatus('ready');
       }).catch((reason: unknown) => {
         if (!controller.signal.aborted) { setError(reason instanceof Error ? reason.message : '列表读取失败'); setStatus('error'); }

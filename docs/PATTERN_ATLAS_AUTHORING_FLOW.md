@@ -53,4 +53,6 @@ node tooling/create-app/project.mjs compile ./my-app/foundation.project.json
 
 - Phase 22-C5：旧 Record Provider 的保存、新增、删除加入单 Provider 实例内的同步在途锁，防止跨按钮快速双击重复提交；成功、冲突或结果不确定时，通过 `atlas:records-refresh` 通知同页旧记录列表与增强表格重新 GET。该事件不会同步其他浏览器/终端，也不替代后端幂等与原子版本检查。
 
+- Phase 22-C6：Record Provider 的服务端 GET 刷新保持当前非首行记录的选中 ID；若后端返回页中该 ID 消失，则清除选中，避免把后续编辑静默指向首行。切换分页/筛选/来源仍按既有逻辑处理。独立 ZIP Chromium 验收包含非首行保存、真实 GET 与服务端删除后的取消选中。
+
 详见 [Phase 7 统一设计器技术说明](PATTERN_ATLAS_PHASE7_UNIFIED_STUDIO.md)。
