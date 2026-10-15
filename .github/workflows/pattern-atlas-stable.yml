@@ -16,6 +16,8 @@ on:
       - 'tooling/scripts/offline-verify.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - '.github/workflows/pattern-atlas-studio-rc.yml'
+      - '.github/workflows/pattern-atlas-studio-rc-release.yml'
       - '.github/workflows/pattern-atlas-stable.yml'
   push:
     branches: [main]
@@ -30,6 +32,8 @@ on:
       - 'tooling/scripts/offline-verify.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - '.github/workflows/pattern-atlas-studio-rc.yml'
+      - '.github/workflows/pattern-atlas-studio-rc-release.yml'
       - '.github/workflows/pattern-atlas-stable.yml'
 permissions:
   contents: read
