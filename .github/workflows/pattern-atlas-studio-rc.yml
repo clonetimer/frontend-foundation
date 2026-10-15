@@ -41,6 +41,8 @@ jobs:
       - run: pnpm --filter @foundation/showcase build
       - name: Package Studio editor candidate
         run: node tooling/scripts/pattern-atlas-studio-rc-package.mjs
+        env:
+          STUDIO_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Smoke installed production editor in Chromium
         run: node tooling/scripts/pattern-atlas-studio-rc-smoke.mjs
         env:
@@ -49,7 +51,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: pattern-atlas-studio-rc-editor-${{ github.sha }}
+          name: pattern-atlas-studio-rc-editor-${{ github.event.pull_request.head.sha || github.sha }}
           path: artifacts/pattern-atlas/studio-rc/
           if-no-files-found: warn
           retention-days: 30
