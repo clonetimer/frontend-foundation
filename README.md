@@ -28,6 +28,8 @@ pnpm dev:studio   # 仅启动新的 Showcase 设计工作台
 
 **Studio 编辑器候选包**：在 GitHub Actions 的 `Pattern Atlas Studio RC Artifact` 工作流，可获得带 SHA-256 清单、本地服务器和 Windows 启动脚本的生产构建试用包。生产 Chromium 测试覆盖 `/create` 与 `/studio`；这与 Studio 导出的业务 React ZIP 不同。当前仅为 Candidate，不包含后端或正式 Stable Release。详见 [Studio RC 规范](docs/PATTERN_ATLAS_STABLE_RC.md)。
 
+**真实 AAS 后端互操作性验证**：新增 [AAS 原生后端 P0 证据及限制](docs/PATTERN_ATLAS_AAS_BACKEND_P0.md)，基于隔离、合成数据运行用户提供的 Python HTTP+SQLite 后端；提供严格只读、仅本地环回地址的探针 `node tooling/scripts/pattern-atlas-aas-readonly-probe.mjs --base http://127.0.0.1:8765/`。原生 POST/GET/PUT/DELETE 已有实测，但 Studio 通用 PATCH、强 ETag、真实鉴权和浏览器端到端集成尚未验收，因此不应宣称正式 Stable。
+
 **Studio 1.0.0 RC 候选发布**：增加 `Pattern Atlas Studio RC Draft Release` 工作流，在完整主干门禁通过后，可把 Windows/Linux 独立试用包连同 SHA-256 校验清单归档为永久的**草稿预发布**；不得把它与正式 Stable 混同。Windows/Linux 的 P0 自动化证据包含真实 ZIP 导出/恢复与三视口截图，Linux CI 安装系统中文字体以便复核。正式发布还需 Issue #29 的人工使用与真实业务联调验收。详见 [RC 发布说明](docs/PATTERN_ATLAS_STUDIO_RC_RELEASE_NOTES.md)。
 
 **Studio Stable RC 路线**：Pattern Atlas Studio 是后续唯一主要开发的可视化产品；Foundation 0.21.0 核心契约冻结维护，原 Designer 仅提供历史兼容。Studio 的 Stable 准入独立于 Foundation npm Registry 发布：PR 与合并后的 `main` 都必须运行跨平台 Studio 全门禁；正式发布仍需独立编辑器试用、可重导入工程、独立 ZIP 交互验收、固定源码与制品哈希。当前状态不是已发布 Stable。详见 [`docs/PATTERN_ATLAS_STABLE_RC.md`](docs/PATTERN_ATLAS_STABLE_RC.md)。
