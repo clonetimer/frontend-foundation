@@ -1,0 +1,107 @@
+name: Pattern Atlas Studio RC Draft Release
+
+# A release archive, not an official Stable promotion.
+# Create studio-release/1.0.0-rc1 at a fully validated main commit to run.
+on:
+  push:
+    branches:
+      - studio-release/1.0.0-rc1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+  checks: read
+
+concurrency:
+  group: studio-release-rc1
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    name: Verify frozen commit and archive RC assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Require a mainline commit and its exact completed gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100" > "$RUNNER_TEMP/studio-checks.json"
+          node --input-type=module - "$RUNNER_TEMP/studio-checks.json" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const data = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          const required = [
+            'Static gates (no install)', 'Node 22 compatibility', 'Node 24 release gates',
+            'ubuntu-latest · Node 22.23.2', 'windows-latest · Node 24.12.0',
+            'ubuntu-latest · Studio editor package + production Chromium',
+            'windows-latest · Studio editor package + production Chromium',
+            'codeql', 'build', 'deploy'
+          ];
+          for (const name of required) {
+            const runs = data.check_runs.filter((entry) => entry.name === name);
+            if (!runs.some((entry) => entry.status === 'completed' && entry.conclusion === 'success'))
+              throw new Error('Exact source commit lacks PASS: ' + name);
+          }
+          console.log('RC draft admission: all required exact-commit checks PASS');
+          NODE
+      - name: Download exact-commit Windows and Linux candidate artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow 'Pattern Atlas Studio RC Artifact' --commit "$GITHUB_SHA" --limit 30 --json databaseId,status,conclusion,event --jq '[.[] | select(.event == "push" and .status == "completed" and .conclusion == "success")][0].databaseId')
+          test -n "$RUN_ID" && test "$RUN_ID" != null
+          mkdir -p bundle/windows bundle/linux releases
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "pattern-atlas-studio-rc-editor-windows-latest-node-24.12.0-$GITHUB_SHA" --dir bundle/windows
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "pattern-atlas-studio-rc-editor-ubuntu-latest-node-22.23.2-$GITHUB_SHA" --dir bundle/linux
+          for platform in windows linux; do
+            ARTIFACT_ROOT="bundle/$platform/studio-rc" SOURCE_SHA="$GITHUB_SHA" node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          import { join } from 'node:path';
+          const root = process.env.ARTIFACT_ROOT;
+          const doc = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
+          if (doc.status !== 'candidate-unpromoted' || doc.sourceCommit !== process.env.SOURCE_SHA)
+            throw new Error('Candidate manifest/source mismatch: ' + root);
+          for (const file of doc.files) {
+            const bytes = readFileSync(join(root, file.path));
+            if (bytes.length !== file.size || createHash('sha256').update(bytes).digest('hex') !== file.sha256)
+              throw new Error('Candidate file integrity mismatch: ' + file.path);
+          }
+          const acceptance = JSON.parse(readFileSync(join(root, '../studio-p0-evidence/p0-automated.json'), 'utf8'));
+          if (acceptance.status !== 'AUTOMATED_PASS' || acceptance.sourceCommit !== process.env.SOURCE_SHA)
+            throw new Error('Production editor P0 roundtrip not verified: ' + root);
+          console.log('SHA256/automated acceptance PASS:', root, doc.files.length);
+          NODE
+          done
+          (cd bundle/windows && zip -q -X -r ../../releases/pattern-atlas-studio-1.0.0-rc1-windows.zip .)
+          (cd bundle/linux && zip -q -X -r ../../releases/pattern-atlas-studio-1.0.0-rc1-linux.zip .)
+          (cd releases && sha256sum *.zip > SHA256SUMS)
+      - name: Create permanent draft prerelease (NEVER Stable promotion)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=studio-v1.0.0-rc.1
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refuse to overwrite immutable artifacts" >&2
+            exit 1
+          fi
+          gh release create "$TAG" releases/*.zip releases/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease \
+            --title 'Pattern Atlas Studio 1.0.0 RC1 (draft, not Stable)' \
+            --notes-file docs/PATTERN_ATLAS_STUDIO_RC_RELEASE_NOTES.md
+          echo "Permanent RC draft prepared; official Studio Stable promotion remains blocked by Issue #29."
