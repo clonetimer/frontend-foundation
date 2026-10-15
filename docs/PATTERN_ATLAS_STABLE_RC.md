@@ -63,3 +63,11 @@ Foundation `0.21.0` 的 npm `candidate → latest` 属于 **另一个发布轨�
 ## Phase 22-D3 · Windows 原生候选包回归
 
 `Pattern Atlas Studio RC Artifact` 在 **Ubuntu / Node 22** 和 **Windows / Node 24** 分别构建、打包与校验独立候选目录。Windows 验收用 `cmd.exe` 实际执行候选包中的 `start-studio.cmd`，在本地监听地址启动产品，并在 Windows Chrome 中自动访问 `/create`、`/studio`，验证生产脚本、路由回退、资源 MIME/404、运行时错误与每个候选文件的 SHA-256。**每个系统上传自己的不可混淆制品**，文件名包含 OS、Node 版本和 Git SHA。该项是 Windows 自动化验收，不等价于用户设备上的人工可用性测试。
+
+## Phase 22-D5 · P0 自动化证据与永久 RC 草稿
+
+在 Windows/Linux 的 Studio RC Artifact workflow 中，生产浏览器从新建页面开始做实际项目编辑、画布组件新增、Inspector 属性修改、桌面/平板/手机预览、体验模式、点击导出实际 ZIP 并提取 `atlas.studio.json`、清除浏览器缓存并通过文件选择重新导入做全字段对比。每个系统产物附 `studio-p0-evidence/p0-automated.json` 与 PNG。Ubuntu Runner 安装系统级 Noto CJK 字体以保证中文截图可供视觉复核；用户 Linux 系统仍需自己配置相应中文字体。
+
+在所有精确 SHA 的主干自动化门禁通过后，可创建 `studio-release/1.0.0-rc1` 分支（指向**同一个已验收的主干提交**）触发 `Pattern Atlas Studio RC Draft Release` workflow。该流程再次检查精确 SHA 的主干门禁、下载 Windows/Linux 两个已验收候选包、逐文件验证 SHA-256 及 `AUTOMATED_PASS` 证据，生成 `SHA256SUMS` 并创建**永久 GitHub Release Draft + Prerelease**；不自动发布 Stable、不修改 Foundation npm 版本。
+
+**仍未完成的 P0**：实际用户视角的端到端试用签收、代表性业务系统真实鉴权/数据权限/CORS 配置验证、缺陷与人工复验记录。Issue #29 未完成前，该 RC 不能转正 Stable。日志和自动截图仅为技术验收证据，不等价于真实用户批准。
