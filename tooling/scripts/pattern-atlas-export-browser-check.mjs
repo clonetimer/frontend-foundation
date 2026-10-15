@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -25,8 +25,10 @@ async function until(check, name, limit = 30000) {
 }
 export async function runExportedBrowserSmoke(directory) {
   const root = 'http://127.0.0.1:4189';
-  const port = 9377;
   const profile = mkdtempSync(join(tmpdir(), 'atlas-export-chrome-'));
+  // Chrome assigns a free DevTools port and records it under this isolated profile.
+  // A fixed port can be held by a previous browser job on shared Windows runners.
+  const devtoolsPortPath = join(profile, 'DevToolsActivePort');
   const vite = spawn(process.execPath, [join(directory, 'node_modules', 'vite', 'bin', 'vite.js'), 'preview', '--host', '127.0.0.1', '--port', '4189', '--strictPort'], { cwd: directory, stdio: 'ignore' });
   let chrome;
   let socket;
@@ -190,9 +192,26 @@ export async function runExportedBrowserSmoke(directory) {
     chrome = spawn(process.env.CHROMIUM_BIN || 'google-chrome', [
       '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
       '--no-first-run', '--no-default-browser-check', '--no-proxy-server',
-      '--remote-debugging-port=' + port, '--user-data-dir=' + profile, 'about:blank'
-    ], { stdio: 'ignore' });
-    await until(async () => (await fetch('http://127.0.0.1:' + port + '/json/version')).ok, 'Chromium DevTools');
+      '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let startupError;
+    let stderr = '';
+    chrome.on('error', (error) => { startupError = error; });
+    chrome.stderr?.on('data', (part) => { stderr = (stderr + String(part)).slice(-3000); });
+    let port;
+    try {
+      port = await until(async () => {
+        if (startupError) throw startupError;
+        if (chrome.exitCode !== null) throw new Error('Chromium exited with status ' + chrome.exitCode);
+        if (!existsSync(devtoolsPortPath)) return false;
+        const candidate = Number(readFileSync(devtoolsPortPath, 'utf8').split(/\r?\n/)[0]);
+        if (!Number.isInteger(candidate) || candidate < 1 || candidate > 65535) return false;
+        const result = await fetch('http://127.0.0.1:' + candidate + '/json/version');
+        return result.ok ? candidate : false;
+      }, 'Chromium DevTools assigned port', 45000);
+    } catch (error) {
+      throw new Error(String(error) + '; Chromium exit=' + chrome.exitCode + '; stderr=' + stderr.slice(-1500));
+    }
     const created = await fetch('http://127.0.0.1:' + port + '/json/new?about:blank', { method: 'PUT' });
     assert.equal(created.status, 200, 'Chromium tab create failed');
     const tab = await created.json();
@@ -614,10 +633,17 @@ export async function runExportedBrowserSmoke(directory) {
     const selectedCount = (count) => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('当前页已选择 " + String(count) + " 条')");
     assert(await selectBulkRow('第二对象'), 'Bulk row checkbox missing');
     await until(() => selectedCount(1), 'Bulk first selected row count');
+    const readsBeforeBulkNext = tableCalls.length;
     assert(await evaluate("(() => {const button=document.querySelector('.pa-studio-remote-table .ant-pagination-next button');if(!button)return false;button.click();return true;})()"), 'Bulk next-page button missing');
+    await until(() => tableCalls.slice(readsBeforeBulkNext).some((item) => item.page === '2'), 'Bulk page-2 authoritative GET missing');
+    // A selection reset can render *before* the page-2 HTTP response. Never
+    // navigate back while the old page's rows are still visible.
+    await until(() => evaluate("(() => {const table=document.querySelector('.pa-studio-remote-table');const active=table?.querySelector('.ant-pagination-item-active')?.textContent?.trim();const rows=table?.querySelector('tbody')?.textContent||'';return active==='2'&&!rows.includes('第二对象')&&table?.querySelectorAll('tbody tr').length===2;})()"), 'Bulk page-2 rows not settled');
     await until(() => selectedCount(0), 'Cross-page multi-selection was not cleared');
+    const readsBeforeBulkPrev = tableCalls.length;
     assert(await evaluate("(() => {const button=document.querySelector('.pa-studio-remote-table .ant-pagination-prev button');if(!button)return false;button.click();return true;})()"), 'Bulk previous-page button missing');
-    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('批量失败对象')"), 'Bulk page-one rows not refreshed');
+    await until(() => tableCalls.slice(readsBeforeBulkPrev).some((item) => item.page === '1'), 'Bulk page-1 authoritative GET missing');
+    await until(() => evaluate("(() => {const table=document.querySelector('.pa-studio-remote-table');const active=table?.querySelector('.ant-pagination-item-active')?.textContent?.trim();const rows=table?.querySelector('tbody')?.textContent||'';return active==='1'&&rows.includes('第二对象')&&rows.includes('批量失败对象');})()"), 'Bulk page-one response not settled');
     assert(await selectBulkRow('第二对象'), 'Bulk row one unavailable');
     await until(() => selectedCount(1), 'Bulk first row not reselected');
     assert(await selectBulkRow('批量失败对象'), 'Bulk row two unavailable');
