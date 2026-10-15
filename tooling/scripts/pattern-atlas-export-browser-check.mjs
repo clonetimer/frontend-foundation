@@ -217,7 +217,7 @@ export async function runExportedBrowserSmoke(directory) {
       const id = ++seq;
       // A stalled DevTools response must fail the gate rather than hang until
       // the outer CI job timeout, which hides the actual browser assertion.
-      const timer = setTimeout(() => { pending.delete(id); reject(new Error('Chrome CDP ' + method + ' timed out')); }, 30000);
+      const timer = setTimeout(() => { pending.delete(id); reject(new Error('Chrome CDP ' + method + ' timed out on ' + String(params.expression ?? params.url ?? '').slice(0, 280))); }, 30000);
       pending.set(id, {
         resolve(value) { clearTimeout(timer); resolve(value); },
         reject(reason) { clearTimeout(timer); reject(reason); }
@@ -726,10 +726,13 @@ export async function runExportedBrowserSmoke(directory) {
     await call('Page.navigate', { url: root + '/#/overview' });
     await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('张三')"), 'C6 restored overview records GET');
     console.log('C6: overview and second record confirmed');
+    console.log('C6: before selecting second record');
     // C6: a server-page refresh must not jump from a non-first selected
     // record back to the first one. A disappeared target must fail closed.
     assert(await evaluate("(() => { const b=[...document.querySelectorAll('.atlas-record-rows button')].find(el=>el.textContent?.includes('张三'));if(!b)return false;b.click();return true;})()"), 'C6 second-row record unavailable');
+    console.log('C6: second record click returned');
     await until(() => evaluate("document.querySelector('.atlas-record-rows button.active')?.textContent?.includes('张三')"), 'C6 second row did not become active');
+    console.log('C6: active second record confirmed');
     assert(await evaluate("(() => {const el=document.querySelector('input[aria-label=记录姓名C4]');if(!el)return false;el.focus();el.select();return true;})()"), 'C6 non-first input unavailable');
     await call('Input.insertText', { text: 'C6第二行' });
     const c6ReadsBeforeSave = listReads;
