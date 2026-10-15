@@ -736,6 +736,9 @@ export async function runExportedBrowserSmoke(directory) {
     assert(await evaluate("(() => {const el=document.querySelector('input[aria-label=记录姓名C4]');if(!el)return false;el.focus();el.select();return true;})()"), 'C6 non-first input unavailable');
     await call('Input.insertText', { text: 'C6第二行' });
     const c6ReadsBeforeSave = listReads;
+    // The intentional full-page navigation above resets earlier test mocks.
+    // Headless Chrome's native confirm dialog would block Runtime.evaluate.
+    await evaluate("window.confirm = () => true");
     assert(await click('保存修改C4'), 'C6 save target missing');
     await until(() => legacySaveCalls.length === 5, 'C6 selected-record write missing');
     assert.equal(legacySaveCalls[4]?.name, 'C6第二行', 'C6 submitted a stale or wrong record draft');
