@@ -63,3 +63,8 @@ pnpm deploy:verify
 ```
 
 This verifies generated assets, runtime-mode selection and Nginx syntax when a local `nginx` binary is available.
+
+
+### Windows verification (without POSIX `sh`)
+
+`pnpm verify:offline` and `pnpm deploy:verify` are supported from Windows PowerShell with Node.js alone. The verifier checks the generated Nginx files, both runtime-config values, shell-script invariants and proxy substitution through a portable Node.js path when `sh` is not installed. It prints a warning that **container shell execution is not tested locally**. Linux CI still runs the generated `/bin/sh` entrypoint (and `nginx -t` where available); the Windows path is not a substitute for that Linux deployment gate.

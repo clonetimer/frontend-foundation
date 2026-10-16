@@ -45,7 +45,81 @@ function testNginxConfig(serverText) {
   }
 }
 
-export function verifyDeploymentTarget() {
+/**
+ * Windows does not ship /bin/sh. Inspect the *generated* POSIX entrypoint and
+ * render its config here, while CI on Linux still executes the real script.
+ * A portable check is not evidence that the container entrypoint ran.
+ */
+function portableRuntimeChecks(scriptText, staticConf, proxyTemplate, errors) {
+  const invariants = [
+    ['POSIX entrypoint', /^#!\/bin\/sh\s*$/m],
+    ['fail-fast shell mode', /^set -eu\s*$/m],
+    ['single-line input guard', /APP_ENVIRONMENT and API_BASE_URL must be single-line values/],
+    ['JSON escaping', /json_escape\(\)/],
+    ['runtime JSON template', /cat > "\$WEB_ROOT\/runtime-config\.json" <<EOF_JSON/],
+    ['explicit upstream mode', /if \[ -n "\$API_UPSTREAM" \]; then/],
+    ['upstream requires /api', /if \[ "\$API_BASE_URL" != "\/api" \]; then/],
+    ['proxy substitution', /envsubst '\$\{API_UPSTREAM\}'/],
+    ['proxy template input', /"\$TEMPLATE_DIR\/default\.proxy\.conf\.template"/],
+    ['relative URL rejection', /Relative API_BASE_URL=\$API_BASE_URL requires API_UPSTREAM/],
+    ['static configuration copy', /cp "\$TEMPLATE_DIR\/default\.static\.conf" "\$NGINX_CONF"/]
+  ];
+  for (const [label, pattern] of invariants) {
+    if (!pattern.test(scriptText)) errors.push(`generated nginx runtime script missing ${label}`);
+  }
+  const nameAssignment = scriptText.match(/^APP_NAME_JSON=('(?:[^']|'\\'')*')\s*$/m)?.[1];
+  if (!nameAssignment) {
+    errors.push('generated nginx runtime script has an invalid app name assignment');
+    return;
+  }
+  let name;
+  try {
+    name = JSON.parse(nameAssignment.slice(1, -1).replaceAll("'\\''", "'"));
+  } catch {
+    errors.push('generated nginx runtime script has invalid JSON app name');
+    return;
+  }
+  const runtimeTemplate = scriptText.match(/cat > "\$WEB_ROOT\/runtime-config\.json" <<EOF_JSON\r?\n([\s\S]*?)\r?\nEOF_JSON/)?.[1];
+  if (!runtimeTemplate) {
+    errors.push('generated nginx runtime-config JSON heredoc missing');
+    return;
+  }
+  const runtimeJSON = (baseUrl) => runtimeTemplate
+    .replaceAll('${APP_NAME_JSON}', JSON.stringify(name))
+    .replaceAll('${APP_ENVIRONMENT_JSON}', 'production')
+    .replaceAll('${API_BASE_URL_JSON}', baseUrl);
+  for (const baseUrl of ['https://api.example.test', '/api']) {
+    try {
+      const output = JSON.parse(runtimeJSON(baseUrl));
+      if (output.api?.baseUrl !== baseUrl) errors.push(`portable nginx runtime-config baseUrl mismatch for ${baseUrl}`);
+      if (output.app?.name !== "Cost $API_BASE_URL 'Q'") errors.push('portable nginx runtime-config mangled generated app name');
+      if (output.app?.environment !== 'production') errors.push('portable nginx runtime-config changed environment');
+      if (output.router?.mode !== 'browser') errors.push('portable nginx runtime-config changed router mode');
+    } catch (error) {
+      errors.push(`portable nginx runtime-config could not parse ${baseUrl}: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+  if (!staticConf.includes('try_files $uri $uri/ /index.html')) errors.push('portable nginx static mode lost SPA fallback');
+  const upstream = 'http://backend:8080';
+  const rendered = proxyTemplate.replaceAll('${API_UPSTREAM}', upstream);
+  if (!rendered.includes(`proxy_pass ${upstream};`) || rendered.includes('${API_UPSTREAM}')) {
+    errors.push('portable nginx proxy config failed upstream substitution');
+  }
+  if (proxyTemplate.split('${API_UPSTREAM}').length !== 2) {
+    errors.push('portable nginx proxy template must contain exactly one API_UPSTREAM placeholder');
+  }
+}
+
+function detectShell() {
+  const probe = spawnSync('sh', ['-c', 'exit 0'], { encoding: 'utf8' });
+  if (probe.error?.code === 'ENOENT') return false;
+  if (probe.error || probe.status !== 0) {
+    throw new Error(`POSIX sh probe failed: ${probe.error?.message ?? probe.stderr ?? probe.status}`);
+  }
+  return true;
+}
+
+export function verifyDeploymentTarget({ forcePortable = false } = {}) {
   const errors = [];
   const warnings = [];
   const temp = mkdtempSync(join(tmpdir(), 'foundation-deployment-'));
@@ -76,27 +150,33 @@ export function verifyDeploymentTarget() {
         APP_ENVIRONMENT: 'production'
       };
 
-      execFileSync('sh', [script], {
-        env: { ...process.env, ...common, API_BASE_URL: 'https://api.example.test' },
-        stdio: 'pipe'
-      });
-      const runtime = JSON.parse(readFileSync(join(webRoot, 'runtime-config.json'), 'utf8'));
-      if (runtime.api.baseUrl !== 'https://api.example.test') errors.push('runtime config injection did not preserve absolute API URL');
-      if (runtime.app.name !== "Cost $API_BASE_URL 'Q'") errors.push('runtime config injection modified the generated application name');
-      if (readFileSync(confOut, 'utf8') !== staticConf) errors.push('static API mode did not select static nginx config');
+      if (forcePortable || process.platform === 'win32' || !detectShell()) {
+        portableRuntimeChecks(readFileSync(script, 'utf8'), staticConf, proxyTemplate, errors);
+        warnings.push('Portable host validation: generated nginx entrypoint verified structurally (POSIX shell not executed here); Linux CI performs real shell execution');
+      } else {
+        execFileSync('sh', [script], {
+          env: { ...process.env, ...common, API_BASE_URL: 'https://api.example.test' },
+          stdio: 'pipe'
+        });
+        const runtime = JSON.parse(readFileSync(join(webRoot, 'runtime-config.json'), 'utf8'));
+        if (runtime.api.baseUrl !== 'https://api.example.test') errors.push('runtime config injection did not preserve absolute API URL');
+        if (runtime.app.name !== "Cost $API_BASE_URL 'Q'") errors.push('runtime config injection modified the generated application name');
+        if (readFileSync(confOut, 'utf8') !== staticConf) errors.push('static API mode did not select static nginx config');
 
-      execFileSync('sh', [script], {
-        env: { ...process.env, ...common, API_BASE_URL: '/api', API_UPSTREAM: 'http://backend:8080' },
-        stdio: 'pipe'
-      });
-      const proxyConf = readFileSync(confOut, 'utf8');
-      if (!proxyConf.includes('proxy_pass http://backend:8080;')) errors.push('proxy mode did not render API_UPSTREAM');
+        execFileSync('sh', [script], {
+          env: { ...process.env, ...common, API_BASE_URL: '/api', API_UPSTREAM: 'http://backend:8080' },
+          stdio: 'pipe'
+        });
+        const proxyConf = readFileSync(confOut, 'utf8');
+        if (!proxyConf.includes('proxy_pass http://backend:8080;')) errors.push('proxy mode did not render API_UPSTREAM');
 
-      const invalid = spawnSync('sh', [script], {
-        env: { ...process.env, ...common, API_BASE_URL: '/api', API_UPSTREAM: '' },
-        encoding: 'utf8'
-      });
-      if (invalid.status === 0) errors.push('relative API_BASE_URL without API_UPSTREAM must fail fast');
+        const invalid = spawnSync('sh', [script], {
+          env: { ...process.env, ...common, API_BASE_URL: '/api', API_UPSTREAM: '' },
+          encoding: 'utf8'
+        });
+        if (invalid.status === 0) errors.push('relative API_BASE_URL without API_UPSTREAM must fail fast');
+
+      }
 
       try {
         const result = testNginxConfig(staticConf);
