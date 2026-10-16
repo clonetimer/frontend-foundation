@@ -82,3 +82,20 @@ jobs:
           path: artifacts/packages/
           if-no-files-found: error
           retention-days: 14
+
+
+  windows-deployment-offline:
+    name: Windows Node 24 · Complete offline verification
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.12.0
+      - name: Full no-dependency offline verification from Windows PowerShell
+        shell: pwsh
+        run: node tooling/scripts/offline-verify.mjs
+      - name: Explicit portable/entrypoint deployment regression
+        shell: pwsh
+        run: node --test tooling/deployment/tests/deployment.test.mjs
