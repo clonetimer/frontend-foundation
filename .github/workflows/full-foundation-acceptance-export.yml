@@ -1,0 +1,66 @@
+name: Full Frontend Foundation Acceptance Source Export
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/full-foundation-acceptance-export.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-source:
+    name: Exact-main full repository source ZIP
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout accepted main SHA, not the PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: aa3e6ad323915def8406ced024c64f59940d7745
+          persist-credentials: false
+      - name: Build complete tracked-source delivery archive
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import zipfile
+          sha = "aa3e6ad323915def8406ced024c64f59940d7745"
+          assert subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() == sha
+          files = [p.decode("utf-8") for p in subprocess.check_output(["git", "ls-files", "-z"]).split(b"\0") if p]
+          assert len(files) > 650, f"Unexpectedly incomplete tracked tree: {len(files)}"
+          target = pathlib.Path("artifacts/foundation-full-source")
+          target.mkdir(parents=True, exist_ok=True)
+          destination = target / f"FrontendFoundation_FullSource_{sha[:8]}.zip"
+          hashes = {}
+          with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+            for p in sorted(files):
+              content = pathlib.Path(p).read_bytes()
+              hashes[p] = hashlib.sha256(content).hexdigest()
+              info = zipfile.ZipInfo("frontend-foundation/" + p)
+              info.compress_type = zipfile.ZIP_DEFLATED
+              info.external_attr = (0o644 << 16)
+              z.writestr(info, content, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+          manifest = {
+            "repo": "clonetimer/frontend-foundation",
+            "source_commit": sha,
+            "tracked_file_count": len(files),
+            "source_zip": destination.name,
+            "zip_sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
+            "tracked_sha256": hashes,
+            "notes": "Git-tracked complete monorepo source; excludes node_modules/dist/.git by design. No dependency bundles."
+          }
+          (target / "SOURCE_MANIFEST.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          print(json.dumps({k:v for k,v in manifest.items() if k != "tracked_sha256"}))
+          PY
+      - name: Upload complete source and provenance manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: FrontendFoundation-Complete-Source-aa3e6ad3
+          path: artifacts/foundation-full-source/
+          if-no-files-found: error
+          retention-days: 30
