@@ -35,7 +35,7 @@
 /* /create-only small-screen shell adaptation.
    Ant Design horizontal nav keeps menu items on a single line, widening
    the document to ~778px at 320px. Keep frozen TopNavShell unchanged. */
-@media (max-width: 640px) {
+@media (max-width: 1000px) {
   body:has(.pa-create) .ant-layout-header {
     height: auto !important;
     min-height: 64px;
