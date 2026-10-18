@@ -10,6 +10,8 @@
 
 **UI 设计质量回归（P1/P2）**：在独立 PR 中对 `/create` 和 `/studio` 的移动/平板顶部导航进行局部溢出修复；生产 Chromium 验收新增键盘 Tab/Enter/Space、Inspector 折叠语义、减少动态与 320/375/768/1440px 视口检查，并将截图和机器可读报告保存为 GitHub Actions 工件。参见 [创建页面审查](docs/STUDIO_CREATE_UI_REVIEW.md)、[Inspector P2 审查](docs/STUDIO_INSPECTOR_UI_REVIEW.md) 和 [Studio Stable RC 准入](docs/PATTERN_ATLAS_STABLE_RC.md)。**仅对应精确提交的自动化与运行证据有效**，不构成视觉人工签收、屏幕阅读器验证或正式 Stable 发布。尚未完成人工的 Modal/Drawer 复杂表单与后端事务专项测试。
 
+**Studio 表单质量 P3（候选）**：对模态弹窗 / 侧边抽屉的本地校验及服务端字段级错误增加 `aria-invalid`、`aria-describedby` 与首个错误字段焦点定位；当 POST/PATCH 出现 5xx、超时或网络异常且结果不确定时，同一弹窗会话禁止重复提交，提示用户核查服务器状态。改动已同步到独立 React ZIP 的 `exported-widgets.ts` 源码镜像，完整测试说明见 [P3 Modal/Drawer 审查](docs/STUDIO_OVERLAY_P3_REVIEW.md)。这不是服务端幂等机制，重新打开表单不代表已经核实写入结果；浏览器自动化不能代替真实业务联调与人工签收。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
