@@ -702,12 +702,21 @@ export async function runExportedBrowserSmoke(directory) {
     assert(await confirmBulk(), 'B4 unknown confirmation failed');
     await until(() => deleteCalls.length === beforeUnknown + 1, 'B4 uncertain DELETE was not issued');
     assert.deepEqual(deleteCalls.slice(beforeUnknown), ['/api/delete/C-2'], 'B4 sent later DELETE after uncertain write');
-    await until(() => evaluate("document.querySelector('.pa-studio-remote-table .ant-alert')?.textContent?.includes('结果不确定 1 条，未执行 1 条')"), 'B4 unknown/skipped result not shown');
+    await until(() => evaluate("[...document.querySelectorAll('.pa-studio-remote-table .ant-alert')].some(x=>x.textContent?.includes('结果不确定 1 条，未执行 1 条'))"), 'B4 unknown/skipped result not shown');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.getAttribute('data-atlas-delete-locked')==='true'"), 'B4 uncertain DELETE must lock all new deletions');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 3 条记录')"), 'B4 unknown response did not reconcile actual server GET');
     await until(() => selectedCount(0), 'B4 unknown write was offered as automatic retry');
     assert.equal(deleteCalls.length, beforeUnknown + 1, 'B4 unknown write was blindly retried');
     assert(!tableRows.some((row) => row.id === 'C-2'), 'B4 simulated server-side commit missing');
     assert(tableRows.some((row) => row.id === 'C-3'), 'B4 skipped write erroneously executed');
+
+    // The fixture has independently verified the simulated server state above.
+    // A deliberate user acknowledgment is required before the next DELETE.
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\s/g,'').includes('已核对服务端，解除删除锁定'));if(!b)return false;b.click();return true;})()"), 'B4 explicit unlock control missing');
+    await until(() => evaluate("[...document.querySelectorAll('.ant-popconfirm-buttons button')].some(x=>x.textContent?.replace(/\s/g,'').includes('已核对，解除锁定'))"), 'B4 explicit review confirmation unavailable');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(x=>x.textContent?.replace(/\s/g,'').includes('已核对，解除锁定'));if(!b)return false;b.click();return true;})()"),'B4 explicit review confirmation failed');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.getAttribute('data-atlas-delete-locked')==='false'"), 'B4 delete lock not cleared by explicit review');
+    assert.equal(deleteCalls.length, beforeUnknown+1, 'B4 review acknowledgement unexpectedly sent DELETE');
 
     // Missing strong ETag must fail closed before the next destructive request.
     tableRows.find((row) => row.id === 'C-3').etag = '';
