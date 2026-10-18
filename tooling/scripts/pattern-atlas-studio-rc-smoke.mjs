@@ -501,7 +501,8 @@ try {
     assert.equal(deleteAttempts.length, 1, 'P4 first single DELETE attempt count');
     assert.equal(deleteAttempts[0].id, '10');
     assert(await evaluate("(() => {const root=document.querySelector('.pa-studio-remote-table');return root?.textContent?.includes('删除操作已锁定') && root.textContent.includes('10') && [...root.querySelectorAll('button')].filter(x=>x.textContent?.replace(/\\s/g,'')==='删除').every(x=>x.disabled);})()"), 'P4 single unknown lock disables all row DELETEs');
-    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.trim()==='刷新');if(!b)return false;b.click();return true;})()"),'P4 refresh while locked');
+    await until(() => evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\\s/g,'')==='刷新');return Boolean(b && !b.disabled);})()"), 'P4 refresh available after 503');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\\s/g,'')==='刷新');if(!b||b.disabled)return false;b.click();return true;})()"),'P4 refresh while locked');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.getAttribute('data-atlas-delete-locked')==='true' && !document.querySelector('.pa-studio-remote-table .ant-table-wrapper .ant-spin-spinning')"), 'P4 lock survives server refresh');
     assert.equal(deleteAttempts.length,1,'P4 refresh must never retry DELETE');
     await acknowledgeDelete();
