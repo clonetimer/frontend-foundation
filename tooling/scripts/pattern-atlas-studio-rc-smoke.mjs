@@ -512,9 +512,16 @@ try {
     deleteMode = 'batch';
     deleteAttempts.length = 0;
     await until(() => evaluate("[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].filter(x=>x.textContent?.includes('AAS-CI-Model-')).length===3"), 'P4 batch fixture ready');
-    const selected = await evaluate("(() => {const rows=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].filter(x=>x.textContent?.includes('AAS-CI-Model-'));const checks=rows.map(x=>x.querySelector('input[type=checkbox]')).filter(Boolean);if(checks.length!==3)return checks.length;checks.forEach(x=>x.click());return checks.length;})()");
-    assert.equal(selected,3,'P4 require three visible checked records');
-    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('已选择 3 条')"), 'P4 bulk selection');
+    // On slower Chromium/Windows, synchronous .click() calls can observe stale
+    // React selection state. Select by authoritative visible row in separate
+    // CDP evaluation turns, awaiting each committed selection count.
+    for (const [index, id] of ['10', '11', '12'].entries()) {
+      const name = 'AAS-CI-Model-' + id;
+      const ready = "(() => {const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(x=>x.textContent?.includes(" + JSON.stringify(name) + "));const input=row?.querySelector('input[type=checkbox]');return Boolean(input && !input.disabled && !input.checked && !document.querySelector('.pa-studio-remote-table .ant-spin-spinning'));})()";
+      await until(() => evaluate(ready), 'P4 bulk checkbox ready ' + id);
+      assert(await evaluate("(() => {const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(x=>x.textContent?.includes(" + JSON.stringify(name) + "));const input=row?.querySelector('input[type=checkbox]');if(!input||input.disabled||input.checked)return false;input.click();return true;})()"), 'P4 select checkbox '+id);
+      await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('当前页已选择 " + String(index + 1) + " 条')"), 'P4 selected count after checkbox '+id);
+    }
     assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\\s/g,'')==='批量删除');if(!b||b.disabled)return false;b.click();return true;})()"),'P4 bulk confirmation opened');
     await until(() => evaluate("[...document.querySelectorAll('.ant-popconfirm-buttons button')].some(x=>x.textContent?.replace(/\\s/g,'').includes('确认批量删除'))"), 'P4 bulk confirmation');
     assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(x=>x.textContent?.replace(/\\s/g,'').includes('确认批量删除'));if(!b)return false;b.click();return true;})()"),'P4 bulk DELETE confirmed');
