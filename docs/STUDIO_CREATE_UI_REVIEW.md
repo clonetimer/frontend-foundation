@@ -32,4 +32,10 @@
 5. 工作流：新建及导入、切换布局、保存项目、进入 /studio、导出/重新导入、独立 ZIP 浏览器回归（影响范围决定是否需要全部回归）。
 6. 证据：记录 commit、Node/pnpm 版本、对应 Actions、截图、错误列表与 NOT RUN 项。CI 自动绿灯不代替用户人工验收。
 
-**本报告不是浏览器审查结果；所有第 3–5 项在拿到实际运行证据之前都标记 NOT RUN。**
+## P1 · 生产浏览器质量回归
+
+新增 Studio RC 打包后 Chromium 自动化审查：测试入口为 tooling/scripts/pattern-atlas-studio-rc-smoke.mjs。真实 CDP Tab/Space/Enter 验证高级设置与布局按钮键盘可达、可见焦点及 aria-pressed；模拟 prefers-reduced-motion 核对模板过渡关闭；在 320、375、768、1440px 视口检查页面横向溢出、模板及主要操作的可见性，并保存截图。
+
+输出 artifacts/pattern-atlas/studio-p0-evidence/create-ui-automated.json 和 create-*.png；证据包含 sourceCommit、平台、断言列表和视口几何信息。只有 PR 精确 HEAD 的 Linux/Windows 编辑器 Chromium CI 与工件通过后，才可写 AUTOMATED_PASS。人工视觉与屏幕阅读器验收继续是 NOT RUN；自动化不等于 Studio Stable 发布。
+
+**此前仅完成源码检查；P1 的自动化新增项须以新 PR 的真实 CI 工件为准。人工检查仍待进行。**
