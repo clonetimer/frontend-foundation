@@ -726,14 +726,20 @@ export async function runExportedBrowserSmoke(directory) {
     assert.equal(deleteCalls.length, beforeUnknown+1, 'B4 review acknowledgement unexpectedly sent DELETE');
 
     // Missing strong ETag must fail closed before the next destructive request.
+    // A prior row's text stays visible while server re-fetch is in flight.
+    // Wait for a *new* GET and an interactive checkbox (loading=false) so
+    // this check cannot delete against the stale in-memory ETag snapshot.
+    const beforeEtagRefreshReads = tableCalls.length;
     tableRows.find((row) => row.id === 'C-3').etag = '';
+    await until(() => evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table .pa-studio-widget-actions button')].find(x=>x.textContent?.replace(/\\s/g,'')==='刷新');return Boolean(b && !b.disabled);})()"), 'B4 ETag refresh action available');
     assert(await refreshRemoteTable(), 'B4 missing ETag refresh missing');
-    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('未执行的下一条')"), 'B4 missing ETag row unavailable');
+    await until(() => tableCalls.length > beforeEtagRefreshReads, 'B4 missing ETag server GET not received');
+    await until(() => evaluate("(() => {const root=document.querySelector('.pa-studio-remote-table');const row=[...root?.querySelectorAll('tbody tr')??[]].find(x=>x.textContent?.includes('未执行的下一条'));const check=row?.querySelector('input[type=checkbox]');return Boolean(row && check && !check.disabled && !root.querySelector('.ant-spin-spinning'));})()"), 'B4 updated ETag page not interactive');
     const beforeMissingEtag = deleteCalls.length;
     assert(await deleteRow('未执行的下一条'), 'B4 missing-version DELETE trigger missing');
     await until(() => evaluate("Boolean(document.querySelector('.ant-popconfirm-buttons'))"), 'B4 missing-version confirmation missing');
     assert(await confirmDelete(), 'B4 missing-version confirmation missing action');
-    await until(() => evaluate("document.querySelector('.pa-studio-remote-table [role=alert]')?.textContent?.includes('强 ETag 前置条件无效')"), 'B4 missing strong ETag not blocked');
+    await until(() => evaluate("[...document.querySelectorAll('.pa-studio-remote-table [role=alert]')].some(x=>x.textContent?.includes('强 ETag 前置条件无效'))"), 'B4 missing strong ETag not blocked');
     assert.equal(deleteCalls.length, beforeMissingEtag, 'B4 missing ETag issued an unguarded DELETE');
 
     // Prior workflow scenarios can navigate away from the exported overview.
