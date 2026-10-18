@@ -156,15 +156,19 @@ try {
     await call('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
     await until(() => evaluate("window.innerWidth === " + width), 'create width ' + width);
     const metrics = await evaluate("(() => {const root=document.documentElement;const form=document.querySelector('.pa-create');const cta=[...document.querySelectorAll('.pa-create-actions button')].find(b=>b.textContent?.includes('进入拖拽设计器'));const rect=cta?.getBoundingClientRect();const buttons=[...document.querySelectorAll('.pa-create-template')];return {viewport:innerWidth,documentScrollWidth:root.scrollWidth,createScrollWidth:form?.scrollWidth,createClientWidth:form?.clientWidth,templateCount:buttons.length,templateOverflow:buttons.some(b=>{const r=b.getBoundingClientRect();return r.right>innerWidth+2 || r.left< -2;}),ctaPresent:Boolean(cta),ctaOverflow:!rect||rect.width<120||rect.right>innerWidth+2||rect.left< -2};})()");
+    // Save a screenshot and log offending DOM boxes before asserting, so
+    // a failed responsive gate identifies its source instead of losing evidence.
+    const overflowOrigins = await evaluate("(() => [...document.querySelectorAll('body *')].map(e=>{const r=e.getBoundingClientRect();return {tag:e.tagName,cls:typeof e.className==='string'?e.className.slice(0,100):'',left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width)};}).filter(e=>e.width>0&&e.right>innerWidth+3).slice(0,20))()");
+    console.log(JSON.stringify({ type: 'create-viewport', width, metrics, overflowOrigins }));
+    const shot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    assert(shot.data, 'Create screenshot absent: ' + width);
+    writeFileSync(join(evidenceDir, 'create-' + width + '.png'), Buffer.from(shot.data, 'base64'));
     assert.equal(metrics.viewport, width, 'Viewport mismatch');
     assert(metrics.documentScrollWidth <= width + 2, 'Horizontal document overflow at ' + width + ': ' + JSON.stringify(metrics));
     assert(metrics.createScrollWidth <= metrics.createClientWidth + 2, 'Create form overflow at ' + width);
     assert.equal(metrics.templateCount, 3, 'Template count drift');
     assert.equal(metrics.templateOverflow, false, 'Template offscreen at ' + width);
     assert.equal(metrics.ctaOverflow, false, 'Primary action clipped at ' + width);
-    const shot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
-    assert(shot.data, 'Create screenshot absent: ' + width);
-    writeFileSync(join(evidenceDir, 'create-' + width + '.png'), Buffer.from(shot.data, 'base64'));
     createAudit.viewports.push(metrics);
   }
   await call('Emulation.clearDeviceMetricsOverride');
