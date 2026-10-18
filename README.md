@@ -4,6 +4,10 @@
 
 **0.21.0 已完成源码、离线/真实依赖、打包消费者、双 Domain SDK 与制品反向验收的 Stable 收口。功能面继续冻结，不再扩充 Blueprint/Designer DSL。按照仓库既有发布规则，`0.21.0` 的不可变包应先以 `candidate` dist-tag 发布；用户接手的真实浏览器/视觉验收、GitHub exact-commit 与目标 registry smoke 通过后，再把同一批 `0.21.0` 字节提升到 `latest`。在完成外部 promotion 前，本源码交付状态称为 Stable-Ready。**
 
+## AI UI 开发规范（Skill P0 试点）
+
+新增 [DESIGN.md](DESIGN.md)、[组件工程指南](docs/COMPONENT_AUTHORING_GUIDE.md)、[仓库自有 UI Design Skill](.agents/skills/foundation-ui-design/SKILL.md) 与 [/create 源码审查试点](docs/STUDIO_CREATE_UI_REVIEW.md)。这些内容用于约束 AI 和开发者的设计/审查工作，**不是**新增 Studio Runtime、Tailwind/shadcn 依赖或 Stable 通过证明。/create 增强了键盘焦点及辅助说明可读性；真实浏览器验收仍依赖对应 PR 的 Actions 和人工试用。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
