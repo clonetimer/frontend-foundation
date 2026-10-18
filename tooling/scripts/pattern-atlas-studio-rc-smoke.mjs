@@ -447,6 +447,97 @@ try {
   await prepareOverlay('drawer','侧边抽屉','/api/p3-uncertain-drawer');
   await verifyOverlay('drawer','查看详情','/api/p3-uncertain-drawer');
   pass('overlay-drawer-field-focus-and-uncertain-post-lock');
+
+  // P4: real Ant Design remote-table DELETE interaction on a synthetic bridge
+  // dataset. CDP fulfills DELETE only, not GET, so table/list reconciliation
+  // remains the existing local fixture. No external business service contacted.
+  const tableDecoration = Object.entries((await stored())?.decorations ?? {})
+    .find(([, value]) => value?.widgetKind === 'table');
+  assert(tableDecoration, 'P4 existing server-backed table missing');
+  const tableNodeId = tableDecoration[0].split(':').at(-1);
+  assert(tableNodeId, 'P4 table node ID missing');
+  assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-toolbar label')].find(x=>x.textContent?.trim()==='编辑');if(!b)return false;b.click();return true;})()"), 'P4 edit mode');
+  assert(await evaluate("(() => {const el=document.querySelector('[data-studio-node=' + " + JSON.stringify(JSON.stringify(tableNodeId)) + " + ']');if(!el)return false;el.click();return true;})()"), 'P4 select actual table component');
+  await until(() => evaluate("!![...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('行删除 DELETE 地址'))?.querySelector('input')"), 'P4 delete URL Inspector');
+  assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('行删除 DELETE 地址'))?.querySelector('input');if(!e)return false;e.focus();e.select();return true;})()"), 'P4 focus delete URL');
+  await call('Input.insertText', { text: '/api/p4-delete/{id}' });
+  await until(async () => Object.values((await stored())?.decorations ?? {}).some(x=>x.widgetKind==='table' && x.widgetProps?.deleteUrl==='/api/p4-delete/{id}'), 'P4 configured delete endpoint');
+  assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-toolbar label')].find(x=>x.textContent?.trim()==='体验');if(!e)return false;e.click();return true;})()"), 'P4 live mode');
+  await until(() => evaluate("document.querySelectorAll('.pa-studio-remote-table tbody tr[data-row-key]').length === 3 && [...document.querySelectorAll('.pa-studio-remote-table tbody tr button')].some(x=>x.textContent?.trim()==='删除')"), 'P4 fixture rows');
+
+  const deleteAttempts = [];
+  let deleteMode = 'single';
+  const p4InterceptErrors = [];
+  const p4Intercept = (event) => {
+    const data = JSON.parse(String(event.data));
+    if (data.method !== 'Fetch.requestPaused') return;
+    const req = data.params;
+    const id = new URL(req.request.url).pathname.split('/').at(-1);
+    deleteAttempts.push({ method: req.request.method, id });
+    const responseCode = deleteMode === 'single' || id === '11' ? 503 : 200;
+    void call('Fetch.fulfillRequest', { requestId: req.requestId, responseCode,
+      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+      body: Buffer.from(JSON.stringify({ status: responseCode })).toString('base64')
+    }).catch((error) => p4InterceptErrors.push(String(error)));
+  };
+  const clickRowDelete = async (id) => {
+    assert(await evaluate("(() => {const row=document.querySelector(" + JSON.stringify('.pa-studio-remote-table tbody tr[data-row-key="'+id+'"]') + ");const b=[...row?.querySelectorAll('button')??[]].find(x=>x.textContent?.replace(/\\s/g,'')==='删除');if(!b||b.disabled)return false;b.click();return true;})()"),'P4 open single DELETE confirmation '+id);
+    await until(() => evaluate("[...document.querySelectorAll('.ant-popconfirm-buttons button')].some(x=>x.textContent?.replace(/\\s/g,'').includes('确认删除'))"),'P4 single delete confirmation');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(x=>x.textContent?.replace(/\\s/g,'').includes('确认删除'));if(!b)return false;b.click();return true;})()"),'P4 confirm single DELETE');
+  };
+  const acknowledgeDelete = async () => {
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\\s/g,'').includes('已核对服务端，解除删除锁定'));if(!b)return false;b.click();return true;})()"), 'P4 explicit review acknowledgement button');
+    await until(() => evaluate("[...document.querySelectorAll('.ant-popconfirm-buttons button')].some(x=>x.textContent?.replace(/\\s/g,'').includes('已核对，解除锁定'))"), 'P4 review confirmation');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(x=>x.textContent?.replace(/\\s/g,'').includes('已核对，解除锁定'));if(!b)return false;b.click();return true;})()"),'P4 review unlock confirmation');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.getAttribute('data-atlas-delete-locked')==='false'"),'P4 delete lock cleared after review');
+  };
+  socket.addEventListener('message', p4Intercept);
+  try {
+    await call('Fetch.enable', { patterns: [{ urlPattern: origin + '/api/p4-delete/*', requestStage: 'Request' }] });
+    await clickRowDelete('10');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.getAttribute('data-atlas-delete-locked')==='true'"), 'P4 single uncertain DELETE lock');
+    assert.equal(deleteAttempts.length, 1, 'P4 first single DELETE attempt count');
+    assert.equal(deleteAttempts[0].id, '10');
+    assert(await evaluate("(() => {const root=document.querySelector('.pa-studio-remote-table');return root?.textContent?.includes('删除操作已锁定') && root.textContent.includes('10') && [...root.querySelectorAll('button')].filter(x=>x.textContent?.replace(/\\s/g,'')==='删除').every(x=>x.disabled);})()"), 'P4 single unknown lock disables all row DELETEs');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.trim()==='刷新');if(!b)return false;b.click();return true;})()"),'P4 refresh while locked');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.getAttribute('data-atlas-delete-locked')==='true' && !document.querySelector('.pa-studio-remote-table .ant-table-wrapper .ant-spin-spinning')"), 'P4 lock survives server refresh');
+    assert.equal(deleteAttempts.length,1,'P4 refresh must never retry DELETE');
+    await acknowledgeDelete();
+    assert.equal(deleteAttempts.length,1,'P4 acknowledgement does not send DELETE');
+    pass('table-single-delete-uncertain-lock-and-review');
+
+    deleteMode = 'batch';
+    deleteAttempts.length = 0;
+    await until(() => evaluate("document.querySelectorAll('.pa-studio-remote-table tbody tr[data-row-key]').length===3"), 'P4 batch fixture ready');
+    const selected = await evaluate("(() => {const checks=[...document.querySelectorAll('.pa-studio-remote-table tbody tr[data-row-key] input[type=checkbox]')];if(checks.length!==3)return checks.length;checks.forEach(x=>x.click());return checks.length;})()");
+    assert.equal(selected,3,'P4 require three visible checked records');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('已选择 3 条')"), 'P4 bulk selection');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\\s/g,'')==='批量删除');if(!b||b.disabled)return false;b.click();return true;})()"),'P4 bulk confirmation opened');
+    await until(() => evaluate("[...document.querySelectorAll('.ant-popconfirm-buttons button')].some(x=>x.textContent?.replace(/\\s/g,'').includes('确认批量删除'))"), 'P4 bulk confirmation');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(x=>x.textContent?.replace(/\\s/g,'').includes('确认批量删除'));if(!b)return false;b.click();return true;})()"),'P4 bulk DELETE confirmed');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.getAttribute('data-atlas-delete-locked')==='true'"), 'P4 batch partial result locks future delete');
+    await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('未执行 1 条')"), 'P4 batch outcomes surfaced');
+    assert.deepEqual(deleteAttempts.map(x=>x.id), ['10','11'], 'P4 batch must stop before 12 after unknown 11');
+    assert(await evaluate("(() => {const r=document.querySelector('.pa-studio-remote-table');return r?.textContent?.includes('成功 1 条') && r.textContent.includes('结果不确定 1 条') && r.textContent.includes('未执行 1 条');})()"), 'P4 partial success, unknown and skipped counted separately');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\\s/g,'')==='清空选择');if(!b)return false;b.click();return true;})()"), 'P4 clear selection while locked');
+    assert(await evaluate("(() => {const r=document.querySelector('.pa-studio-remote-table');return r?.getAttribute('data-atlas-delete-locked')==='true' && r.textContent.includes('未执行 1 条');})()"), 'P4 clearing selection must not erase unknown outcome');
+    assert.deepEqual(deleteAttempts.map(x=>x.id), ['10','11'], 'P4 no repeat after selection clear');
+    assert.deepEqual(p4InterceptErrors,[],'P4 intercept errors');
+    const screenshot=await call('Page.captureScreenshot', { format:'png',captureBeyondViewport:false });
+    writeFileSync(join(evidenceDir,'table-delete-p4-uncertain.png'),Buffer.from(screenshot.data,'base64'));
+    writeFileSync(join(evidenceDir,'table-delete-p4-automated.json'),JSON.stringify({
+      status:'SYNTHETIC_BROWSER_PASS',sourceCommit:manifest.sourceCommit,platform:process.platform,
+      single503:'10 locked until explicit acknowledgement',
+      batch:{successful:['10'], uncertain:['11'], skipped:['12'], attempts:deleteAttempts},
+      limitations:['Only synthetic DELETE interception with local list fixture',
+        'No real backend transaction verification or inter-session idempotency']
+    },null,2)+'\n');
+    pass('table-bulk-partial-success-stops-and-persists-uncertainty');
+  } finally {
+    await call('Fetch.disable');
+    socket.removeEventListener('message',p4Intercept);
+  }
+
   writeFileSync(join(evidenceDir,'overlay-p3-automated.json'),JSON.stringify({
     status:'SYNTHETIC_BROWSER_PASS',sourceCommit:manifest.sourceCommit,platform:process.platform,
     scenarios:['modal','drawer'],responses:[503],
