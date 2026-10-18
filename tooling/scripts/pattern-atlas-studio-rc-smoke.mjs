@@ -194,6 +194,49 @@ try {
   await until(() => evaluate("document.querySelector('.pa-studio h1')?.textContent === " + JSON.stringify(projectName)), 'P0 creation handoff');
   pass('create-project-and-handoff');
 
+  // P2 production Studio Inspector keyboard/ARIA + page-level viewport regression.
+  await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await until(() => evaluate("!!document.querySelector('.pa-studio-inspector-rail .pa-studio-rail-collapse')"), 'P2 inspector toolbar ready');
+  assert(await evaluate("(() => { const b=document.querySelector('.pa-studio-rail-collapse');const p=document.querySelector('#pa-studio-inspector-content');return b?.getAttribute('aria-expanded')==='true' && b?.getAttribute('aria-controls')==='pa-studio-inspector-content' && p?.getAttribute('role')==='region'; })()"), 'Inspector must describe expanded controlled region');
+  assert(await evaluate("(() => {const e=document.querySelector('.pa-studio-rail-collapse');e?.focus();return document.activeElement===e})()"), 'Inspector collapse button focus');
+  await key('Tab', 'Tab', 9);
+  assert(await evaluate("(() => {const e=document.activeElement;const s=getComputedStyle(e);return e?.matches('.pa-studio-inspector-rail button[title=\"页面\"]') && e.matches(':focus-visible') && s.outlineStyle!=='none' && parseFloat(s.outlineWidth)>=2;})()"), 'Inspector first category reachable with visible Tab focus');
+  await key('Enter', 'Enter', 13);
+  await until(() => evaluate("document.querySelector('.pa-studio-inspector-rail button[title=\"页面\"]')?.getAttribute('aria-pressed')==='true' && document.querySelector('#pa-studio-inspector-content')?.getAttribute('aria-label')==='当前属性分类：页面'"), 'Inspector page category keyboard selection');
+  assert(await evaluate("(() => {const e=document.querySelector('.pa-studio-rail-collapse');e?.focus();return document.activeElement===e;})()"));
+  await key('Enter', 'Enter', 13);
+  await until(() => evaluate("document.querySelector('.pa-studio-rail-collapse')?.getAttribute('aria-expanded')==='false' && !document.querySelector('#pa-studio-inspector-content')"), 'Inspector keyboard collapse');
+  await key('Enter', 'Enter', 13);
+  await until(() => evaluate("document.querySelector('.pa-studio-rail-collapse')?.getAttribute('aria-expanded')==='true' && Boolean(document.querySelector('#pa-studio-inspector-content'))"), 'Inspector keyboard reexpand');
+  const pageTabState = await evaluate("(() => {const tabs=[...document.querySelectorAll('.pa-studio-page-tabs button')];return {count:tabs.length,current:tabs.filter(x=>x.getAttribute('aria-current')==='page').length};})()");
+  assert.equal(pageTabState.count, (await stored()).blueprint.pages.length, 'Page navigation count changed');
+  assert.equal(pageTabState.current, 1, 'Exactly one studio page should be current');
+  pass('studio-inspector-keyboard-and-aria');
+
+  const inspectorViewports = [];
+  for (const width of [320, 375, 768, 1440]) {
+    await call('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
+    await until(() => evaluate("window.innerWidth === " + width), 'Studio Inspector viewport ' + width);
+    const metrics = await evaluate("(() => {const rail=document.querySelector('.pa-studio-inspector-rail');const region=document.querySelector('#pa-studio-inspector-content');const panel=document.querySelector('.pa-studio-inspector-shell');const bounds=panel?.getBoundingClientRect();return {viewport:innerWidth,documentScrollWidth:document.documentElement.scrollWidth,inspectorAvailable:Boolean(region),railButtons:rail?.querySelectorAll('button').length,inspectorLeft:Math.round(bounds?.left ?? -1),inspectorRight:Math.round(bounds?.right ?? -1),inspectorWidth:Math.round(bounds?.width ?? -1)};})()");
+    const offenders = await evaluate("(() => [...document.querySelectorAll('body *')].map(e=>{const r=e.getBoundingClientRect();return {tag:e.tagName,cls:typeof e.className==='string'?e.className.slice(0,90):'',left:Math.round(r.left),right:Math.round(r.right)};}).filter(e=>e.right>innerWidth+3).slice(0,12))()");
+    console.log(JSON.stringify({ type:'studio-inspector-viewport', width, metrics, offenders }));
+    const shot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    assert(shot.data, 'Studio inspector screenshot absent: ' + width);
+    writeFileSync(join(evidenceDir, 'studio-inspector-' + width + '.png'), Buffer.from(shot.data, 'base64'));
+    assert(metrics.documentScrollWidth <= width + 2, 'Studio horizontal overflow at ' + width + ': ' + JSON.stringify(metrics));
+    assert(metrics.inspectorAvailable && metrics.railButtons >= 5 && metrics.inspectorWidth > 0, 'Inspector hidden at ' + width);
+    assert(metrics.inspectorLeft >= -2 && metrics.inspectorRight <= width + 2, 'Inspector panel outside viewport at ' + width);
+    inspectorViewports.push(metrics);
+  }
+  await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  writeFileSync(join(evidenceDir, 'studio-inspector-ui-automated.json'), JSON.stringify({
+    status:'AUTOMATED_PASS', sourceCommit:manifest.sourceCommit, platform:process.platform,
+    checks:['studio-inspector-keyboard-and-aria','studio-inspector-responsive-viewport'], viewports:inspectorViewports,
+    limitations:['Automated geometry is not human visual acceptance','No screen reader testing or product owner signoff']
+  }, null, 2) + '\n');
+  pass('studio-inspector-responsive-viewport');
+
+
   const before = await stored();
   assert(before?.blueprint?.pages?.[0]?.composition, 'P0 initial autosave absent');
   const originalCount = countNodes(before.blueprint.pages[0].composition);
