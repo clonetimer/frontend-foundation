@@ -11,6 +11,8 @@ import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import console from 'node:console';
+import process from 'node:process';
 
 const args = process.argv.slice(2);
 const fix = args.includes('--fix');
