@@ -378,6 +378,83 @@ try {
   }, null, 2) + '\n');
   pass('production-Studio-Python-bridge-AAS-shaped-HTTP');
 
+  // P3 production Modal/Drawer: deterministic, synthetic HTTP 503. Never contact
+  // an external backend, and never treat an unknown POST result as safe to retry.
+  const prepareOverlay = async (kind, paletteName, endpoint) => {
+    const edit = await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-toolbar label')].find(x=>x.textContent?.trim()==='编辑');if(!e)return false;e.click();return true;})()");
+    assert(edit, 'P3 edit mode control');
+    const added = await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-palette-item')].find(x=>x.querySelector('strong')?.textContent?.trim()===" + JSON.stringify(paletteName) + ");if(!e)return false;e.click();return true;})()");
+    assert(added, 'P3 '+kind+' palette entry');
+    await until(async () => Object.values((await stored())?.decorations ?? {}).some(x=>x.widgetKind===kind), 'P3 '+kind+' inserted');
+    assert(await evaluate("(() => {const b=document.querySelector('.pa-studio-inspector-rail button[title=内容]');if(!b)return false;if(b.getAttribute('aria-pressed')!=='true')b.click();return true;})()"), 'P3 content inspector');
+    await until(() => evaluate("!![...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('弹窗表单字段'))?.querySelector('textarea')"), 'P3 '+kind+' fields editor');
+    assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('弹窗表单字段'))?.querySelector('textarea');if(!e)return false;e.focus();e.select();return true;})()"), 'P3 form fields focus');
+    await call('Input.insertText', { text: 'title|标题|text|required' });
+    await until(async () => Object.values((await stored())?.decorations ?? {}).some(x=>x.widgetKind===kind && x.widgetProps?.formFields==='title|标题|text|required'), 'P3 '+kind+' form declared');
+    assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('表单提交 POST 地址'))?.querySelector('input');if(!e)return false;e.focus();e.select();return true;})()"), 'P3 submit URL editor');
+    await call('Input.insertText', { text: endpoint });
+    await until(async () => Object.values((await stored())?.decorations ?? {}).some(x=>x.widgetKind===kind && x.widgetProps?.submitUrl===endpoint), 'P3 '+kind+' URL persisted');
+    assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-toolbar label')].find(x=>x.textContent?.trim()==='体验');if(!e)return false;e.click();return true;})()"), 'P3 live mode');
+    await until(() => evaluate("[...document.querySelectorAll('.pa-studio-overlay > button')].some(x=>x.textContent?.includes(" + JSON.stringify(kind==='modal'?'打开弹窗':'查看详情') + "))"), 'P3 '+kind+' trigger ready');
+  };
+  const verifyOverlay = async (kind, triggerText, endpoint) => {
+    const panel = kind==='modal' ? '.ant-modal' : '.ant-drawer';
+    const footer = kind==='modal' ? '.ant-modal-footer' : '.ant-drawer-footer';
+    const opened = await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-overlay > button')].find(x=>x.textContent?.includes(" + JSON.stringify(triggerText) + "));if(!b||b.disabled)return false;b.click();return true;})()");
+    assert(opened, 'P3 '+kind+' trigger enabled');
+    await until(() => evaluate("!!document.querySelector(" + JSON.stringify(panel+" input[aria-label='标题']") + ")"), 'P3 '+kind+' form visible');
+    assert(await evaluate("(() => {const e=document.querySelector(" + JSON.stringify(footer+" .ant-btn-primary") + ");if(!e)return false;e.click();return true;})()"), 'P3 '+kind+' invalid submit');
+    await until(() => evaluate("(() => {const e=document.querySelector(" + JSON.stringify(panel+" input[aria-label='标题']") + ");return e?.getAttribute('aria-invalid')==='true' && e?.getAttribute('aria-describedby') && document.activeElement===e && document.getElementById(e.getAttribute('aria-describedby'))?.getAttribute('role')==='alert';})()"), 'P3 '+kind+' field invalid ARIA/focus');
+    assert(await evaluate("(() => {const e=document.querySelector(" + JSON.stringify(panel+" input[aria-label='标题']") + ");e?.focus();return document.activeElement===e;})()"));
+    await call('Input.insertText', { text: 'P3 safe write' });
+    await until(() => evaluate("document.querySelector(" + JSON.stringify(panel+" input[aria-label='标题']") + ")?.getAttribute('aria-invalid')==='false'"), 'P3 '+kind+' corrected field clears ARIA');
+    let pausedCount=0;
+    const interceptionErrors=[];
+    const onIntercept=(event)=>{
+      const msg=JSON.parse(String(event.data));
+      if(msg.method!=='Fetch.requestPaused') return;
+      pausedCount++;
+      void call('Fetch.fulfillRequest',{
+        requestId:msg.params.requestId,responseCode:503,
+        responseHeaders:[{name:'Content-Type',value:'application/json'}],
+        body:Buffer.from('{"error":"synthetic uncertain outcome"}').toString('base64')
+      }).catch(x=>interceptionErrors.push(String(x)));
+    };
+    socket.addEventListener('message',onIntercept);
+    try {
+      await call('Fetch.enable',{patterns:[{urlPattern:origin+endpoint,requestStage:'Request'}]});
+      assert(await evaluate("(() => {const b=document.querySelector(" + JSON.stringify(footer+" .ant-btn-primary") + ");if(!b||b.disabled)return false;b.click();return true;})()"), 'P3 '+kind+' first POST');
+      await until(() => evaluate("(() => {const p=document.querySelector(" + JSON.stringify(panel) + ");return p?.textContent?.includes('写入结果不确定') && p.textContent.includes('禁止重复提交') && document.querySelector(" + JSON.stringify(footer+" .ant-btn-primary") + ")?.disabled;})()"),'P3 '+kind+' uncertain lock');
+      assert.equal(pausedCount,1,'P3 '+kind+' expected exactly one intercepted POST');
+      assert(await evaluate("(() => {const b=document.querySelector(" + JSON.stringify(footer+" .ant-btn-primary") + ");if(!b)return false;b.click();return b.disabled;})()"),'P3 '+kind+' submit must remain disabled');
+      await pause(250);
+      assert.equal(pausedCount,1,'P3 '+kind+' must not repeat uncertain POST');
+      assert.deepEqual(interceptionErrors,[],'P3 synthetic interceptor');
+    } finally {
+      await call('Fetch.disable');
+      socket.removeEventListener('message',onIntercept);
+    }
+    const shot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+    writeFileSync(join(evidenceDir,'overlay-'+kind+'-uncertain.png'),Buffer.from(shot.data,'base64'));
+    const cancelled=await evaluate("(() => {const b=[...document.querySelectorAll(" + JSON.stringify(footer+" button") + ")].find(x=>x.textContent?.includes('取消'));if(!b)return false;b.click();return true;})()");
+    assert(cancelled,'P3 '+kind+' session closed after unknown result');
+    await pause(350);
+  };
+  await prepareOverlay('modal','模态弹窗','/api/p3-uncertain-modal');
+  await verifyOverlay('modal','打开弹窗','/api/p3-uncertain-modal');
+  pass('overlay-modal-field-focus-and-uncertain-post-lock');
+  await prepareOverlay('drawer','侧边抽屉','/api/p3-uncertain-drawer');
+  await verifyOverlay('drawer','查看详情','/api/p3-uncertain-drawer');
+  pass('overlay-drawer-field-focus-and-uncertain-post-lock');
+  writeFileSync(join(evidenceDir,'overlay-p3-automated.json'),JSON.stringify({
+    status:'SYNTHETIC_BROWSER_PASS',sourceCommit:manifest.sourceCommit,platform:process.platform,
+    scenarios:['modal','drawer'],responses:[503],
+    contract:'Field errors focus/ARIA and uncertain POST blocked in one dialog session',
+    limitations:['Synthetic HTTP interception only; no production database or server idempotency proof',
+      'No human screen-reader validation or backend reinspection after reopening']
+  },null,2)+'\n');
+
+
   writeFileSync(join(evidenceDir, 'p0-automated.json'), JSON.stringify({
     status: 'AUTOMATED_PASS', sourceCommit: manifest.sourceCommit, platform: process.platform,
     checks: accepted, limitations: [
