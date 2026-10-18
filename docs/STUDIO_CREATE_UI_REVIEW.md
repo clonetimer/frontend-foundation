@@ -39,3 +39,7 @@
 输出 artifacts/pattern-atlas/studio-p0-evidence/create-ui-automated.json 和 create-*.png；证据包含 sourceCommit、平台、断言列表和视口几何信息。只有 PR 精确 HEAD 的 Linux/Windows 编辑器 Chromium CI 与工件通过后，才可写 AUTOMATED_PASS。人工视觉与屏幕阅读器验收继续是 NOT RUN；自动化不等于 Studio Stable 发布。
 
 **此前仅完成源码检查；P1 的自动化新增项须以新 PR 的真实 CI 工件为准。人工检查仍待进行。**
+
+## P1 实际失败归因（基于真实 Chromium）
+
+初版浏览器回归在 320px 视口发现 documentScrollWidth=778px；/create 根表单自身为 241px，模板按钮和主操作并未越界。新诊断输出显示越界元素是 Showcase 顶部横向 Ant Design Menu 的 ant-menu-overflow-item，范围延伸至 x=778px。为避免改动冻结的 Foundation TopNavShell，本 PR 在 create.css 中仅对 /create 且视口宽度不超过 640px 时的顶部导航施加局部适配：Header 可换行，Menu 在限定宽度的内部水平滚动，内容区减小内边距。该整改仍须以修复后的 Linux/Windows CI 和截图判定，不能因修改 CSS 就标记通过。
