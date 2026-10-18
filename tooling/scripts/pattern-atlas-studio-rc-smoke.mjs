@@ -463,7 +463,9 @@ try {
   await call('Input.insertText', { text: '/api/p4-delete/{id}' });
   await until(async () => Object.values((await stored())?.decorations ?? {}).some(x=>x.widgetKind==='table' && x.widgetProps?.deleteUrl==='/api/p4-delete/{id}'), 'P4 configured delete endpoint');
   assert(await evaluate("(() => {const e=[...document.querySelectorAll('.pa-studio-toolbar label')].find(x=>x.textContent?.trim()==='体验');if(!e)return false;e.click();return true;})()"), 'P4 live mode');
-  await until(() => evaluate("document.querySelectorAll('.pa-studio-remote-table tbody tr[data-row-key]').length === 3 && [...document.querySelectorAll('.pa-studio-remote-table tbody tr button')].some(x=>x.textContent?.trim()==='删除')"), 'P4 fixture rows');
+  await until(() => evaluate("(() => {const r=document.querySelector('.pa-studio-remote-table[data-atlas-table-source=remote]');return r?.textContent?.includes('AAS-CI-Model-10') && [...r.querySelectorAll('tbody tr')].filter(x=>x.textContent?.includes('AAS-CI-Model-')).length===3 && [...r.querySelectorAll('tbody tr button')].some(x=>x.textContent?.replace(/\\s/g,'')==='删除');})()"), 'P4 visible three server-backed fixture rows');
+  const p4Rows = await evaluate("(() => {const r=document.querySelector('.pa-studio-remote-table');return {source:r?.getAttribute('data-atlas-table-source'),rows:[...r?.querySelectorAll('tbody tr')??[]].map(x=>({key:x.getAttribute('data-row-key'),text:x.textContent?.slice(0,100)}))};})()");
+  console.log(JSON.stringify({type:'P4-live-table-fixture',p4Rows}));
 
   const deleteAttempts = [];
   let deleteMode = 'single';
@@ -481,7 +483,7 @@ try {
     }).catch((error) => p4InterceptErrors.push(String(error)));
   };
   const clickRowDelete = async (id) => {
-    assert(await evaluate("(() => {const row=document.querySelector(" + JSON.stringify('.pa-studio-remote-table tbody tr[data-row-key="'+id+'"]') + ");const b=[...row?.querySelectorAll('button')??[]].find(x=>x.textContent?.replace(/\\s/g,'')==='删除');if(!b||b.disabled)return false;b.click();return true;})()"),'P4 open single DELETE confirmation '+id);
+    assert(await evaluate("(() => {const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(x=>x.textContent?.includes(" + JSON.stringify('AAS-CI-Model-'+id) + "));const b=[...row?.querySelectorAll('button')??[]].find(x=>x.textContent?.replace(/\\s/g,'')==='删除');if(!b||b.disabled)return false;b.click();return true;})()"),'P4 open single DELETE confirmation '+id);
     await until(() => evaluate("[...document.querySelectorAll('.ant-popconfirm-buttons button')].some(x=>x.textContent?.replace(/\\s/g,'').includes('确认删除'))"),'P4 single delete confirmation');
     assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(x=>x.textContent?.replace(/\\s/g,'').includes('确认删除'));if(!b)return false;b.click();return true;})()"),'P4 confirm single DELETE');
   };
@@ -508,8 +510,8 @@ try {
 
     deleteMode = 'batch';
     deleteAttempts.length = 0;
-    await until(() => evaluate("document.querySelectorAll('.pa-studio-remote-table tbody tr[data-row-key]').length===3"), 'P4 batch fixture ready');
-    const selected = await evaluate("(() => {const checks=[...document.querySelectorAll('.pa-studio-remote-table tbody tr[data-row-key] input[type=checkbox]')];if(checks.length!==3)return checks.length;checks.forEach(x=>x.click());return checks.length;})()");
+    await until(() => evaluate("[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].filter(x=>x.textContent?.includes('AAS-CI-Model-')).length===3"), 'P4 batch fixture ready');
+    const selected = await evaluate("(() => {const rows=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].filter(x=>x.textContent?.includes('AAS-CI-Model-'));const checks=rows.map(x=>x.querySelector('input[type=checkbox]')).filter(Boolean);if(checks.length!==3)return checks.length;checks.forEach(x=>x.click());return checks.length;})()");
     assert.equal(selected,3,'P4 require three visible checked records');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('已选择 3 条')"), 'P4 bulk selection');
     assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\\s/g,'')==='批量删除');if(!b||b.disabled)return false;b.click();return true;})()"),'P4 bulk confirmation opened');
