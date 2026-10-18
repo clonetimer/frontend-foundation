@@ -110,7 +110,14 @@ try {
   const createPass = (name) => { createAudit.checks.push(name); pass(name); };
   const key = async (keyName, code, keyCode) => {
     const params = { key: keyName, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode };
-    await call('Input.dispatchKeyEvent', { type: 'keyDown', ...params });
+    // CDP Enter requires a char event to reproduce Chrome's trusted native button activation.
+    // Verified against a standalone Chromium button: keyDown/keyUp alone does not click.
+    if (code === 'Enter') {
+      await call('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...params });
+      await call('Input.dispatchKeyEvent', { type: 'char', ...params, text: '\r', unmodifiedText: '\r' });
+    } else {
+      await call('Input.dispatchKeyEvent', { type: 'keyDown', ...params });
+    }
     await call('Input.dispatchKeyEvent', { type: 'keyUp', ...params });
   };
   const keyboardFocusOn = async (selector, label) => {
