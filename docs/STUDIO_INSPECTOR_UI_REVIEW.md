@@ -26,3 +26,7 @@
 - [ ] Modal/Drawer 错误提示与读屏专项（后续阶段）
 
 自动证据预定路径：\`artifacts/pattern-atlas/studio-p0-evidence/studio-inspector-ui-automated.json\`、\`studio-inspector-{320,375,768,1440}.png\`。
+
+## P2 生产浏览器首次缺陷与修复
+
+首轮 Linux Chromium 320px 测试发现 `documentScrollWidth=778`（视口宽度 320），Inspector 面板本身为 `left=33px, right=272px`；`offenders` 均为 Showcase 顶部 Ant Design horizontal Menu 子项。原 `/create` 页面已定向治理同类溢出，但 `/studio` 路由独立加载 CSS，因此尚未覆盖。本轮在 Studio 应用层且仅当视口宽度不大于 1000px 时，为顶部 Header 设置换行、菜单容器内水平滚动和窄屏内容边距；Foundation TopNavShell 核心不变。新增测试保留原 `scrollWidth` 断言和失败截图。最终 PASS 必须以修复后双平台精确提交 CI 为证，不因源码提交而自动判通过。

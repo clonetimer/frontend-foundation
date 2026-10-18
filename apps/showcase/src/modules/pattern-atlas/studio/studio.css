@@ -338,3 +338,35 @@
 .pa-studio-graph-child .pa-studio-graph-node{padding:7px 5px}
 .pa-studio-graph-empty{display:block;text-align:center;padding:10px 0;color:#8b988e;font-size:10px}
 @media(prefers-reduced-motion:reduce){.pa-studio-graph *{scroll-behavior:auto!important;transition:none!important}}
+
+/* P2 production Chromium regression: at 320px the Showcase horizontal
+   AntD header menu extended the whole /studio document to 778px. Contain it
+   in an internal scroller, without changing the frozen Foundation shell. */
+@media (max-width: 1000px) {
+  body:has(.pa-studio) .ant-layout-header {
+    height: auto !important;
+    min-height: 64px;
+    line-height: normal !important;
+    flex-wrap: wrap;
+    gap: 10px 12px !important;
+    padding: 12px 14px !important;
+    min-width: 0;
+  }
+  body:has(.pa-studio) .ant-layout-header > .ant-menu-horizontal {
+    order: 3;
+    flex: 0 1 100% !important;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  body:has(.pa-studio) .ant-layout-header > .ant-space {
+    margin-left: auto;
+  }
+  body:has(.pa-studio) .ant-layout-content {
+    min-width: 0;
+    padding: 12px !important;
+  }
+}
