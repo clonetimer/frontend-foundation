@@ -154,7 +154,7 @@ try {
 
   for (const width of [320, 375, 768, 1440]) {
     await call('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
-    await until(() => evaluate("document.documentElement.clientWidth === " + width), 'create width ' + width);
+    await until(() => evaluate("window.innerWidth === " + width), 'create width ' + width);
     const metrics = await evaluate("(() => {const root=document.documentElement;const form=document.querySelector('.pa-create');const cta=[...document.querySelectorAll('.pa-create-actions button')].find(b=>b.textContent?.includes('进入拖拽设计器'));const rect=cta?.getBoundingClientRect();const buttons=[...document.querySelectorAll('.pa-create-template')];return {viewport:innerWidth,documentScrollWidth:root.scrollWidth,createScrollWidth:form?.scrollWidth,createClientWidth:form?.clientWidth,templateCount:buttons.length,templateOverflow:buttons.some(b=>{const r=b.getBoundingClientRect();return r.right>innerWidth+2 || r.left< -2;}),ctaPresent:Boolean(cta),ctaOverflow:!rect||rect.width<120||rect.right>innerWidth+2||rect.left< -2};})()");
     assert.equal(metrics.viewport, width, 'Viewport mismatch');
     assert(metrics.documentScrollWidth <= width + 2, 'Horizontal document overflow at ' + width + ': ' + JSON.stringify(metrics));
