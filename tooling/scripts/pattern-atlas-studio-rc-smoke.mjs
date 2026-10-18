@@ -436,8 +436,9 @@ try {
     }
     const shot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
     writeFileSync(join(evidenceDir,'overlay-'+kind+'-uncertain.png'),Buffer.from(shot.data,'base64'));
-    const cancelled=await evaluate("(() => {const b=[...document.querySelectorAll(" + JSON.stringify(footer+" button") + ")].find(x=>x.textContent?.includes('取消'));if(!b)return false;b.click();return true;})()");
-    assert(cancelled,'P3 '+kind+' session closed after unknown result');
+    const closeResult=await evaluate("(() => {const input=document.querySelector(" + JSON.stringify(panel+" input[aria-label='标题']") + ");const root=input?.closest(" + JSON.stringify(panel) + ");const buttons=[...root?.querySelectorAll('button')??[]];const descriptions=buttons.map(b=>({text:b.textContent?.trim().slice(0,70),label:b.getAttribute('aria-label'),disabled:b.disabled}));const cancel=buttons.find(b=>/取消|Cancel/i.test(b.textContent||''))??root?.querySelector('.ant-modal-close,.ant-drawer-close');if(cancel)cancel.click();return {clicked:!!cancel,buttons:descriptions};})()");
+    console.log(JSON.stringify({type:'P3-overlay-close',kind,closeResult}));
+    assert(closeResult.clicked,'P3 '+kind+' session closed after unknown result');
     await pause(350);
   };
   await prepareOverlay('modal','模态弹窗','/api/p3-uncertain-modal');
