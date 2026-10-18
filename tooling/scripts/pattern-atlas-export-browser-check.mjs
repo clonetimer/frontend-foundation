@@ -610,7 +610,14 @@ export async function runExportedBrowserSmoke(directory) {
     );
     assert(await evaluate("(() => {const button=[...document.querySelectorAll('.pa-studio-remote-table .pa-studio-widget-actions button')].find(b=>b.textContent?.replace(/\\s/g,'')==='刷新');if(!button)return false;button.click();return true;})()"), 'Bulk fixture refresh missing');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('共 4 条记录')"), 'Bulk fixture server total missing');
-    const selectBulkRow = (name) => evaluate("(() => {const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes(" + JSON.stringify(name) + "));const check=row?.querySelector('input[type=checkbox]');if(!check)return false;check.click();return true;})()");
+    const selectBulkRow = async (name) => {
+      // A visible row can still be loading after a page switch. Clicking a
+      // disabled checkbox returns without changing React selection state.
+      // Wait for the real control to become actionable on slower Windows CI.
+      const checkboxReady = "(() => {const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes(" + JSON.stringify(name) + "));const check=row?.querySelector('input[type=checkbox]');return Boolean(check && !check.disabled);})()";
+      await until(() => evaluate(checkboxReady), 'Bulk row checkbox interactive: ' + name);
+      return evaluate("(() => {const row=[...document.querySelectorAll('.pa-studio-remote-table tbody tr')].find(el=>el.textContent?.includes(" + JSON.stringify(name) + "));const check=row?.querySelector('input[type=checkbox]');if(!check||check.disabled)return false;check.click();return true;})()");
+    };
     const selectedCount = (count) => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('当前页已选择 " + String(count) + " 条')");
     assert(await selectBulkRow('第二对象'), 'Bulk row checkbox missing');
     await until(() => selectedCount(1), 'Bulk first selected row count');
