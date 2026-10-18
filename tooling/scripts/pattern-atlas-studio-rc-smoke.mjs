@@ -104,6 +104,84 @@ try {
   mkdirSync(evidenceDir, { recursive: true });
   const accepted = [];
   const pass = (id) => accepted.push({ id, status: 'PASS' });
+
+  // P1: assert keyboard and viewport behavior in the packaged production editor.
+  const createAudit = { checks: [], viewports: [] };
+  const createPass = (name) => { createAudit.checks.push(name); pass(name); };
+  const key = async (keyName, code, keyCode) => {
+    const params = { key: keyName, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode };
+    // CDP Enter requires a char event to reproduce Chrome's trusted native button activation.
+    // Verified against a standalone Chromium button: keyDown/keyUp alone does not click.
+    if (code === 'Enter') {
+      await call('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...params });
+      await call('Input.dispatchKeyEvent', { type: 'char', ...params, text: '\r', unmodifiedText: '\r' });
+    } else {
+      await call('Input.dispatchKeyEvent', { type: 'keyDown', ...params });
+    }
+    await call('Input.dispatchKeyEvent', { type: 'keyUp', ...params });
+  };
+  const keyboardFocusOn = async (selector, label) => {
+    for (let index = 0; index < 48; index++) {
+      await key('Tab', 'Tab', 9);
+      const focus = await evaluate("(() => { const e = document.activeElement; if (!e?.matches(" + JSON.stringify(selector) + ")) return null; const style = getComputedStyle(e); return { focusVisible: e.matches(':focus-visible'), outlineStyle: style.outlineStyle, outlineWidth: parseFloat(style.outlineWidth) }; })()");
+      if (focus) {
+        assert(focus.focusVisible, label + ' must be :focus-visible after real Tab');
+        assert.notEqual(focus.outlineStyle, 'none', label + ' lacks outline style');
+        assert(focus.outlineWidth >= 2, label + ' has insufficient outline width');
+        return;
+      }
+    }
+    throw new Error(label + ' not reachable via Tab');
+  };
+  await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await call('Page.navigate', { url: origin + '/create' });
+  await until(() => evaluate("document.querySelectorAll('.pa-create-template').length === 3"), 'create templates ready');
+  await keyboardFocusOn('.pa-create-advanced summary', 'advanced settings');
+  await keyboardFocusOn('.pa-create-template', 'layout template');
+  assert(await evaluate("document.activeElement?.textContent?.includes('空白页面')"), 'Expected first template focus');
+  await key(' ', 'Space', 32);
+  await until(() => evaluate("document.querySelector('.pa-create-template')?.getAttribute('aria-pressed') === 'true'"), 'Space chooses blank template');
+  await key('Tab', 'Tab', 9);
+  assert(await evaluate("document.activeElement?.matches('.pa-create-template') && document.activeElement.textContent?.includes('Bento')"), 'Bento must follow first template');
+  await key('Enter', 'Enter', 13);
+  await until(() => evaluate("[...document.querySelectorAll('.pa-create-template')].find(e=>e.textContent?.includes('Bento'))?.getAttribute('aria-pressed') === 'true'"), 'Enter chooses Bento');
+  createPass('create-keyboard-focus-and-layout-selection');
+
+  await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.pa-create-template')).transitionDuration"), '0s', 'Reduced motion must disable template transitions');
+  await call('Emulation.setEmulatedMedia', { features: [] });
+  createPass('create-reduced-motion');
+
+  for (const width of [320, 375, 768, 1440]) {
+    await call('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
+    await until(() => evaluate("window.innerWidth === " + width), 'create width ' + width);
+    const metrics = await evaluate("(() => {const root=document.documentElement;const form=document.querySelector('.pa-create');const cta=[...document.querySelectorAll('.pa-create-actions button')].find(b=>b.textContent?.includes('进入拖拽设计器'));const rect=cta?.getBoundingClientRect();const buttons=[...document.querySelectorAll('.pa-create-template')];return {viewport:innerWidth,documentScrollWidth:root.scrollWidth,createScrollWidth:form?.scrollWidth,createClientWidth:form?.clientWidth,templateCount:buttons.length,templateOverflow:buttons.some(b=>{const r=b.getBoundingClientRect();return r.right>innerWidth+2 || r.left< -2;}),ctaPresent:Boolean(cta),ctaOverflow:!rect||rect.width<120||rect.right>innerWidth+2||rect.left< -2};})()");
+    // Save a screenshot and log offending DOM boxes before asserting, so
+    // a failed responsive gate identifies its source instead of losing evidence.
+    const overflowOrigins = await evaluate("(() => [...document.querySelectorAll('body *')].map(e=>{const r=e.getBoundingClientRect();return {tag:e.tagName,cls:typeof e.className==='string'?e.className.slice(0,100):'',left:Math.round(r.left),right:Math.round(r.right),width:Math.round(r.width)};}).filter(e=>e.width>0&&e.right>innerWidth+3).slice(0,20))()");
+    console.log(JSON.stringify({ type: 'create-viewport', width, metrics, overflowOrigins }));
+    const shot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    assert(shot.data, 'Create screenshot absent: ' + width);
+    writeFileSync(join(evidenceDir, 'create-' + width + '.png'), Buffer.from(shot.data, 'base64'));
+    assert.equal(metrics.viewport, width, 'Viewport mismatch');
+    assert(metrics.documentScrollWidth <= width + 2, 'Horizontal document overflow at ' + width + ': ' + JSON.stringify(metrics));
+    assert(metrics.createScrollWidth <= metrics.createClientWidth + 2, 'Create form overflow at ' + width);
+    assert.equal(metrics.templateCount, 3, 'Template count drift');
+    assert.equal(metrics.templateOverflow, false, 'Template offscreen at ' + width);
+    assert.equal(metrics.ctaOverflow, false, 'Primary action clipped at ' + width);
+    createAudit.viewports.push(metrics);
+  }
+  await call('Emulation.clearDeviceMetricsOverride');
+  createPass('create-multi-viewport-overflow-and-screenshots');
+  writeFileSync(join(evidenceDir, 'create-ui-automated.json'), JSON.stringify({
+    status: 'AUTOMATED_PASS', sourceCommit: manifest.sourceCommit, platform: process.platform,
+    ...createAudit, limitations: [
+      'No human visual acceptance; screenshots and DOM geometry are automated evidence',
+      'No screen reader/browser accessibility-tree acceptance',
+      'No product-owner signoff'
+    ]
+  }, null, 2) + '\n');
+
   const stored = () => evaluate("JSON.parse(localStorage.getItem('foundation-showcase:pattern-atlas:studio-v1') || 'null')");
   const countNodes = (node) => 1 + (node.children || []).reduce((n, x) => n + countNodes(x), 0);
   const projectName = 'Stable-P0-' + manifest.sourceCommit.slice(0, 8);

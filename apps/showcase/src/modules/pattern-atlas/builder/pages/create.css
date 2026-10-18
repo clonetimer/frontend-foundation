@@ -31,3 +31,35 @@
 @media (prefers-reduced-motion: reduce) {
   .pa-create-template { transition: none; }
 }
+
+/* /create-only small-screen shell adaptation.
+   Ant Design horizontal nav keeps menu items on a single line, widening
+   the document to ~778px at 320px. Keep frozen TopNavShell unchanged. */
+@media (max-width: 1000px) {
+  body:has(.pa-create) .ant-layout-header {
+    height: auto !important;
+    min-height: 64px;
+    line-height: normal !important;
+    flex-wrap: wrap;
+    gap: 10px 12px !important;
+    padding: 12px 14px !important;
+    min-width: 0;
+  }
+  body:has(.pa-create) .ant-layout-header > .ant-menu-horizontal {
+    order: 3;
+    flex: 0 1 100% !important;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  body:has(.pa-create) .ant-layout-header > .ant-space {
+    margin-left: auto;
+  }
+  body:has(.pa-create) .ant-layout-content {
+    min-width: 0;
+    padding: 12px !important;
+  }
+}
