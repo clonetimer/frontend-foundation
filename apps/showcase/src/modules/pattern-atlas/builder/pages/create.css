@@ -12,3 +12,22 @@
 .pa-create-preview-card .ant-card-body{padding-top:13px}
 .pa-create-mini-empty{min-height:215px;display:grid;place-items:center;text-align:center;font-size:13px;color:#86998e}
 .pa-create-preview-foot{font-size:11px;text-align:center;color:#93a299;line-height:1.8}
+
+/* Studio design-quality P0: keyboard focus and legible assistance on /create only. */
+.pa-create-template:focus-visible,
+.pa-create-advanced summary:focus-visible,
+.pa-create-discover a:focus-visible {
+  outline: 3px solid #175b9a;
+  outline-offset: 3px;
+}
+.pa-create-template small,
+.pa-create-import-empty,
+.pa-create-preview-foot {
+  font-size: 13px;
+}
+.pa-create-advanced {
+  font-size: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pa-create-template { transition: none; }
+}
