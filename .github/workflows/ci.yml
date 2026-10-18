@@ -107,3 +107,19 @@ jobs:
       - name: Explicit portable/entrypoint deployment regression
         shell: pwsh
         run: node --test tooling/deployment/tests/deployment.test.mjs
+
+p5-synthetic-idempotency:
+    name: P5 synthetic idempotency · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Execute isolated SQLite replay and ETag/CAS contract
+        run: python -m unittest discover -s tooling/scripts/aas_p0 -p test_p5_idempotency.py -v

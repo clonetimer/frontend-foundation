@@ -14,6 +14,8 @@
 
 **远程表格删除安全 P4（候选）**：单条或批量 DELETE 在 HTTP 5xx、超时等结果不确定时，当前表格组件锁定全部删除入口；刷新、换页、清空选择均不会隐式解锁。用户应先核查真实服务端记录，再通过二次确认明确解除锁定；解除后清空旧选择并重新 GET。批量部分成功、确定失败、冲突、不确定及未执行分别统计。Studio 和独立 React ZIP 的组件源码完全同步，并增加生产浏览器合成 503/部分成功回归，详见 [P4 DataTable 删除审查](docs/STUDIO_TABLE_DELETE_P4_REVIEW.md)。此为组件会话级安全防护，不提供跨设备/重载后幂等、真实服务器事务验证或正式 Stable 签收。
 
+**P5-R1 合成后端幂等性合同（开发验证）**：新增独立 SQLite 事务参考网关，使用写入键 + 强 ETag/CAS + 持久回执验证“提交后 503”“相同请求重放”“服务重启恢复”“并发冲突”。Linux/Windows CI 单独执行 Python 标准库端到端合成测试。详见 [P5 幂等协议与边界](docs/PATTERN_ATLAS_P5_IDEMPOTENCY_CONTRACT.md)。这**尚未接入真实 AAS 后端或 Studio 生产写入路径**，不改变既有模型 DB schema、冻结内核或 Stable 发布状态。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
