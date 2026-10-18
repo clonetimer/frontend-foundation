@@ -8,6 +8,8 @@
 
 新增 [DESIGN.md](DESIGN.md)、[组件工程指南](docs/COMPONENT_AUTHORING_GUIDE.md)、[仓库自有 UI Design Skill](.agents/skills/foundation-ui-design/SKILL.md) 与 [/create 源码审查试点](docs/STUDIO_CREATE_UI_REVIEW.md)。这些内容用于约束 AI 和开发者的设计/审查工作，**不是**新增 Studio Runtime、Tailwind/shadcn 依赖或 Stable 通过证明。/create 增强了键盘焦点及辅助说明可读性；真实浏览器验收仍依赖对应 PR 的 Actions 和人工试用。
 
+**UI 设计质量回归（P1/P2）**：在独立 PR 中对 `/create` 和 `/studio` 的移动/平板顶部导航进行局部溢出修复；生产 Chromium 验收新增键盘 Tab/Enter/Space、Inspector 折叠语义、减少动态与 320/375/768/1440px 视口检查，并将截图和机器可读报告保存为 GitHub Actions 工件。参见 [创建页面审查](docs/STUDIO_CREATE_UI_REVIEW.md)、[Inspector P2 审查](docs/STUDIO_INSPECTOR_UI_REVIEW.md) 和 [Studio Stable RC 准入](docs/PATTERN_ATLAS_STABLE_RC.md)。**仅对应精确提交的自动化与运行证据有效**，不构成视觉人工签收、屏幕阅读器验证或正式 Stable 发布。尚未完成人工的 Modal/Drawer 复杂表单与后端事务专项测试。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
