@@ -108,7 +108,7 @@ jobs:
         shell: pwsh
         run: node --test tooling/deployment/tests/deployment.test.mjs
 
-p5-synthetic-idempotency:
+  p5-synthetic-idempotency:
     name: P5 synthetic idempotency · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
