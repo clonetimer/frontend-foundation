@@ -12,6 +12,8 @@
 
 **Studio 表单质量 P3（候选）**：对模态弹窗 / 侧边抽屉的本地校验及服务端字段级错误增加 `aria-invalid`、`aria-describedby` 与首个错误字段焦点定位；当 POST/PATCH 出现 5xx、超时或网络异常且结果不确定时，同一弹窗会话禁止重复提交，提示用户核查服务器状态。改动已同步到独立 React ZIP 的 `exported-widgets.ts` 源码镜像，完整测试说明见 [P3 Modal/Drawer 审查](docs/STUDIO_OVERLAY_P3_REVIEW.md)。这不是服务端幂等机制，重新打开表单不代表已经核实写入结果；浏览器自动化不能代替真实业务联调与人工签收。
 
+**远程表格删除安全 P4（候选）**：单条或批量 DELETE 在 HTTP 5xx、超时等结果不确定时，当前表格组件锁定全部删除入口；刷新、换页、清空选择均不会隐式解锁。用户应先核查真实服务端记录，再通过二次确认明确解除锁定；解除后清空旧选择并重新 GET。批量部分成功、确定失败、冲突、不确定及未执行分别统计。Studio 和独立 React ZIP 的组件源码完全同步，并增加生产浏览器合成 503/部分成功回归，详见 [P4 DataTable 删除审查](docs/STUDIO_TABLE_DELETE_P4_REVIEW.md)。此为组件会话级安全防护，不提供跨设备/重载后幂等、真实服务器事务验证或正式 Stable 签收。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
