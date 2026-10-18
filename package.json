@@ -1,6 +1,6 @@
 {
   "name": "frontend-foundation",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.7.0",
@@ -68,6 +68,7 @@
     "patterns:stable:offline": "node tooling/scripts/pattern-atlas-stable-gate.mjs --offline"
   },
   "devDependencies": {
+    "@eslint/js": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
@@ -76,7 +77,6 @@
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "@eslint/js": "catalog:"
+    "vitest": "catalog:"
   }
 }
