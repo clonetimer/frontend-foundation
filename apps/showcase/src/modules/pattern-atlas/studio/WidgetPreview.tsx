@@ -192,6 +192,22 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   const [error, setError] = useState('');
   const [selectionError, setSelectionError] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  // An uncertain DELETE may have committed upstream. Keep the lock across
+  // list refreshes, page changes and cleared selection until an explicit acknowledgement.
+  const [uncertainDeleteIds, setUncertainDeleteIds] = useState<string[]>([]);
+  const uncertainDeleteLock = useRef(false);
+  const lockUncertainDeletes = (ids: string[]) => {
+    uncertainDeleteLock.current = true;
+    setUncertainDeleteIds((previous) => [...new Set([...previous, ...ids])]);
+  };
+  const acknowledgeDeleteReview = () => {
+    uncertainDeleteLock.current = false;
+    setUncertainDeleteIds([]);
+    setBulkSelectedKeys([]);
+    setBulkOutcome(null);
+    setDeleteError('');
+    setRevision((previous) => previous + 1);
+  };
   const [deletingId, setDeletingId] = useState('');
   const [bulkSelectedKeys, setBulkSelectedKeys] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -205,7 +221,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
   const deleteTemplate = label(props.deleteUrl);
   const deleteEnabled = Boolean(deleteTemplate);
   useEffect(() => () => { detailRequest.current?.abort(); deleteRequest.current?.abort(); batchRequest.current?.abort(); viewRequest.current?.abort(); }, []);
-  const clearBulkSelection = () => { setBulkSelectedKeys([]); setBulkOutcome(null); };
+  const clearBulkSelection = () => { setBulkSelectedKeys([]); if (!uncertainDeleteLock.current) setBulkOutcome(null); };
   const closeView = () => {
     viewRequest.current?.abort();
     viewRequest.current = null;
@@ -227,7 +243,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     }
   };
   const deleteSelectedRecords = async () => {
-    if (!live || !deleteEnabled || !data || loading || bulkBusy || batchRequest.current || deleteRequest.current) return;
+    if (!live || !deleteEnabled || !data || loading || bulkBusy || uncertainDeleteLock.current || batchRequest.current || deleteRequest.current) return;
     const visible = new Map(data.items.map((row) => [row.key, row]));
     const ids = bulkSelectedKeys.filter((id) => visible.has(id)).slice(0, 20);
     if (!ids.length) return;
@@ -271,6 +287,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
         onRecordSelect?.({ selectedId: '', selected: null, detailStatus: 'idle' });
         setSelectionError('');
       }
+      if (uncertain.length) lockUncertainDeletes(uncertain.map((item) => item.id));
       // Retry only definitive failures; conflict/unknown/skipped require
       // server-side reinspection and a fresh user selection.
       setBulkSelectedKeys(failed.map(({ id }) => id));
@@ -283,7 +300,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     }
   };
   const deleteRecord = async (id: string) => {
-    if (!live || !deleteEnabled || deleteRequest.current || batchRequest.current || loading) return;
+    if (!live || !deleteEnabled || uncertainDeleteLock.current || deleteRequest.current || batchRequest.current || loading) return;
     const row = data?.items.find((item) => item.key === id);
     const endpoint = overlaySubmitUrl(deleteTemplate, 'edit-selected', id);
     const etag = deleteEtagField ? strongRecordEtag(row?.[deleteEtagField]) : undefined;
@@ -308,6 +325,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
           setSelectionError('');
         }
       } else {
+        if (result.kind === 'uncertain') lockUncertainDeletes([id]);
         setDeleteError(result.kind === 'uncertain' ? '删除结果不确定：' + result.reason :
           result.kind === 'conflict' ? '删除冲突：' + result.reason :
           '删除失败：' + result.reason);
@@ -450,10 +468,10 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
       <Button size="small" onClick={() => { void viewRecord(row); }}>查看</Button>
       {deleteEnabled ? <Popconfirm title="确认删除记录？" description={'删除记录 ' + row.key + ' 后不能撤销。'} okText="确认删除" cancelText="取消"
         onConfirm={() => { void deleteRecord(row.key); }}>
-        <Button size="small" danger disabled={!live || Boolean(deletingId) || bulkBusy} loading={deletingId === row.key}>删除</Button>
+        <Button size="small" danger disabled={!live || Boolean(deletingId) || bulkBusy || uncertainDeleteIds.length > 0} loading={deletingId === row.key}>删除</Button>
       </Popconfirm> : null}
     </Space> }];
-  return <div className="pa-studio-rich pa-studio-remote-table" data-atlas-table-source="remote">
+  return <div className="pa-studio-rich pa-studio-remote-table" data-atlas-table-source="remote" data-atlas-delete-locked={uncertainDeleteIds.length > 0 ? 'true' : 'false'}>
     <strong>{title}</strong>
     <form className="pa-studio-widget-actions" onSubmit={(event) => { event.preventDefault(); clearBulkSelection(); setPage(1); setSearch(searchInput.trim().slice(0,120)); }}>
       <Input aria-label="表格搜索" placeholder="搜索记录" size="small" style={{ maxWidth: 210 }} maxLength={120} value={searchInput} onChange={(event)=>setSearchInput(event.target.value)} disabled={!live || bulkBusy}/>
@@ -467,11 +485,19 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
     {error ? <small role="alert">表格加载失败：{error}</small> : null}
     {selectionError ? <small role="alert">记录详情加载失败：{selectionError}</small> : null}
     {deleteError ? <small role="alert">{deleteError}</small> : null}
+    {uncertainDeleteIds.length ? <Alert showIcon type="error"
+      message={'删除操作已锁定：' + uncertainDeleteIds.length + ' 条记录的最终状态尚不确定'}
+      description={<Space direction="vertical">
+        <span>涉及记录：{uncertainDeleteIds.join('、')}。所有删除操作已暂停；请在真实服务端核对记录状态。刷新或重新选择不代表删除失败。</span>
+        <Popconfirm title="确认已核对服务端最新状态？" description="解除锁定可能允许新的删除请求。请先核对记录是否仍存在，必要时确认记录版本；此操作不会自动验证服务端。" okText="已核对，解除锁定" cancelText="继续锁定" onConfirm={acknowledgeDeleteReview}>
+          <Button size="small" danger>已核对服务端，解除删除锁定</Button>
+        </Popconfirm>
+      </Space>}/> : null}
     {deleteEnabled ? <div className="pa-studio-widget-actions">
       <small role="status">当前页已选择 {bulkSelectedKeys.length} 条（最多 {pageSize} 条；跨页不保留选择）</small>
       <Popconfirm title="确认批量删除？" description={'将逐条请求删除当前页选中的 ' + bulkSelectedKeys.length + ' 条记录。部分失败不会回滚已经成功的删除。'}
         okText="确认批量删除" cancelText="取消" onConfirm={() => { void deleteSelectedRecords(); }}>
-        <Button size="small" danger loading={bulkBusy} disabled={loading || bulkBusy || Boolean(deletingId) || !bulkSelectedKeys.length}>批量删除</Button>
+        <Button size="small" danger loading={bulkBusy} disabled={loading || bulkBusy || Boolean(deletingId) || uncertainDeleteIds.length > 0 || !bulkSelectedKeys.length}>批量删除</Button>
       </Popconfirm>
       <Button size="small" disabled={bulkBusy || !bulkSelectedKeys.length} onClick={clearBulkSelection}>清空选择</Button>
     </div> : null}
@@ -496,7 +522,7 @@ function RemoteTableWidget({ props, live, onRecordSelect }: { props: Record<stri
         if (!bulkBusy && !loading) {
           const visible = new Set(data?.items.map((item) => item.key) ?? []);
           setBulkSelectedKeys(keys.map(String).filter((id) => visible.has(id)).slice(0, 20));
-          setBulkOutcome(null);
+          if (!uncertainDeleteLock.current) setBulkOutcome(null);
         }
       }, getCheckboxProps: () => ({ disabled: bulkBusy || loading || Boolean(deletingId) }) } } : {})}
       columns={[...displayColumns, ...selectionColumn]}
