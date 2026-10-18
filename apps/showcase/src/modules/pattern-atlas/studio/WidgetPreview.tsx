@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { InputRef } from 'antd';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
 import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, mapOverlaySubmitPayload, classifyMutationHttpFailure, classifyMutationTransportFailure, parseMutationFieldErrors, type MutationFailure, overlaySubmitUrl, parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, type RemoteTableRow, type RemoteTablePage, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
 import { normalizeStudioWorkflow, runStudioWorkflow, dispatchWorkflowComponentEvent, type StudioWorkflow } from './studio-workflows';
@@ -593,10 +594,15 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState('');
+  // 5xx/timeouts can commit upstream even when the browser sees an error.
+  // Never permit a blind second POST/PATCH in the same dialog session.
+  const [uncertainWrite, setUncertainWrite] = useState(false);
   const [workflowError, setWorkflowError] = useState('');
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const controller = useRef<AbortController | null>(null);
+  const fieldInputs = useRef<Record<string, InputRef | null>>({});
+  const formId = useId();
   useEffect(() => () => controller.current?.abort(), []);
   const title = label(props.title, '操作确认');
   const description = label(props.description);
@@ -649,17 +655,21 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
       defaults[field.key] = current === null || current === undefined ? '' : typeof current === 'string' || typeof current === 'number' ? String(current) : '';
     }
     setEditingId(selectedId);
-    setDraft(defaults); setErrors({}); setSubmitError(''); setWorkflowError(''); setOpen(true);
+    setDraft(defaults); setErrors({}); setSubmitError(''); setWorkflowError(''); setUncertainWrite(false); setOpen(true);
   };
   const trigger = <Button size="small" disabled={!live || (editMode && (!selectedId || !recordSelection?.selected || recordSelection.detailStatus === 'loading' || recordSelection.detailStatus === 'error'))} onClick={openDialog}>{label(props.triggerText, '打开')}</Button>;
   const confirmed = () => { setOpen(false); void notify.success('操作已确认（未关联后端）'); };
   const submit = async () => {
-    if (!hasForm || !live || pending.current) return;
+    if (!hasForm || !live || pending.current || uncertainWrite) return;
     if (editMode && (!editingId || recordSelection?.selectedId !== editingId)) { setSubmitError('所选记录已变化，请重新打开表单'); return; }
     if (!fields.length) { setSubmitError('字段配置有误，请检查每一行的字段名、标签、类型和必填设置'); return; }
     const result = validateOverlayForm(fields, draft);
     setErrors(result.errors);
-    if (Object.keys(result.errors).length) return;
+    const invalidField = fields.find((field) => Boolean(result.errors[field.key]))?.key;
+    if (invalidField) {
+      fieldInputs.current[invalidField]?.focus();
+      return;
+    }
     if (props.sourceError) { setSubmitError(label(props.sourceError)); return; }
     if (!url) { setSubmitError(editMode ? '编辑模式需要含单个 {id} 的有效保存地址和选中记录' : '未配置有效的保存地址'); return; }
     let outgoing: Record<string, string | number>;
@@ -691,7 +701,11 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
                 const feedback = parseMutationFieldErrors(JSON.parse(body) as unknown, props.saveFieldMappings);
                 const allowed = new Set(fields.map((field) => field.key));
                 const visible = Object.fromEntries(Object.entries(feedback).filter(([key]) => allowed.has(key)));
-                if (Object.keys(visible).length) setErrors((current) => ({ ...current, ...visible }));
+                if (Object.keys(visible).length) {
+                  setErrors((current) => ({ ...current, ...visible }));
+                  const invalidField = fields.find((field) => Boolean(visible[field.key]))?.key;
+                  if (invalidField) fieldInputs.current[invalidField]?.focus();
+                }
               }
             }
           } catch { /* no field-level details; retain the stable error classification */ }
@@ -710,7 +724,8 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
         window.dispatchEvent(new Event('atlas:records-refresh'));
       }
       if (failure?.kind === 'uncertain') {
-        setSubmitError('写入结果不确定：' + failure.message);
+        setUncertainWrite(true);
+        setSubmitError('写入结果不确定：' + failure.message + '。本次弹窗已禁止重复提交；请先核对服务端最新记录状态，再关闭并重新打开。');
       } else setSubmitError(reason instanceof Error ? '保存失败：' + reason.message : '保存失败');
       // Failure workflows may contain mutations; do not run them for unknown
       // outcomes, even if a proxy committed before replying 503.
@@ -722,20 +737,23 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
   const form = hasForm ? <div className="pa-studio-overlay-form">
     {description ? <p>{description}</p> : null}
     {fields.map((field) => <label className="pa-studio-field" key={field.key}><small>{field.label}{field.required ? ' *' : ''}</small>
-      <Input aria-label={field.label} type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+      <Input ref={(instance) => { fieldInputs.current[field.key] = instance; }}
+        id={`${formId}-${field.key}`} aria-label={field.label} aria-invalid={Boolean(errors[field.key])}
+        aria-describedby={errors[field.key] ? `${formId}-${field.key}-error` : undefined}
+        type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
         maxLength={240} disabled={!live || busy} value={draft[field.key] ?? ''}
         onChange={(event) => { setDraft((values) => ({ ...values, [field.key]: event.target.value })); setErrors((current) => ({ ...current, [field.key]: '' })); }}/>
-      {errors[field.key] ? <small role="alert">{errors[field.key]}</small> : null}
+      {errors[field.key] ? <small id={`${formId}-${field.key}-error`} role="alert">{errors[field.key]}</small> : null}
     </label>)}
     {!fields.length ? <small role="alert">字段配置无效：格式为 key|标签|text/email/number|required/optional，每行一个</small> : null}
     {submitError ? <small role="alert">{submitError}</small> : null}
     {workflowError ? <small role="alert">{workflowError}</small> : null}
     {!url ? <small>编辑模式请设置含 {'{id}'} 的保存地址；新增模式设置普通地址</small> : null}
   </div> : description;
-  const actions = hasForm ? <Space><Button disabled={busy} onClick={close}>{cancel}</Button><Button type="primary" loading={busy} disabled={!live || !fields.length} onClick={() => { void submit(); }}>{ok}</Button></Space> : undefined;
+  const actions = hasForm ? <Space><Button disabled={busy} onClick={close}>{cancel}</Button><Button type="primary" loading={busy} disabled={!live || !fields.length || uncertainWrite} onClick={() => { void submit(); }}>{ok}</Button></Space> : undefined;
   return <div className="pa-studio-rich pa-studio-overlay"><strong>{title}</strong>{context}
     {kind === 'popconfirm' ? <Popconfirm title={title} description={description} open={open} onConfirm={confirmed} onCancel={close} okText={ok} cancelText={cancel}>{trigger}</Popconfirm> : trigger}
-    {kind === 'modal' ? <Modal title={title} open={open} onOk={hasForm ? () => { void submit(); } : confirmed} onCancel={close} okText={ok} cancelText={cancel} okButtonProps={{ disabled: hasForm && (!live || !fields.length) }} confirmLoading={busy} closable={!busy} maskClosable={!busy} destroyOnHidden>{form}</Modal> : null}
+    {kind === 'modal' ? <Modal title={title} open={open} onOk={hasForm ? () => { void submit(); } : confirmed} onCancel={close} okText={ok} cancelText={cancel} okButtonProps={{ disabled: hasForm && (!live || !fields.length || uncertainWrite) }} confirmLoading={busy} closable={!busy} maskClosable={!busy} destroyOnHidden>{form}</Modal> : null}
     {kind === 'drawer' ? <Drawer title={title} open={open} onClose={close} placement={props.placement === 'left' ? 'left' : 'right'} width={Math.max(280, Math.min(800, Number(props.width) || 420))} closable={!busy} maskClosable={!busy} footer={actions} destroyOnHidden>{form}</Drawer> : null}
     <small>{hasForm ? (live ? (editMode ? '编辑选中记录；提交成功后刷新列表' : '新增表单；提交成功后刷新列表') : '切换到体验模式后可编辑和提交') : (live ? '可在体验模式操作；确认不会提交后端' : '切换到体验模式后可操作')}</small>
   </div>;
