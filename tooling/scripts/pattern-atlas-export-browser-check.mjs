@@ -712,9 +712,9 @@ export async function runExportedBrowserSmoke(directory) {
 
     // The fixture has independently verified the simulated server state above.
     // A deliberate user acknowledgment is required before the next DELETE.
-    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\s/g,'').includes('已核对服务端，解除删除锁定'));if(!b)return false;b.click();return true;})()"), 'B4 explicit unlock control missing');
-    await until(() => evaluate("[...document.querySelectorAll('.ant-popconfirm-buttons button')].some(x=>x.textContent?.replace(/\s/g,'').includes('已核对，解除锁定'))"), 'B4 explicit review confirmation unavailable');
-    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(x=>x.textContent?.replace(/\s/g,'').includes('已核对，解除锁定'));if(!b)return false;b.click();return true;})()"),'B4 explicit review confirmation failed');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-remote-table button')].find(x=>x.textContent?.replace(/\\s/g,'').includes('已核对服务端，解除删除锁定'));if(!b)return false;b.click();return true;})()"), 'B4 explicit unlock control missing');
+    await until(() => evaluate("[...document.querySelectorAll('.ant-popconfirm-buttons button')].some(x=>x.textContent?.replace(/\\s/g,'').includes('已核对，解除锁定'))"), 'B4 explicit review confirmation unavailable');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm-buttons button')].find(x=>x.textContent?.replace(/\\s/g,'').includes('已核对，解除锁定'));if(!b)return false;b.click();return true;})()"),'B4 explicit review confirmation failed');
     await until(() => evaluate("document.querySelector('.pa-studio-remote-table')?.getAttribute('data-atlas-delete-locked')==='false'"), 'B4 delete lock not cleared by explicit review');
     assert.equal(deleteCalls.length, beforeUnknown+1, 'B4 review acknowledgement unexpectedly sent DELETE');
 
