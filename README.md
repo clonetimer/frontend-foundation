@@ -18,6 +18,8 @@
 
 **P5-R2a 原生 AAS 幂等网关适配（受限集成）**：在现有 `secure_records.py` 的真实原生 `models` 表结构上增加可选的持久回执事务、同键重放、提交后 503 查询和并发 CAS 回归；仅可对**隔离的 P0 合成模型数据库副本**显式准备 ledger，绝不自动迁移真实 AAS DB。Linux/Windows CI 同时验证旧 P0 网关兼容性。参见 [P5-R2a 原生网关接入与限制](docs/PATTERN_ATLAS_P5_R2_NATIVE_GATEWAY.md)。Studio 客户端的跨会话恢复适配属于后续 P5-R2b，未完成前不得认定生产幂等能力已上线。
 
+**P5-R2b1 合成原生客户端恢复模块（未接入 Studio UI）**：新增可独立调用的浏览器兼容幂等 PATCH 客户端；仅对 loopback 原生 AAS 合成模型生效，先持久保存原始 status/ETag/key，再发送请求。提交结果不确定时仅查询原回执，明确选择后才允许原样重放；写 Token 不保存到本地，旧表单/独立 ZIP 的普通写入逻辑保持不变。Node 合同测试加入 Linux/Windows CI。**尚未执行 Chromium 端到端或接入 Studio 操作界面，不代表生产级跨会话幂等或 Stable 发布完成。** 详见 [P5-R2b1 客户端恢复合同](docs/PATTERN_ATLAS_P5_R2B_CLIENT.md)。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
