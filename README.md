@@ -16,6 +16,8 @@
 
 **P5-R1 合成后端幂等性合同（开发验证）**：新增独立 SQLite 事务参考网关，使用写入键 + 强 ETag/CAS + 持久回执验证“提交后 503”“相同请求重放”“服务重启恢复”“并发冲突”。Linux/Windows CI 单独执行 Python 标准库端到端合成测试。详见 [P5 幂等协议与边界](docs/PATTERN_ATLAS_P5_IDEMPOTENCY_CONTRACT.md)。这**尚未接入真实 AAS 后端或 Studio 生产写入路径**，不改变既有模型 DB schema、冻结内核或 Stable 发布状态。
 
+**P5-R2a 原生 AAS 幂等网关适配（受限集成）**：在现有 `secure_records.py` 的真实原生 `models` 表结构上增加可选的持久回执事务、同键重放、提交后 503 查询和并发 CAS 回归；仅可对**隔离的 P0 合成模型数据库副本**显式准备 ledger，绝不自动迁移真实 AAS DB。Linux/Windows CI 同时验证旧 P0 网关兼容性。参见 [P5-R2a 原生网关接入与限制](docs/PATTERN_ATLAS_P5_R2_NATIVE_GATEWAY.md)。Studio 客户端的跨会话恢复适配属于后续 P5-R2b，未完成前不得认定生产幂等能力已上线。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。

@@ -18,8 +18,13 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+from native_idempotency import (
+    KEY as IDEMPOTENCY_KEY, verify_prepared, fingerprint, principal_hash,
+    matches_receipt,
+)
 
 ID_PATH = re.compile(r"/api/records/([1-9][0-9]{0,15})\Z")
+RECEIPT_PATH = re.compile(r"/api/mutations/([A-Za-z0-9_-]{16,128})\Z")
 FIXTURE = re.compile(r"p0_case_[1-9][0-9]{0,3}\Z")
 STATES = frozenset({"draft", "published", "evaluated"})
 SORTS = {"id": "id", "name": "model_name", "status": "status", "algorithm": "algorithm"}
@@ -48,7 +53,8 @@ def loopback_origin(text):
     return text.rstrip("/")
 
 
-def make_handler(db_path, studio_origin, read_token, write_token, allow_synthetic_writes=False):
+def make_handler(db_path, studio_origin, read_token, write_token, allow_synthetic_writes=False,
+                 enable_native_idempotency=False, fault=None):
     """Build an authenticated local-only test handler without changing AAS files."""
     origin = loopback_origin(studio_origin)
     if (len(read_token) < 32 or len(write_token) < 32
@@ -57,6 +63,10 @@ def make_handler(db_path, studio_origin, read_token, write_token, allow_syntheti
     database = Path(db_path).resolve(strict=True)
     if database.suffix.lower() not in (".db", ".sqlite", ".sqlite3") or not database.is_file():
         raise ValueError("Expected an existing AAS SQLite model database")
+    if enable_native_idempotency:
+        if not allow_synthetic_writes:
+            raise ValueError("Native idempotency requires explicit synthetic write opt-in")
+        verify_prepared(database)  # never auto-create a table during gateway startup
     with closing(sqlite3.connect(f"file:{database}?mode=ro", uri=True)) as check:
         if not check.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='models'").fetchone():
             raise ValueError("Native models table absent")
@@ -73,7 +83,7 @@ def make_handler(db_path, studio_origin, read_token, write_token, allow_syntheti
         def log_message(self, *_):
             pass  # Do not log tokens, request headers or user data.
 
-        def reply(self, code, body, *, etag=None, challenge=False):
+        def reply(self, code, body, *, etag=None, challenge=False, replay=False):
             raw = json.dumps(body, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -82,12 +92,15 @@ def make_handler(db_path, studio_origin, read_token, write_token, allow_syntheti
             self.send_header("X-Content-Type-Options", "nosniff")
             if etag:
                 self.send_header("ETag", etag)
+            if replay:
+                self.send_header("Idempotency-Replayed", "true")
             if challenge:
                 self.send_header("WWW-Authenticate", 'Bearer realm="Studio AAS P0"')
             if self.headers.get("Origin") == origin:
                 self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Access-Control-Allow-Methods", "GET,PATCH,OPTIONS")
-                self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type,If-Match")
+                self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type,If-Match,Idempotency-Key")
+                self.send_header("Access-Control-Expose-Headers", "ETag,Idempotency-Replayed")
                 self.send_header("Vary", "Origin")
             self.end_headers()
             self.wfile.write(raw)
@@ -125,11 +138,23 @@ def make_handler(db_path, studio_origin, read_token, write_token, allow_syntheti
                 return
             url = urlsplit(self.path)
             match = ID_PATH.fullmatch(url.path)
-            if (url.path != "/api/records" and not match) or (match and url.query):
+            receipt_match = RECEIPT_PATH.fullmatch(url.path) if enable_native_idempotency else None
+            if (url.path != "/api/records" and not match and not receipt_match) or (url.query and (match or receipt_match)):
                 return self.reply(404, {"error": "Not found"})
+            if receipt_match and not self.authorize(write=True):
+                return
             try:
                 with closing(connect()) as conn, conn:
                     conn.execute("BEGIN")
+                    if receipt_match:
+                        receipt = conn.execute("""SELECT record_id,response_json FROM native_mutation_receipts
+                            WHERE request_key=? AND principal_hash=?""",
+                            (receipt_match.group(1), principal_hash(write_token))).fetchone()
+                        if not receipt:
+                            return self.reply(404, {"status": "not_found"})
+                        return self.reply(200, {"status": "committed",
+                            "recordId": receipt["record_id"],
+                            "response": json.loads(receipt["response_json"])})
                     if match:
                         row = conn.execute(SELECT + " WHERE id=?", (int(match.group(1)),)).fetchone()
                         if not row:
@@ -178,6 +203,11 @@ def make_handler(db_path, studio_origin, read_token, write_token, allow_syntheti
             if not match or url.query:
                 return self.reply(404, {"error": "Not found"})
             token = self.headers.get("If-Match", "")
+            request_key = self.headers.get("Idempotency-Key", "")
+            if enable_native_idempotency and not IDEMPOTENCY_KEY.fullmatch(request_key):
+                return self.reply(428, {"error": "Idempotency-Key required for native writes"})
+            if not enable_native_idempotency and request_key:
+                return self.reply(409, {"error": "Native idempotency is not enabled"})
             if not re.fullmatch(r'"[0-9a-f]{64}"', token):
                 return self.reply(428, {"error": "Strong If-Match is required"})
             if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
@@ -186,12 +216,22 @@ def make_handler(db_path, studio_origin, read_token, write_token, allow_syntheti
                 length = int(self.headers.get("Content-Length", "0"))
                 if not 2 <= length <= 2048:
                     raise ValueError("Invalid payload length")
-                payload = json.loads(self.rfile.read(length))
+                raw_body = self.rfile.read(length)
+                payload = json.loads(raw_body)
                 if not isinstance(payload, dict) or set(payload) != {"status"} or payload["status"] not in STATES:
                     return self.reply(422, {"error": "Only status enum updates are supported"})
                 with closing(connect()) as conn, conn:
                     conn.execute("BEGIN IMMEDIATE")
                     key = int(match.group(1))
+                    request_fingerprint = fingerprint("PATCH", url.path, token, raw_body) if enable_native_idempotency else None
+                    if enable_native_idempotency:
+                        receipt = conn.execute("""SELECT * FROM native_mutation_receipts
+                            WHERE request_key=?""", (request_key,)).fetchone()
+                        if receipt:
+                            if not matches_receipt(receipt, write_token, request_fingerprint):
+                                return self.reply(409, {"error": "Idempotency key reused for different request"})
+                            return self.reply(200, json.loads(receipt["response_json"]),
+                                              etag=receipt["response_etag"], replay=True)
                     row = conn.execute(SELECT + " WHERE id=?", (key,)).fetchone()
                     if not row:
                         return self.reply(404, {"error": "Not found"})
@@ -207,8 +247,20 @@ def make_handler(db_path, studio_origin, read_token, write_token, allow_syntheti
                     else:
                         conn.execute("UPDATE models SET status=? WHERE id=?", (payload["status"], key))
                     revised = conn.execute(SELECT + " WHERE id=?", (key,)).fetchone()
+                    response = {"data": as_record(revised)}
+                    updated_etag = model_etag(revised)
+                    if enable_native_idempotency:
+                        conn.execute("""INSERT INTO native_mutation_receipts
+                            (request_key,principal_hash,fingerprint,record_id,response_json,response_etag,created_at)
+                            VALUES (?,?,?,?,?,?,?)""",
+                            (request_key, principal_hash(write_token), request_fingerprint, key,
+                             json.dumps(response, ensure_ascii=False), updated_etag,
+                             datetime.now(timezone.utc).isoformat()))
                     conn.execute("COMMIT")
-                    return self.reply(200, {"data": as_record(revised)}, etag=model_etag(revised))
+                    if enable_native_idempotency and fault is not None and fault.get("commit_then_503_once"):
+                        fault["commit_then_503_once"] = False
+                        return self.reply(503, {"error": "Synthetic fault: committed but response lost"})
+                    return self.reply(200, response, etag=updated_etag)
             except (ValueError, TypeError, json.JSONDecodeError):
                 return self.reply(400, {"error": "Invalid status update"})
             except sqlite3.Error:
@@ -230,11 +282,14 @@ def main():
     parser.add_argument("--read-token-env", default="STUDIO_AAS_P0_READ_TOKEN")
     parser.add_argument("--write-token-env", default="STUDIO_AAS_P0_WRITE_TOKEN")
     parser.add_argument("--allow-synthetic-status-writes", action="store_true")
+    parser.add_argument("--enable-native-idempotency", action="store_true",
+                        help="Opt-in. Requires pre-migrated synthetic AAS fixture DB")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("Port must be 1024..65535")
     handler = make_handler(args.db, args.origin, os.environ.get(args.read_token_env, ""),
-                           os.environ.get(args.write_token_env, ""), args.allow_synthetic_status_writes)
+                           os.environ.get(args.write_token_env, ""), args.allow_synthetic_status_writes,
+                           enable_native_idempotency=args.enable_native_idempotency)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
     try:
         server.serve_forever()
