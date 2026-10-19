@@ -36,6 +36,7 @@ class NativeAASIdempotencyTests(unittest.TestCase):
                     (id,experiment_id,model_name,status,algorithm,evaluation_count)
                     VALUES (?,?,?,?,?,0)""", (i, f"p0_case_{i}", f"Native synthetic {i}",
                                           "draft", "dummy_detector"))
+        prepare_fixture(self.db)
         self.fault = {"commit_then_503_once": False}
         self.start()
 
@@ -84,6 +85,14 @@ class NativeAASIdempotencyTests(unittest.TestCase):
         return self.request("PATCH", f"/api/records/{row}", {"status": state},
                             key=key, match=self.etag(row) if match is None else match)
 
+    def unprepared_copy(self, name):
+        target = str(Path(self.tmp.name) / name)
+        with closing(sqlite3.connect(self.db)) as source, closing(sqlite3.connect(target)) as copy:
+            source.backup(copy)
+            copy.execute("DROP TABLE native_mutation_receipts")
+            copy.commit()
+        return target
+
     def native(self, row=1):
         with closing(sqlite3.connect(self.db)) as conn:
             return conn.execute(
@@ -95,21 +104,22 @@ class NativeAASIdempotencyTests(unittest.TestCase):
 
     def test_01_fixture_prepare_is_explicit_no_automatic_migration(self):
         # A handler with native idempotency refuses an unprepared native DB.
-        self.assertEqual(self.receipt_count(), 0)
+        fresh = self.unprepared_copy("unprepared.sqlite")
         with self.assertRaises(ValueError):
-            make_handler(self.db, ORIGIN, READER, WRITER, True,
+            make_handler(fresh, ORIGIN, READER, WRITER, True,
                          enable_native_idempotency=True)
-        self.assertEqual(prepare_fixture(self.db), Path(self.db).resolve())
-        verify_prepared(self.db)
+        self.assertEqual(prepare_fixture(fresh), Path(fresh).resolve())
+        verify_prepared(fresh)
         self.assertEqual(self.native(1), ("draft", 0))
         self.assertEqual(self.receipt_count(), 0)
 
     def test_02_refuse_business_models_and_non_native_database(self):
-        with closing(sqlite3.connect(self.db)) as conn, conn:
+        unsafe = self.unprepared_copy("mixed_business.sqlite")
+        with closing(sqlite3.connect(unsafe)) as conn, conn:
             conn.execute("INSERT INTO models (id,experiment_id,model_name,status) VALUES (4,'real_case','actual','draft')")
         with self.assertRaises(ValueError):
-            prepare_fixture(self.db)
-        with closing(sqlite3.connect(self.db)) as conn:
+            prepare_fixture(unsafe)
+        with closing(sqlite3.connect(unsafe)) as conn:
             self.assertIsNone(conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE name='native_mutation_receipts'").fetchone())
         empty = Path(self.tmp.name) / "not_native.sqlite"
