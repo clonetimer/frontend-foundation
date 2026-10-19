@@ -128,6 +128,8 @@ jobs:
         run: node --test tooling/scripts/aas_p0/test_p5_client_recovery.mjs
       - name: P5-R3a authenticated write capability negotiation (read-only contract)
         run: node --test tooling/scripts/aas_p0/test_p5_capability_contract.mjs
+      - name: P5-R3c scoped pending journal, fail-closed Web Locks and explicit original-key recovery
+        run: node --test tooling/scripts/aas_p0/test_p5_r3c_scoped_journal.mjs
       - name: P5-R3b1 scoped identity, token rotation, native SQLite ledger and tombstone GC
         run: python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_p5_r3b_scoped_reference.py' -v
       - name: P5-R3b2 same-origin session, CSRF and scoped ledger contract
