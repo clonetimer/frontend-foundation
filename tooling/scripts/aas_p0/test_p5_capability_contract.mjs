@@ -103,7 +103,7 @@ test('project-stored or manually validated capabilities are never write grants',
   });
   assert.throws(() => plan(readOnly), /provider, receipt epoch, or authenticated session changed/);
   const live = await discover();
-  const cloned = structuredClone(live);
+  const cloned = JSON.parse(JSON.stringify(live));
   assert.throws(() => plan(cloned), /provider, receipt epoch, or authenticated session changed/);
   assert.equal(plan(live).providerId, PROVIDER);
 });
