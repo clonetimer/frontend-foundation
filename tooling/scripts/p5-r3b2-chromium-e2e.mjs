@@ -32,7 +32,7 @@ function killTree(process) {
     catch { process.kill(); }
   } else process.kill();
 }
-let fixture, chrome, socket;
+let fixture, chrome, socket, secondSocket;
 try {
   fixture = spawn(windows ? 'python' : 'python3',
     ['-u', 'tooling/scripts/aas_p0/p5_r3b2_browser_fixture.py', '--port', '5497'],
@@ -245,6 +245,139 @@ try {
   assert.equal(recovered.identity.tenantId, 'tenant-a');
   assert.deepEqual((await command('STATS')).data, stats, 'Original-key recovery caused duplicate write');
 
+  // P5-R3c: actual TWO Chromium tabs under the same origin share Web Locks
+  // and a scoped journal; unlike pure mocks this tests the browser scheduler.
+  const secondTab = await fetch(debug + '/json/new?about:blank', {method:'PUT'});
+  assert.equal(secondTab.status,200);
+  secondSocket = new WebSocket((await secondTab.json()).webSocketDebuggerUrl);
+  await new Promise((resolve,reject)=>{
+    secondSocket.addEventListener('open',resolve,{once:true});
+    secondSocket.addEventListener('error',reject,{once:true});
+  });
+  let secondId=0;
+  const secondPending=new Map();
+  secondSocket.addEventListener('message',event=>{
+    const reply=JSON.parse(String(event.data));
+    const handler=secondPending.get(reply.id);
+    if(!handler)return;
+    secondPending.delete(reply.id);
+    clearTimeout(handler.timer);
+    if(reply.error)handler.reject(new Error(reply.error.message));
+    else handler.resolve(reply.result);
+  });
+  const secondCall=(method,params={})=>new Promise((resolve,reject)=>{
+    const id=++secondId;
+    const timer=setTimeout(()=>{secondPending.delete(id);reject(new Error('Second Chromium tab timeout'))},15000);
+    secondPending.set(id,{resolve,reject,timer});
+    secondSocket.send(JSON.stringify({id,method,params}));
+  });
+  const secondEval=async(expression)=>{
+    const r=await secondCall('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});
+    if(r.exceptionDetails)throw new Error('Second tab: '+(r.exceptionDetails.exception?.description||r.exceptionDetails.text));
+    return r.result?.value;
+  };
+  const evalTab2=(fn,args={})=>secondEval('('+fn.toString()+')('+JSON.stringify(args)+')');
+  await secondCall('Page.enable');
+  await secondCall('Runtime.enable');
+  await secondCall('Page.navigate',{url:origin+'/'});
+  await until(()=>secondEval("!!globalThis.document.querySelector('#p5-browser-contract')"),
+    'Second same-origin Chromium tab');
+
+  // This closure is deliberately serialized and executed in either tab;
+  // credentials and real identity are freshly read from the cookie session.
+  async function browserScopedAction(args) {
+    const response=await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
+    if(response.status!==200)throw new Error('Current session unavailable');
+    const trusted=await response.json();
+    const capabilityModule=await import('/p5_capability_contract.mjs');
+    const journalModule=await import('/p5_r3c_scoped_journal.mjs');
+    const capability=await capabilityModule.discoverP5Capability({
+      origin:globalThis.location.origin,verifiedIdentity:trusted.identity,
+      fetchImpl:fetch,now:Date.now
+    });
+    const task=await fetch('/api/tasks/1',{credentials:'same-origin',cache:'no-store'});
+    const etag=task.headers.get('etag');
+    const request={method:'PATCH',path:'/api/tasks/1',
+      key:args.key,etag,status:args.status,
+      body:JSON.stringify({status:args.status})};
+    return journalModule.runP5R3cOperation({
+      action:args.action,origin:globalThis.location.origin,
+      lockManager:globalThis.navigator.locks,storage:globalThis.localStorage,
+      verifiedIdentity:trusted.identity,capability,
+      expectedProviderId:capability.providerId,expectedReceiptEpoch:capability.receiptEpoch,
+      getTrustedSession:async()=>{
+        const r=await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
+        if(r.status!==200)throw new Error('Session expired');
+        return r.json();
+      },
+      request,
+      executePatch:async({record,session})=>{
+        const r=await fetch(record.path,{
+          method:record.method,credentials:'same-origin',cache:'no-store',
+          headers:{'Content-Type':'application/json',
+            'X-P5-CSRF-Token':session.csrfToken,
+            'Idempotency-Key':record.key,'If-Match':record.etag,
+            'X-P5-Provider-Id':record.providerId,
+            'X-P5-Receipt-Epoch':record.receiptEpoch},
+          body:record.body
+        });
+        return {status:r.status};
+      },
+      queryReceipt:async({record})=>{
+        const r=await fetch('/api/mutations/'+record.key,{
+          method:'GET',credentials:'same-origin',cache:'no-store',
+          headers:{'X-P5-Provider-Id':record.providerId,
+            'X-P5-Receipt-Epoch':record.receiptEpoch}
+        });
+        return {status:r.status,body:await r.json()};
+      }
+    });
+  }
+  // Hold an exclusive Web Lock in tab A. Tab B MUST fail fast rather than
+  // queue a second write or fall back to a non-atomic localStorage lock.
+  const locked=await evalCode("(() => { globalThis.__r3cHeld=false; void globalThis.navigator.locks.request('foundation:p5-r3c:synthetic-journal:exclusive:v1',{mode:'exclusive'},async()=>{globalThis.__r3cHeld=true;await new Promise(resolve=>{globalThis.__r3cRelease=resolve;});});return true;})()");
+  assert.equal(locked,true);
+  await until(()=>evalCode('globalThis.__r3cHeld===true'),'First tab Web Lock held');
+  const blockedInSecond=await evalTab2(browserScopedAction,{
+    action:'begin',key:'p5_r3c_browser_first_00001',status:'archived'
+  });
+  assert.deepEqual(blockedInSecond,{state:'busy'},'Second Chromium tab bypassed exclusive browser lock');
+  assert.equal(await secondEval("globalThis.localStorage.getItem('foundation:p5-r3c:synthetic-pending:v1')"),null);
+  await evalCode('globalThis.__r3cRelease();true');
+  await until(async()=>evalCode("(async()=>!(await globalThis.navigator.locks.query()).held.some(x=>x.name==='foundation:p5-r3c:synthetic-journal:exclusive:v1'))()"),
+    'First tab Web Lock released');
+
+  const r3cBegin=await evalTab2(browserScopedAction,{
+    action:'begin',key:'p5_r3c_browser_first_00001',status:'archived'
+  });
+  assert.deepEqual(r3cBegin,{state:'pending',reason:'await-original-receipt'});
+  const journalInFirst=await evalCode("JSON.parse(globalThis.localStorage.getItem('foundation:p5-r3c:synthetic-pending:v1'))");
+  assert.equal(journalInFirst.status,'archived');
+  assert.equal(journalInFirst.tenantId,'tenant-a');
+  assert.equal(JSON.stringify(journalInFirst).includes(rotated.cookie),false);
+  const r3cBlocked=await evaluate(browserScopedAction,{
+    action:'begin',key:'p5_r3c_browser_second_00002',status:'draft'
+  });
+  assert.deepEqual(r3cBlocked,{state:'blocked',reason:'pending-exists'});
+  const r3cChecked=await evaluate(browserScopedAction,{
+    action:'check',key:'p5_r3c_browser_ignored_00003',status:'draft'
+  });
+  assert.deepEqual(r3cChecked,{state:'committed'});
+  assert.equal(await secondEval("globalThis.localStorage.getItem('foundation:p5-r3c:synthetic-pending:v1')"),null);
+  const r3cOne=(await command('STATS')).data;
+  assert.deepEqual(r3cOne,{status:'archived',version:3,
+    receiptCount:2,spentKeys:2,committedAudits:2,injected503Consumed:true});
+
+  // A second pending write is retained when the browser identity changes:
+  // new tenant must not query, clear, or replay the previous actor's journal.
+  const secondPendingWrite=await evalTab2(browserScopedAction,{
+    action:'begin',key:'p5_r3c_browser_third_00004',status:'draft'
+  });
+  assert.deepEqual(secondPendingWrite,{state:'pending',reason:'await-original-receipt'});
+  const r3cBeforeSwitch=(await command('STATS')).data;
+  assert.deepEqual(r3cBeforeSwitch,{status:'draft',version:4,
+    receiptCount:3,spentKeys:3,committedAudits:3,injected503Consumed:true});
+
   const other = await command('OTHER');
   assert.equal(other.type, 'other');
   await setCookie(other.cookie);
@@ -267,7 +400,12 @@ try {
   }
   assert.deepEqual(await evaluate(browserDifferentUser, { key }),
     { tenant: 'tenant-b', refused: true, code: 404 });
-  assert.deepEqual((await command('STATS')).data, stats);
+  const wrongActorPending=await evaluate(browserScopedAction,{
+    action:'check',key:'ignored-new-tenant-key_00005',status:'approved'
+  });
+  assert.deepEqual(wrongActorPending,{state:'blocked',reason:'scope-or-ledger-changed'});
+  assert.equal(await evalCode("JSON.parse(globalThis.localStorage.getItem('foundation:p5-r3c:synthetic-pending:v1')).tenantId"),'tenant-a');
+  assert.deepEqual((await command('STATS')).data,r3cBeforeSwitch);
   assert.equal((await command('REVOKE')).type, 'revoked');
   assert.equal(await evaluate(async function () {
     return (await fetch('/api/session', { credentials: 'same-origin' })).status;
@@ -282,14 +420,17 @@ try {
       checks: ['HttpOnly unreadable', 'R3a authenticated capability discovery and plan',
         'CSRF refusal', 'SQLite commit-then-503', 'Cookie rotation and reload',
         'Original-key receipt and exactly one synthetic SQLite transaction',
-        'Cross-tenant denial', 'Revoked session denial'],
+        'Cross-tenant denial', 'Revoked session denial', 'R3c real two-tab Web Locks busy/no-queue',
+        'R3c shared pending journal and original-key receipt across tabs',
+        'R3c changed-tenant pending recovery blocked'],
       sqlite: stats, limitations: [
         'No production SSO/OIDC or business database',
         'Journal belongs to this test harness, not a Studio/ZIP production feature',
-        'No multi-tab atomic lock or Stable promotion'
+        'P5-R3c Web Locks protect cooperating same-origin tabs, not multiple devices or production Stable'
       ] }, null, 2) + '\n');
   console.log(JSON.stringify({ result: 'PASS', scenario: 'P5-R3b2b true same-origin Chromium session and durable receipt', platform: process.platform }));
 } finally {
+  if (secondSocket?.readyState === WebSocket.OPEN) secondSocket.close();
   if (socket?.readyState === WebSocket.OPEN) socket.close();
   if (fixture?.stdin && !fixture.stdin.destroyed) fixture.stdin.end();
   killTree(fixture);
