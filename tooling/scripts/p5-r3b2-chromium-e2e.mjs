@@ -128,7 +128,7 @@ try {
   await call('Runtime.enable');
   await call('Network.enable');
   await call('Page.navigate', { url: origin + '/' });
-  await until(() => evalCode("!!document.querySelector('#p5-browser-contract')"), 'Fixture page loaded');
+  await until(() => evalCode("!!globalThis.document.querySelector('#p5-browser-contract')"), 'Fixture page loaded');
   assert.equal(await evaluate(async function () {
     return (await fetch('/api/session', { credentials: 'same-origin' })).status;
   }), 401);
@@ -140,11 +140,11 @@ try {
     const session = await sessionResponse.json();
     const mod = await import('/p5_capability_contract.mjs');
     const grant = await mod.discoverP5Capability({
-      origin: location.origin, verifiedIdentity: session.identity,
+      origin: globalThis.location.origin, verifiedIdentity: session.identity,
       fetchImpl: fetch, now: Date.now
     });
     const plan = mod.authorizeP5WritePlan({
-      capability: grant, origin: location.origin, verifiedIdentity: session.identity,
+      capability: grant, origin: globalThis.location.origin, verifiedIdentity: session.identity,
       method: 'PATCH', path: '/api/tasks/1', expectedProviderId: grant.providerId,
       expectedReceiptEpoch: grant.receiptEpoch
     });
@@ -157,7 +157,7 @@ try {
       receiptEpoch: plan.receiptEpoch, tenantId: plan.tenantId,
       subjectId: plan.subjectId, sessionEpoch: plan.sessionEpoch
     };
-    localStorage.setItem(args.journalName, JSON.stringify(journal));
+    globalThis.localStorage.setItem(args.journalName, JSON.stringify(journal));
     const csrfFail = await fetch(plan.path, {
       method: 'PATCH', credentials: 'same-origin',
       headers: { 'X-P5-CSRF-Token': 'incorrect', 'Idempotency-Key': journal.key,
@@ -173,9 +173,9 @@ try {
         'X-P5-Receipt-Epoch': plan.receiptEpoch },
       body: journal.body
     });
-    return { code: response.status, origin: location.origin,
-      cookieReadable: document.cookie,
-      saved: JSON.parse(localStorage.getItem(args.journalName)) };
+    return { code: response.status, origin: globalThis.location.origin,
+      cookieReadable: globalThis.document.cookie,
+      saved: JSON.parse(globalThis.localStorage.getItem(args.journalName)) };
   }
   const initial = await evaluate(browserInitial, { key, body, journalName });
   assert.equal(initial.code, 503, 'Must observe commit-then-503');
@@ -197,18 +197,18 @@ try {
   }), 401, 'Rotated-away session must be revoked');
   await setCookie(rotated.cookie);
   await call('Page.reload', { ignoreCache: true });
-  await until(() => evalCode("document.readyState === 'complete' && !!document.querySelector('#p5-browser-contract')"),
+  await until(() => evalCode("globalThis.document.readyState === 'complete' && !!globalThis.document.querySelector('#p5-browser-contract')"),
     'Browser reload');
 
   async function browserRecover(args) {
-    const journal = JSON.parse(localStorage.getItem(args.journalName));
+    const journal = JSON.parse(globalThis.localStorage.getItem(args.journalName));
     if (!journal) throw new Error('Pending journal lost on reload');
     const session = await fetch('/api/session', { credentials: 'same-origin', cache: 'no-store' });
     if (session.status !== 200) throw new Error('Rotated cookie rejected');
     const identity = (await session.json()).identity;
     const mod = await import('/p5_capability_contract.mjs');
     const grant = await mod.discoverP5Capability({
-      origin: location.origin, verifiedIdentity: identity,
+      origin: globalThis.location.origin, verifiedIdentity: identity,
       fetchImpl: fetch, now: Date.now
     });
     if (grant.tenantId !== journal.tenantId || grant.subjectId !== journal.subjectId
@@ -216,7 +216,7 @@ try {
       || grant.providerId !== journal.providerId || grant.receiptEpoch !== journal.receiptEpoch) {
       throw new Error('Scope, provider or ledger epoch changed; recovery forbidden');
     }
-    mod.authorizeP5WritePlan({ capability: grant, origin: location.origin,
+    mod.authorizeP5WritePlan({ capability: grant, origin: globalThis.location.origin,
       verifiedIdentity: identity, method: journal.method, path: journal.path,
       expectedProviderId: journal.providerId, expectedReceiptEpoch: journal.receiptEpoch });
     const receipt = await fetch('/api/mutations/' + journal.key, {
@@ -231,11 +231,11 @@ try {
       || body.response.data.tenant_id !== journal.tenantId) {
       throw new Error('Durable original-key receipt not verified');
     }
-    window.__lastP5Proof = grant;
-    localStorage.removeItem(args.journalName);
+    globalThis.window.__lastP5Proof = grant;
+    globalThis.localStorage.removeItem(args.journalName);
     return { code: receipt.status, key: journal.key, identity,
-      journalAbsent: localStorage.getItem(args.journalName) === null,
-      cookieReadable: document.cookie };
+      journalAbsent: globalThis.localStorage.getItem(args.journalName) === null,
+      cookieReadable: globalThis.document.cookie };
   }
   const recovered = await evaluate(browserRecover, { journalName });
   assert.equal(recovered.code, 200);
@@ -250,11 +250,11 @@ try {
   await setCookie(other.cookie);
   async function browserDifferentUser(args) {
     const session = await (await fetch('/api/session', { credentials: 'same-origin' })).json();
-    const grant = window.__lastP5Proof;
+    const grant = globalThis.window.__lastP5Proof;
     const mod = await import('/p5_capability_contract.mjs');
     let refused = false;
     try {
-      mod.authorizeP5WritePlan({ capability: grant, origin: location.origin,
+      mod.authorizeP5WritePlan({ capability: grant, origin: globalThis.location.origin,
         verifiedIdentity: session.identity, method: 'PATCH', path: '/api/tasks/1',
         expectedProviderId: grant.providerId, expectedReceiptEpoch: grant.receiptEpoch });
     } catch { refused = true; }
