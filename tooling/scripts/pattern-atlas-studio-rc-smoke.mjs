@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { launchChromiumCdp } from './chromium-cdp-start.mjs';
 
 const directory = resolve(import.meta.dirname, '../../artifacts/pattern-atlas/studio-rc');
 const manifest = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8'));
@@ -53,11 +54,10 @@ try {
   assert.equal(asset.status, 200, 'Compiled asset missing');
   assert.match(asset.headers.get('content-type') || '', /javascript/);
   assert.equal((await fetch(origin + '/assets/not-real.js')).status, 404, 'Missing JS must be 404, not the SPA');
-  browser = spawn(process.env.CHROMIUM_BIN || 'google-chrome', [
-    '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-    '--no-proxy-server', '--remote-debugging-port=' + debugPort, '--user-data-dir=' + profile, 'about:blank'
-  ], { stdio: 'ignore' });
-  await until(async () => (await fetch('http://127.0.0.1:' + debugPort + '/json/version')).ok, 'Chromium CDP');
+  browser = await launchChromiumCdp({
+    executable: process.env.CHROMIUM_BIN || 'google-chrome',
+    port: debugPort, profileRoot: profile
+  });
   const tab = await fetch('http://127.0.0.1:' + debugPort + '/json/new?about:blank', { method: 'PUT' });
   assert.equal(tab.status, 200);
   const target = await tab.json();
