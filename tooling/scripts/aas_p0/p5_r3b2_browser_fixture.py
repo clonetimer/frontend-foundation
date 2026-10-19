@@ -29,6 +29,7 @@ OTHER = {
     "sessionEpoch": "22222222-2222-4222-8222-222222222222",
 }
 MODULE = Path(__file__).with_name("p5_capability_contract.mjs")
+R3C_MODULE = Path(__file__).with_name("p5_r3c_scoped_journal.mjs")
 PAGE = b"<!doctype html><html><head><meta charset='UTF-8'><title>P5 isolated browser contract</title></head><body><main id='p5-browser-contract'>Isolated P5 browser protocol acceptance</main></body></html>"
 
 
@@ -45,10 +46,12 @@ def main(port):
 
         class TestHandler(parent):
             def do_GET(self):
-                if self.path == "/" or self.path == "/p5_capability_contract.mjs":
+                if self.path in ("/", "/p5_capability_contract.mjs", "/p5_r3c_scoped_journal.mjs"):
                     if not self._same_host():
                         return
-                    raw = PAGE if self.path == "/" else MODULE.read_bytes()
+                    raw = (PAGE if self.path == "/" else
+                           MODULE.read_bytes() if self.path == "/p5_capability_contract.mjs"
+                           else R3C_MODULE.read_bytes())
                     self.send_response(200)
                     self.send_header("Content-Length", str(len(raw)))
                     self.send_header("Content-Type", "text/html; charset=utf-8" if self.path == "/" else "text/javascript; charset=utf-8")
