@@ -351,6 +351,9 @@ try {
     action:'begin',key:'p5_r3c_browser_first_00001',status:'archived'
   });
   assert.deepEqual(r3cBegin,{state:'pending',reason:'await-original-receipt'});
+  await secondCall('Page.reload',{ignoreCache:true});
+  await until(()=>secondEval("globalThis.document.readyState==='complete' && !!globalThis.document.querySelector('#p5-browser-contract')"),
+    'R3c second tab refresh preserves scoped journal');
   const journalInFirst=await evalCode("JSON.parse(globalThis.localStorage.getItem('foundation:p5-r3c:synthetic-pending:v1'))");
   assert.equal(journalInFirst.status,'archived');
   assert.equal(journalInFirst.tenantId,'tenant-a');
