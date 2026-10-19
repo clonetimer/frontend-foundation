@@ -121,6 +121,11 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: P5-R2b fail-closed browser journal and explicit recovery contract
+        run: node --test tooling/scripts/aas_p0/test_p5_client_recovery.mjs
       - name: Execute isolated SQLite replay and ETag/CAS contract
         run: python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*idempotency.py' -v
       - name: Check native AAS P0 gateway backwards compatibility
