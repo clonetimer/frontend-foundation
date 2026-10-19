@@ -30,6 +30,12 @@ function trustedOrigin(value) {
       || parsed.pathname !== '/' || parsed.search || parsed.hash) {
     fail('HTTPS origin required except explicit localhost development');
   }
+  // In a real browser, 'same-origin' means the currently loaded application,
+  // not an arbitrary HTTPS origin provided by an imported project.
+  const pageOrigin = globalThis.location?.origin;
+  if (typeof pageOrigin === 'string' && pageOrigin && parsed.origin !== pageOrigin) {
+    fail('capability discovery must target the active page origin');
+  }
   return parsed.origin;
 }
 function trustedIdentity(input) {
