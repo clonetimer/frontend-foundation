@@ -12,6 +12,8 @@ export const P5_CAPABILITY_MAX_AGE_MS = 15_000;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const METHODS = new Set(['POST', 'PATCH', 'DELETE']);
+// An imported file or a manually constructed object cannot grant write capability.
+const issuedFromAuthenticatedDiscovery = new WeakSet();
 const TEMPLATE = /^\/api\/(?:[a-z][a-z0-9-]{0,39}\/){0,6}[a-z][a-z0-9-]{0,39}(?:\/\{id\})?$/;
 const RECEIPT_TEMPLATE = /^\/api\/(?:[a-z][a-z0-9-]{0,39}\/){0,6}mutations\/\{key\}$/;
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -151,9 +153,11 @@ export async function discoverP5Capability({
     if (body.length > 8192) fail('capability response exceeds 8 KB');
     payload = JSON.parse(body);
   } catch { fail('invalid capability response'); }
-  return validateP5Capability(payload, {
+  const verified = validateP5Capability(payload, {
     origin: target, verifiedIdentity, checkedAt: now()
   });
+  issuedFromAuthenticatedDiscovery.add(verified);
+  return verified;
 }
 /**
  * A point-in-time, fail-closed write PLAN check. It does not send anything.
@@ -166,7 +170,8 @@ export function authorizeP5WritePlan({
 }) {
   const target = trustedOrigin(origin);
   const identity = trustedIdentity(verifiedIdentity);
-  if (!isObject(capability) || capability.version !== P5_CAPABILITY_VERSION
+  if (!isObject(capability) || !issuedFromAuthenticatedDiscovery.has(capability)
+      || capability.version !== P5_CAPABILITY_VERSION
       || capability.origin !== target || capability.tenantId !== identity.tenantId
       || capability.subjectId !== identity.subjectId
       || capability.sessionEpoch !== identity.sessionEpoch
