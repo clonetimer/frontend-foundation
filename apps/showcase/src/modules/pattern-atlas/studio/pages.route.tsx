@@ -7,6 +7,7 @@ import { buildProjectBlueprint, type PageTemplate } from '../builder/project-blu
 import { accentChoices, designCssVariables, type DesignConfig } from '../effects/config';
 import { effectCategories, effects } from '../effects/catalog';
 import { StudioCanvas } from './StudioCanvas';
+import { NativeAasRecoveryPanel } from './NativeAasRecoveryPanel';
 import { WorkflowGraph } from './WorkflowGraph';
 import { useStudioRecordFlow } from './StudioRecords';
 import { addRecordEditorExample, addLinkedRecordExample } from './record-template';
@@ -680,6 +681,7 @@ export function Component() {
       {countDataSourceUses(source.id, doc.decorations) ? <div className="pa-studio-note">当前被 {countDataSourceUses(source.id, doc.decorations)} 个组件引用。删除前需要先解绑。</div> : null}
       <div className="pa-studio-note">这里不提供凭据输入，请勿在 URL 中填写 Token、密钥或密码。测试仅发送 GET；生产环境仍须由后端负责权限和跨域配置。</div>
     </> : null}
+    <NativeAasRecoveryPanel/>
   </div>;
   const pagesTab = <div className="pa-studio-inspector-inner">
     <div className="pa-studio-subtitle">页面导航</div>
