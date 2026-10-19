@@ -23,7 +23,7 @@ Web Locks 只在**同一浏览器存储分区中合作的同源上下文**之间
     node --test tooling/scripts/aas_p0/test_p5_r3c_scoped_journal.mjs
     node tooling/scripts/p5-r3b2-chromium-e2e.mjs
 
-15 项 Node 合同测试纳入 Linux/Windows P5 CI，验证先记账再网络、HTTP 200 不盲清、404 不自动重试、显式同 Key 重放、410/409/401/403 阻断、损坏存储、无 Web Locks、过期能力、会话权限变化、作用域变化、锁忙和 journal 被改写等。
+16 项 Node 合同测试纳入 Linux/Windows P5 CI，验证先记账再网络、HTTP 200 不盲清、404 不自动重试、显式同 Key 重放、410/409/401/403 阻断、损坏存储、无 Web Locks、过期能力、会话权限变化、作用域变化、锁忙和 journal 被改写等。
 
 现有 Linux/Windows Studio RC 的真实 Chromium 同源验收，在原 R3b2b Cookie + CSRF + R3a discovery + SQLite 503/回执链路基础上额外打开**第二个同源标签页**，先由标签 A 实际持有 Web Lock 验证标签 B 无法提交，再解除锁由 B 保存 journal 和提交状态变更；标签 A 看到 pending 阻止新写入，并按原 Key 查询回执清理。最后发起新的待恢复操作并切换到 tenant-b，检验跨租户 recovery 阻断和 journal 保留，全部使用临时合成 SQLite。
 
