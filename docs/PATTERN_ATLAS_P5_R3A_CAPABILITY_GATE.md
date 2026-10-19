@@ -62,7 +62,7 @@ node --test tooling/scripts/aas_p0/test_p5_capability_contract.mjs
 node --test tooling/scripts/aas_p0/test_p5_client_recovery.mjs
 ```
 
-新增 14 项 Node 合同测试，作为独立 P5 专项 Linux/Windows CI 工作矩阵的一部分。正常场景测试只读 GET 与合法写入计划，负面测试覆盖伪造 JSON 授权、跨租户、跨用户、Session 失效、后端迁移/账本重建、TTL、URI 安全、事务承诺缺失、数据过期与路由白名单绕过。测试中不会向真实服务器写数据。
+新增 15 项 Node 合同测试，作为独立 P5 专项 Linux/Windows CI 工作矩阵的一部分。正常场景测试只读 GET 与合法写入计划，负面测试覆盖伪造 JSON 授权、跨租户、跨用户、Session 失效、后端迁移/账本重建、TTL、URI 安全、事务承诺缺失、数据过期与路由白名单绕过。测试中不会向真实服务器写数据。
 
 ## P5-R3b/R3c 后续工作（尚未完成）
 
