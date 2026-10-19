@@ -5,7 +5,7 @@ import {
 } from './p5_capability_contract.mjs';
 import {
   P5_R3C_PENDING_KEY, P5_R3C_LOCK_NAME,
-  readP5R3cPending, runP5R3cOperation
+  runP5R3cOperation
 } from './p5_r3c_scoped_journal.mjs';
 
 const origin = 'https://app.example.test';
