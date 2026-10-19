@@ -33,7 +33,7 @@ export async function launchChromiumCdp({
   const endpoint = 'http://127.0.0.1:' + port + '/json/version';
   // Avoid accidentally attaching to an already running external debugger.
   try {
-    const preflight = await fetch(endpoint, { signal: AbortSignal.timeout(1000) });
+    const preflight = await fetch(endpoint, { signal: globalThis.AbortSignal.timeout(1000) });
     if (preflight.ok) throw new Error('Refusing an occupied Chromium CDP port ' + port);
   } catch (error) {
     if (String(error).includes('Refusing an occupied')) throw error;
@@ -69,7 +69,7 @@ export async function launchChromiumCdp({
     let lastProbe = '';
     while (Date.now() < until && !exited) {
       try {
-        const r = await fetch(endpoint, { signal: AbortSignal.timeout(1500) });
+        const r = await fetch(endpoint, { signal: globalThis.AbortSignal.timeout(1500) });
         if (r.ok) {
           const version = await r.json();
           if (typeof version.webSocketDebuggerUrl === 'string'
