@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { launchChromiumCdp } from './chromium-cdp-start.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(check, name, limit = 30000) {
@@ -187,12 +188,10 @@ export async function runExportedBrowserSmoke(directory) {
   try {
     await new Promise((resolve, reject) => { api.once('error', reject); api.listen(4198, '127.0.0.1', resolve); });
     await until(async () => (await fetch(root)).ok, 'Exported Vite preview');
-    chrome = spawn(process.env.CHROMIUM_BIN || 'google-chrome', [
-      '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-      '--no-first-run', '--no-default-browser-check', '--no-proxy-server',
-      '--remote-debugging-port=' + port, '--user-data-dir=' + profile, 'about:blank'
-    ], { stdio: 'ignore' });
-    await until(async () => (await fetch('http://127.0.0.1:' + port + '/json/version')).ok, 'Chromium DevTools');
+    chrome = await launchChromiumCdp({
+      executable: process.env.CHROMIUM_BIN || 'google-chrome',
+      port, profileRoot: profile
+    });
     const created = await fetch('http://127.0.0.1:' + port + '/json/new?about:blank', { method: 'PUT' });
     assert.equal(created.status, 200, 'Chromium tab create failed');
     const tab = await created.json();
