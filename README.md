@@ -26,6 +26,8 @@
 
 **P5-R3b1 服务端多租户回执账本（合成参考实现）**：新增仅允许创建全新合成 SQLite 的 HTTP 协议服务，使用测试身份注册表模拟租户/用户鉴权与 Token 轮换；任务写入与回执、已使用 Key 墓碑、提交审计在同一事务中持久化。支持同 Key 重放、并发 CAS、提交后 503 查询、7 天回执保留期及显式 GC 时的账本 epoch 旋转；Linux/Windows CI 新增 10 项真实 HTTP+SQLite 场景测试。**未接入正式 OIDC/SSO、生产业务数据库或 Studio/ZIP 通用表单，不能宣称生产级 exactly-once。** 参见 [P5-R3b1 后端合同及限制](docs/PATTERN_ATLAS_P5_R3B1_SCOPED_LEDGER.md)。
 
+**P5-R3b2a 同源认证适配参考（非生产）**：新增隔离会话 Cookie/CSRF 层，通过受信任测试宿主维护的随机 Cookie 映射解析租户、用户、角色和会话 epoch。基于 R3b1 原子 SQLite 回执，测试提交后 503、Cookie/CSRF 轮换恢复、权限撤销、跨租户隔离及同键并发；9 项真实 HTTP/SQLite 合同加入 Linux/Windows CI。**没有 OIDC/SSO、真实登录系统或真实业务数据库，不改变 Studio 与独立 React ZIP 通用写入；目前不是正式生产身份或 exactly-once。** 详见 [P5-R3b2a 同源会话适配说明](docs/PATTERN_ATLAS_P5_R3B2_SESSION_ADAPTER.md)。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
