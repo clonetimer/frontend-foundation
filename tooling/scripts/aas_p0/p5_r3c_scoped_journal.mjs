@@ -156,6 +156,10 @@ export async function runP5R3cOperation(args) {
         return {state:'blocked',reason:'scope-or-ledger-changed'};
       }
       const session = trustedSession(await args.getTrustedSession(), args.verifiedIdentity);
+      // The authenticated session read is asynchronous: a previously fresh
+      // capability may expire while awaiting it. Recheck inside the lock
+      // immediately before IO, rather than trusting pre-await permission.
+      permission(args, path);
       // Check once more under the same exclusive lock after the auth await.
       if (args.action === 'begin') {
         if (readP5R3cPending(args.storage)) return {state:'blocked',reason:'pending-exists'};
@@ -197,6 +201,7 @@ export async function runP5R3cOperation(args) {
       // spent-key tombstone; do not run without fresh proof and permission.
       permission(args, pending.path);
       const renewedSession = trustedSession(await args.getTrustedSession(), args.verifiedIdentity);
+      permission(args, pending.path);
       if (JSON.stringify(readP5R3cPending(args.storage)) !== JSON.stringify(pending)) {
         return {state:'blocked',reason:'pending-replaced'};
       }
