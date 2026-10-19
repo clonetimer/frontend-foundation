@@ -20,6 +20,8 @@
 
 **P5-R2b1 合成原生客户端恢复模块（未接入 Studio UI）**：新增可独立调用的浏览器兼容幂等 PATCH 客户端；仅对 loopback 原生 AAS 合成模型生效，先持久保存原始 status/ETag/key，再发送请求。提交结果不确定时仅查询原回执，明确选择后才允许原样重放；写 Token 不保存到本地，旧表单/独立 ZIP 的普通写入逻辑保持不变。Node 合同测试加入 Linux/Windows CI。**尚未执行 Chromium 端到端或接入 Studio 操作界面，不代表生产级跨会话幂等或 Stable 发布完成。** 详见 [P5-R2b1 客户端恢复合同](docs/PATTERN_ATLAS_P5_R2B_CLIENT.md)。
 
+**P5-R2b2 Studio 合成原生写入恢复面板（专项验收）**：在 `/studio`「接口管理」新增显式启用的隔离 AAS `p0_case_N` 状态写入与回执恢复工具；临时写角色 Token 不进入项目、ZIP 或本地存储。原生 Python SQLite 网关注入“已提交但返回 503”，并在 Linux/Windows production Chromium 验证刷新后原 Key 回执恢复、原生提交恰好一次。**本功能不适用于普通业务接口/通用表单，不会改变独立导出 React ZIP 的请求语义，也不代表生产级 exactly-once、真实业务后端或 Studio Stable 签收。** 详见 [P5-R2b2 隔离浏览器恢复验收](docs/PATTERN_ATLAS_P5_R2B2_STUDIO_RECOVERY.md)。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。

@@ -39,7 +39,7 @@ const server = spawn(windows ? (process.env.ComSpec || 'cmd.exe') : process.exec
   { cwd: directory, env: { ...process.env, ATLAS_STUDIO_PORT: String(serverPort) },
     stdio: 'inherit' });
 const profile = mkdtempSync(join(tmpdir(), 'studio-rc-smoke-'));
-let browser, socket, aasFixtureServer, aasBridge;
+let browser, socket, aasFixtureServer, aasBridge, p5Server;
 try {
   await until(async () => (await fetch(origin + '/studio')).ok, 'candidate static server');
   for (const path of ['/create', '/studio']) {
@@ -557,6 +557,77 @@ try {
   },null,2)+'\n');
 
 
+  // P5-R2b2: real production Chromium + native-model SQLite/HTTP sandbox.
+  // The gateway commits the first PATCH and deliberately replies HTTP 503.
+  // After a browser reload, the UI must query the SAME receipt key and clear
+  // its journal without submitting another PATCH. No real user DB or tokens.
+  const p5Origin = 'http://127.0.0.1:5499';
+  const p5Writer = 'p5-browser-fixture-' + 'x'.repeat(40);
+  p5Server = spawn(python, [
+    'tooling/scripts/aas_p0/p5_browser_fixture.py',
+    '--origin', origin + '/', '--port', '5499'
+  ], { cwd: resolve(import.meta.dirname, '../..'), stdio: 'ignore' });
+  let p5StartupError;
+  p5Server.on('error', (error) => { p5StartupError = error; });
+  await until(async () => {
+    if (p5StartupError) throw p5StartupError;
+    if (p5Server.exitCode !== null) throw new Error('P5 native fixture exited early');
+    return (await fetch(p5Origin + '/__p5_test_counts')).ok;
+  }, 'Native P5 SQLite fixture ready');
+  await call('Page.navigate', { url: origin + '/studio' });
+  await until(() => evaluate("!!document.querySelector('.pa-studio-inspector-rail button[title=\"接口管理\"]')"), 'P5 Studio editor loaded');
+  const openP5Panel = async () => {
+    assert(await evaluate("(() => {const b=document.querySelector('.pa-studio-inspector-rail button[title=\"接口管理\"]');if(!b)return false;if(b.getAttribute('aria-pressed')!=='true')b.click();return true;})()"), 'P5 interface manager');
+    await until(() => evaluate("!!document.querySelector('[data-testid=\"p5-aas-recovery\"]')"), 'P5 sandbox panel');
+    assert(await evaluate("(() => {const b=document.querySelector('button[aria-label=\"允许 AAS 合成模型测试\"]');if(!b)return false;if(b.getAttribute('aria-checked')!=='true')b.click();return true;})()"), 'P5 operator opt in');
+  };
+  const fillP5Writer = async () => {
+    assert(await evaluate("(() => {const e=document.querySelector('input[aria-label=\"P5 临时写 Token\"]');if(!e)return false;e.focus();e.select();return true;})()"), 'P5 token input');
+    await call('Input.insertText', { text: p5Writer });
+    await until(() => evaluate("document.querySelector('input[aria-label=\"P5 临时写 Token\"]')?.value.length >= 32"), 'P5 transient token entered');
+    assert.equal(await evaluate("localStorage.getItem('pattern-atlas:p5-native-synthetic-pending:v1')?.includes('p5-browser-fixture-') ?? false"), false, 'No fixture bearer token may be stored');
+  };
+  await openP5Panel();
+  await until(() => evaluate("!!document.querySelector('[data-testid=\"p5-idle\"]')"), 'P5 initially idle');
+  await fillP5Writer();
+  assert(await evaluate("(() => {const b=document.querySelector('[data-testid=\"p5-submit\"]');if(!b||b.disabled)return false;b.click();return true;})()"), 'P5 one-shot submit');
+  await until(() => evaluate("!![...document.querySelectorAll('.ant-popconfirm button')].find(b=>b.textContent?.includes('确认测试写入'))"), 'P5 write confirmation');
+  assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-popconfirm button')].find(b=>b.textContent?.includes('确认测试写入'));if(!b)return false;b.click();return true;})()"), 'P5 confirm synthetic write');
+  await until(() => evaluate("!!document.querySelector('[data-testid=\"p5-pending\"]') && document.querySelector('[data-testid=\"p5-result\"]')?.textContent?.includes('结果仍不确定')"), 'P5 committed-but-503 pending');
+  const storedP5 = await evaluate("JSON.parse(localStorage.getItem('pattern-atlas:p5-native-synthetic-pending:v1'))");
+  assert.equal(storedP5.recordId, 1);
+  assert.equal(storedP5.status, 'evaluated');
+  assert.equal(storedP5.origin, p5Origin);
+  assert(!JSON.stringify(storedP5).includes(p5Writer), 'P5 writer token leaked to journal');
+  let nativeCounts = await (await fetch(p5Origin + '/__p5_test_counts')).json();
+  assert.deepEqual(nativeCounts, { evaluationCount: 1, receiptCount: 1, faultConsumed: true }, 'P5 SQLite commit/receipt mismatch');
+  const p5UncertainShot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+  writeFileSync(join(evidenceDir, 'p5-native-commit-503-pending.png'), Buffer.from(p5UncertainShot.data, 'base64'));
+  // Reload the real app; no active React component state or writer token survives.
+  await call('Page.navigate', { url: origin + '/studio' });
+  await until(() => evaluate("!!document.querySelector('.pa-studio-inspector-rail button[title=\"接口管理\"]')"), 'P5 reload real editor');
+  await openP5Panel();
+  await until(() => evaluate("!!document.querySelector('[data-testid=\"p5-pending\"]')"), 'P5 cross-session pending restored');
+  assert.equal(await evaluate("document.querySelector('input[aria-label=\"P5 临时写 Token\"]')?.value"), '', 'P5 token cannot survive reload');
+  await fillP5Writer();
+  assert(await evaluate("(() => {const b=document.querySelector('[data-testid=\"p5-query\"]');if(!b||b.disabled)return false;b.click();return true;})()"), 'P5 GET receipt');
+  await until(() => evaluate("!!document.querySelector('[data-testid=\"p5-idle\"]') && document.querySelector('[data-testid=\"p5-result\"]')?.textContent?.includes('确认提交')"), 'P5 recovered from persisted native receipt');
+  assert.equal(await evaluate("localStorage.getItem('pattern-atlas:p5-native-synthetic-pending:v1')"), null, 'P5 journal not cleared after receipt verification');
+  nativeCounts = await (await fetch(p5Origin + '/__p5_test_counts')).json();
+  assert.deepEqual(nativeCounts, { evaluationCount: 1, receiptCount: 1, faultConsumed: true }, 'P5 duplicate native SQLite write after UI recovery');
+  const p5RecoveredShot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+  writeFileSync(join(evidenceDir, 'p5-native-receipt-recovered.png'), Buffer.from(p5RecoveredShot.data, 'base64'));
+  writeFileSync(join(evidenceDir, 'p5-native-browser-recovery.json'), JSON.stringify({
+    status: 'SYNTHETIC_NATIVE_SQLITE_CHROMIUM_PASS',
+    sourceCommit: manifest.sourceCommit, platform: process.platform,
+    injectedFailure: 'native SQLite models + receipt COMMIT then first HTTP 503',
+    recovery: 'production Chromium reload → original key GET receipt → committed',
+    originalKey: storedP5.key, ...nativeCounts,
+    limitations: ['Synthetic temporary native AAS DB only', 'No general Studio/ZIP mutation integration',
+      'No production tenant authentication, multi-tab or cross-device guarantee']
+  }, null, 2) + '\n');
+  pass('P5-native-SQLite-503-reload-original-receipt-Chromium');
+
   writeFileSync(join(evidenceDir, 'p0-automated.json'), JSON.stringify({
     status: 'AUTOMATED_PASS', sourceCommit: manifest.sourceCommit, platform: process.platform,
     checks: accepted, limitations: [
@@ -575,6 +646,12 @@ try {
       windows ? 'Windows start-studio.cmd launcher' : 'POSIX node launcher'] }));
 } finally {
   if (socket?.readyState === WebSocket.OPEN) socket.close();
+  if (p5Server) {
+    if (windows && p5Server.pid) {
+      try { execFileSync('taskkill', ['/PID', String(p5Server.pid), '/T', '/F'], { stdio: 'ignore' }); }
+      catch { p5Server.kill(); }
+    } else { p5Server.kill(); }
+  }
   if (aasBridge) {
     if (windows && aasBridge.pid) {
       try { execFileSync('taskkill', ['/PID', String(aasBridge.pid), '/T', '/F'], { stdio: 'ignore' }); }

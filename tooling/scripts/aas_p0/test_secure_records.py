@@ -123,18 +123,29 @@ class NativeSQLiteAuthCASTests(unittest.TestCase):
         self.assertEqual(sorted(outcomes), [200] + [412] * 7)
 
     def test_05_writes_disabled_by_default(self):
+        # This test isolates the "writes disabled" authorization gate. A denied
+        # PATCH with an unread request body may produce a Windows TCP RST
+        # (WinError 10053) instead of exposing the server's 403. Other tests
+        # cover normal JSON PATCH payloads, so send no body here and assert
+        # the same strict HTTP 403 plus absence of SQLite side effects.
+        with closing(sqlite3.connect(self.db)) as conn:
+            before = conn.execute(
+                "SELECT status,evaluation_count FROM models WHERE id=3").fetchone()
         safe = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.db, ORIGIN, READER, WRITER))
         worker = threading.Thread(target=safe.serve_forever, daemon=True)
         worker.start()
         try:
             req = Request(f"http://127.0.0.1:{safe.server_port}/api/records/3",
-                          method="PATCH", data=b'{"status":"draft"}',
+                          method="PATCH",
                           headers={"Authorization": "Bearer " + WRITER,
-                                   "Content-Type": "application/json",
                                    "If-Match": '"' + "0" * 64 + '"'})
             with self.assertRaises(HTTPError) as raised:
                 urlopen(req, timeout=5)
             self.assertEqual(raised.exception.code, 403)
+            with closing(sqlite3.connect(self.db)) as conn:
+                after = conn.execute(
+                    "SELECT status,evaluation_count FROM models WHERE id=3").fetchone()
+            self.assertEqual(after, before, "Disabled native status writes modified SQLite")
         finally:
             safe.shutdown()
             safe.server_close()
