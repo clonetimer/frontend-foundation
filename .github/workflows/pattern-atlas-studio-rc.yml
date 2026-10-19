@@ -5,6 +5,7 @@ on:
       - 'apps/showcase/**'
       - 'packages/**'
       - 'tooling/scripts/pattern-atlas-studio-rc-*'
+      - 'tooling/scripts/p5-r3b2-chromium-e2e.mjs'
       - 'tooling/scripts/aas_p0/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/pattern-atlas-studio-rc.yml'
@@ -14,6 +15,7 @@ on:
       - 'apps/showcase/**'
       - 'packages/**'
       - 'tooling/scripts/pattern-atlas-studio-rc-*'
+      - 'tooling/scripts/p5-r3b2-chromium-e2e.mjs'
       - 'tooling/scripts/aas_p0/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/pattern-atlas-studio-rc.yml'
@@ -73,6 +75,8 @@ jobs:
           STUDIO_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Smoke installed production editor in Chromium
         run: node tooling/scripts/pattern-atlas-studio-rc-smoke.mjs
+      - name: P5-R3b2b actual Chromium same-origin Cookie R3a discovery and SQLite receipt E2E
+        run: node tooling/scripts/p5-r3b2-chromium-e2e.mjs
       - name: Preserve candidate package and P0 browser evidence
         if: always()
         uses: actions/upload-artifact@v7
