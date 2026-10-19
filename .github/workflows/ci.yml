@@ -128,6 +128,8 @@ jobs:
         run: node --test tooling/scripts/aas_p0/test_p5_client_recovery.mjs
       - name: P5-R3a authenticated write capability negotiation (read-only contract)
         run: node --test tooling/scripts/aas_p0/test_p5_capability_contract.mjs
+      - name: P5-R3b1 scoped identity, token rotation, native SQLite ledger and tombstone GC
+        run: python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_p5_r3b_scoped_reference.py' -v
       - name: Execute isolated SQLite replay and ETag/CAS contract
         run: python -m unittest discover -s tooling/scripts/aas_p0 -p 'test_*idempotency.py' -v
       - name: Check native AAS P0 gateway backwards compatibility
