@@ -143,6 +143,14 @@ export async function runP5R3cOperation(args) {
       const path = args.action === 'begin' ? args.request?.path : pending.path;
       // The R3a proof must have been acquired from authenticated same-origin
       // discovery, not imported, forged or copied out of a prior page session.
+      if (pending && (pending.origin !== args.origin
+          || pending.tenantId !== args.verifiedIdentity?.tenantId
+          || pending.subjectId !== args.verifiedIdentity?.subjectId
+          || pending.sessionEpoch !== args.verifiedIdentity?.sessionEpoch
+          || pending.providerId !== args.expectedProviderId
+          || pending.receiptEpoch !== args.expectedReceiptEpoch)) {
+        return {state:'blocked',reason:'scope-or-ledger-changed'};
+      }
       const plan = permission(args, path);
       if (pending && !matches(pending, plan, args.verifiedIdentity)) {
         return {state:'blocked',reason:'scope-or-ledger-changed'};
@@ -188,12 +196,12 @@ export async function runP5R3cOperation(args) {
       // Server guarantees SAME-KEY original-body idempotency and a durable
       // spent-key tombstone; do not run without fresh proof and permission.
       permission(args, pending.path);
-      trustedSession(await args.getTrustedSession(), args.verifiedIdentity);
+      const renewedSession = trustedSession(await args.getTrustedSession(), args.verifiedIdentity);
       if (JSON.stringify(readP5R3cPending(args.storage)) !== JSON.stringify(pending)) {
         return {state:'blocked',reason:'pending-replaced'};
       }
       try {
-        const result = await args.executePatch({plan,record:pending,session});
+        const result = await args.executePatch({plan,record:pending,session:renewedSession});
         return {state:'pending',reason:result?.status === 200 ?
           'await-original-receipt' : 'replay-uncertain'};
       } catch {
