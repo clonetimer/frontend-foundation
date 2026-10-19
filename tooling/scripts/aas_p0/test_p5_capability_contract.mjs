@@ -254,3 +254,21 @@ test('a declared POST does not confer other methods or allow bypass via route pr
   assert.throws(() => plan(capability, { path: '/api/tasksabc/task-7' }), /authorized/);
   assert.throws(() => plan(capability, { path: '/api/tasks/task-7/extra' }), /authorized/);
 });
+
+test('browser runtime origin must match the origin used for negotiation', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  try {
+    Object.defineProperty(globalThis, 'location', {
+      configurable: true, value: { origin: 'https://real-app.example.test' }
+    });
+    const server = withFakeServer();
+    await assert.rejects(discover(server), /active page origin/);
+    assert.equal(server.requests.length, 0);
+    assert.throws(() => validateP5Capability(example(), {
+      origin: ORIGIN, verifiedIdentity: IDENTITY, checkedAt: TIME
+    }), /active page origin/);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'location', previous);
+    else delete globalThis.location;
+  }
+});
