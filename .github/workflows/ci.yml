@@ -27,6 +27,7 @@ jobs:
       - run: node tooling/scripts/capability-check.mjs
       - run: node tooling/oss/verify.mjs
       - run: node tooling/deployment/verify.mjs
+      - run: node --test tooling/scripts/test-chromium-cdp-start.mjs
 
   node22-compat:
     name: Node 22 compatibility
