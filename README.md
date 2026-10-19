@@ -22,6 +22,8 @@
 
 **P5-R2b2 Studio 合成原生写入恢复面板（专项验收）**：在 `/studio`「接口管理」新增显式启用的隔离 AAS `p0_case_N` 状态写入与回执恢复工具；临时写角色 Token 不进入项目、ZIP 或本地存储。原生 Python SQLite 网关注入“已提交但返回 503”，并在 Linux/Windows production Chromium 验证刷新后原 Key 回执恢复、原生提交恰好一次。**本功能不适用于普通业务接口/通用表单，不会改变独立导出 React ZIP 的请求语义，也不代表生产级 exactly-once、真实业务后端或 Studio Stable 签收。** 详见 [P5-R2b2 隔离浏览器恢复验收](docs/PATTERN_ATLAS_P5_R2B2_STUDIO_RECOVERY.md)。
 
+**P5-R3a 生产适配能力协商前置合同（只读，不开放写入）**：新增经过认证的同源 `GET` 能力发现验证器，要求服务端明确声明原子写入+回执、同键重放、作用域隔离、强条件写入及至少 24 小时回执保留期；在宿主身份/租户、会话 epoch、提供者及回执账本 epoch、15 秒新鲜度和精确方法/路径匹配前，拒绝生成可用写入计划。JSON 项目文件无法自行授权，探测结果仅内存有效。Linux/Windows CI 运行 14 项负面与正常合同测试。**未接入可信生产 SSO、真实业务后端，也不执行生产 POST/PATCH/DELETE；普通 Studio 与 React ZIP 写入完全不变。** 详见 [P5-R3a 能力门禁设计及验证](docs/PATTERN_ATLAS_P5_R3A_CAPABILITY_GATE.md)。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
