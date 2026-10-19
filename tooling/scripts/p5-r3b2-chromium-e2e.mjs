@@ -7,6 +7,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { launchChromiumCdp } from './chromium-cdp-start.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const origin = 'http://127.0.0.1:5497';
@@ -70,12 +71,10 @@ try {
   assert(ready.cookie?.length >= 32);
   await until(async () => (await fetch(origin + '/')).ok, 'Python same-origin fixture');
 
-  chrome = spawn(process.env.CHROMIUM_BIN || 'google-chrome', [
-    '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-    '--no-proxy-server', '--remote-debugging-port=9399',
-    '--user-data-dir=' + profile, 'about:blank'
-  ], { stdio: 'ignore' });
-  await until(async () => (await fetch(debug + '/json/version')).ok, 'Chromium debug API');
+  chrome = await launchChromiumCdp({
+    executable: process.env.CHROMIUM_BIN || 'google-chrome',
+    port: 9399, profileRoot: profile
+  });
   const newTab = await fetch(debug + '/json/new?about:blank', { method: 'PUT' });
   assert.equal(newTab.status, 200);
   socket = new WebSocket((await newTab.json()).webSocketDebuggerUrl);
