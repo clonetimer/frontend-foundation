@@ -286,3 +286,14 @@ test('receipt transport failure does not trigger hidden replay',async()=>{
   assert.equal(writes,0);
   assert(saved(c.st));
 });
+
+test('proof expiry while waiting for host session blocks network before journal is written',async()=>{
+  const c=await setup();
+  let writes=0;
+  await assert.rejects(begin(c,{
+    getTrustedSession:async()=>{c.clock.value+=15001;return session;},
+    executePatch:async()=>{writes++;return {status:200};}
+  }),/expired/);
+  assert.equal(writes,0);
+  assert.equal(c.st.getItem(P5_R3C_PENDING_KEY),null);
+});
