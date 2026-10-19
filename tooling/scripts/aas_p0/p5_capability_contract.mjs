@@ -16,7 +16,6 @@ const METHODS = new Set(['POST', 'PATCH', 'DELETE']);
 const issuedFromAuthenticatedDiscovery = new WeakSet();
 const TEMPLATE = /^\/api\/(?:[a-z][a-z0-9-]{0,39}\/){0,6}[a-z][a-z0-9-]{0,39}(?:\/\{id\})?$/;
 const RECEIPT_TEMPLATE = /^\/api\/(?:[a-z][a-z0-9-]{0,39}\/){0,6}mutations\/\{key\}$/;
-const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fail = (message) => { throw new Error('P5 capability refused: ' + message); };
 
