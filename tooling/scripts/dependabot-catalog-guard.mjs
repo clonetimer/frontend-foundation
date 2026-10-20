@@ -8,6 +8,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -156,6 +157,6 @@ function run() {
   console.log('Dependabot resolved-version admission PASS:',result);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(new URL('file://' + process.argv[1]))) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   try { run(); } catch (error) { console.error(String(error)); process.exitCode = 1; }
 }
