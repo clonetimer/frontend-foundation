@@ -112,15 +112,19 @@ export function createP5R3c2ReferenceAdapter({host,browser=globalThis,fetchImpl=
       refuse('explicit trusted host approval required');
     }
     const initial=await session();
-    const proof=await discoverP5Capability({
-      origin,verifiedIdentity:initial.identity,fetchImpl,now:Date.now
-    });
     const previous=readP5R3cPending(browser.localStorage);
+    // Identity changed: block before even reading a new provider's capability.
+    // The previously stored request must remain untouched for manual review.
     if(previous&&(previous.origin!==origin
       ||previous.tenantId!==initial.identity.tenantId
       ||previous.subjectId!==initial.identity.subjectId
-      ||previous.sessionEpoch!==initial.identity.sessionEpoch
-      ||previous.providerId!==proof.providerId
+      ||previous.sessionEpoch!==initial.identity.sessionEpoch)){
+      return {state:'blocked',reason:'scope-or-ledger-changed'};
+    }
+    const proof=await discoverP5Capability({
+      origin,verifiedIdentity:initial.identity,fetchImpl,now:Date.now
+    });
+    if(previous&&(previous.providerId!==proof.providerId
       ||previous.receiptEpoch!==proof.receiptEpoch)){
       return {state:'blocked',reason:'scope-or-ledger-changed'};
     }
