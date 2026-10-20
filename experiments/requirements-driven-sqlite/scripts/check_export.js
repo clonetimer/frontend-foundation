@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global require, process, console, Buffer */
+/* global require, process, console */
 /* eslint-disable @typescript-eslint/no-require-imports -- standalone CommonJS TypeScript adapter scripts */
 /* Syntax/import existence check; NOT the equivalent of npm run build. */
 const fs=require('node:fs'),path=require('node:path');
