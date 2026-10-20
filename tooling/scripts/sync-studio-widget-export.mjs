@@ -17,7 +17,7 @@ const p5FileNames = [
 ];
 const p5Sources = p5FileNames.map((name) => ({
   name: 'p5-reference/' + name,
-  text: readFileSync(resolve(root, 'tooling/scripts/aas_p0', name), 'utf8')
+  base64: readFileSync(resolve(root, 'tooling/scripts/aas_p0', name)).toString('base64')
 }));
 const p5Out = '/** Synthetic-only P5 reference module source, mirrored byte-for-byte; NOT auto-activated. */\n'
   + 'export const exportedP5ReferenceSources = ' + JSON.stringify(p5Sources) + ' as const;\n';
