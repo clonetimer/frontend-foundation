@@ -8,6 +8,11 @@ updates:
       time: '04:00'
       timezone: UTC
     versioning-strategy: increase-if-necessary
+    # Issue #68: pnpm 11 catalog updates currently generate reorder-only
+    # version PRs. Pause regular npm version PRs until a verified updater is
+    # available. GitHub documents that security-update PRs are independent
+    # of this limit (when Dependabot security updates are enabled).
+    open-pull-requests-limit: 0
     # Our supported runtimes are Node 22/24; @types/node 26 is out of scope.
     # Allow compatible Node 22 type fixes, but block major-line upgrades.
     ignore:
