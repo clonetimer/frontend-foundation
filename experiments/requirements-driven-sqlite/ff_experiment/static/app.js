@@ -1,3 +1,4 @@
+/* global document, clearTimeout, setTimeout, fetch, URLSearchParams, URL */
 'use strict';
 const $ = id => document.getElementById(id);
 let selectedFile = null;
@@ -16,7 +17,7 @@ async function request(path, options = {}) {
   const res = await fetch(path, options);
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
-    try { const body = await res.json(); message = body.error || message; } catch (_) {}
+    try { const body = await res.json(); message = body.error || message; } catch { /* malformed error payload: retain HTTP status */ }
     throw new Error(message);
   }
   return res;

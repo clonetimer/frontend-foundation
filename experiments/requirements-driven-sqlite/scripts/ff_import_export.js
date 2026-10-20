@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* global require, process, console, Buffer */
+/* eslint-disable @typescript-eslint/no-require-imports -- standalone CommonJS TypeScript adapter scripts */
 /* Execute the real frozen FF Studio model/parser and exporter, without a browser.
  Usage: node ff_import_export.js <FF-extracted-repository> <atlas.studio.json> <output.zip>
  Requires TypeScript available in the FF node_modules or NODE_PATH (no other runtime dependencies).
@@ -6,7 +8,7 @@
 const fs=require('node:fs');const path=require('node:path');const Module=require('node:module');
 const [root, inputFile, outputFile] = process.argv.slice(2).map(x=>x&&path.resolve(x));
 if(!root || !inputFile || !outputFile){console.error('Usage: node ff_import_export.js <FF-repo-root> <input.studio.json> <output.zip>');process.exit(2)}
-let ts;for(const name of [path.join(root,'node_modules/typescript'),process.env.TYPESCRIPT_PATH,'typescript']){if(!name)continue;try{ts=require(name);break}catch{}}
+let ts;for(const name of [path.join(root,'node_modules/typescript'),process.env.TYPESCRIPT_PATH,'typescript']){if(!name)continue;try{ts=require(name);break}catch { /* optional resolution failed */ }}
 if(!ts){console.error('Install TypeScript in FF checkout or provide TYPESCRIPT_PATH to TypeScript module.');process.exit(2)}
 require.extensions['.ts']=(mod,filename)=>{const input=fs.readFileSync(filename,'utf8');const result=ts.transpileModule(input,{fileName:filename,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}});mod._compile(result.outputText,filename)};
 const oldResolve=Module._resolveFilename;
