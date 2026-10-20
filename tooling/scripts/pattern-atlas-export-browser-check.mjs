@@ -233,6 +233,36 @@ export async function runExportedBrowserSmoke(directory) {
     await call('Runtime.enable');
     await call('Page.navigate', { url: root + '/#/overview' });
     await until(() => evaluate("document.querySelector('main')?.textContent?.includes('验收多序列曲线')"), 'Exported React mount');
+    // P5-R3c2b1: test the *actual built ZIP* from its production Vite origin.
+    // Dormant modules must load only via an explicit import; reject any
+    // request without runtime-only trusted host approval/session hooks.
+    const p5Before = { posts: posts.length, mappedPosts: mappedPosts.length,
+      patchCalls: patchCalls.length, deleteCalls: deleteCalls.length };
+    const portable = await evaluate("(async () => {"
+      + "const mod=await import('/p5-reference/p5_r3c2_runtime_adapter.mjs');"
+      + "const ineligible=mod.p5R3c2SourceIsEligible({id:'imported',idempotent:true,saveUrl:'/api/tasks/1'});"
+      + "const browser={location:globalThis.location,navigator:globalThis.navigator,localStorage:globalThis.localStorage};"
+      + "let missingHostRefused=false;"
+      + "try{mod.createP5R3c2ReferenceAdapter({host:{origin:globalThis.location.origin},browser})}"
+      + "catch(e){missingHostRefused=String(e).includes('trusted nonserializable host hooks')}"
+      + "const adapter=mod.createP5R3c2ReferenceAdapter({"
+      + "host:{origin:globalThis.location.origin,getApproval:async()=>false,"
+      + "getSession:async()=>{throw Error('Unexpected auth request')}},browser});"
+      + "let denied=false;"
+      + "try{await adapter.begin({recordId:1,status:'approved',key:'p5_zip_browser_no_write_001'})}"
+      + "catch(e){denied=String(e).includes('approval required')}"
+      + "return {kind:adapter.kind,defaultOn:adapter.enabledByDefault,"
+      + "ineligible,missingHostRefused,denied,begin:typeof adapter.begin,"
+      + "check:typeof adapter.check,replay:typeof adapter.replay};"
+      + "})()");
+    assert.deepEqual(portable, { kind:'synthetic-reference-only',defaultOn:false,
+      ineligible:false,missingHostRefused:true,denied:true,
+      begin:'function',check:'function',replay:'function' },
+    'Standalone Vite browser failed to load shared adapter or enforced implicit write');
+    assert.deepEqual({posts:posts.length,mappedPosts:mappedPosts.length,
+      patchCalls:patchCalls.length,deleteCalls:deleteCalls.length},p5Before,
+    'Importing dormant P5 reference source caused business mutation');
+    console.log('P5-R3c2b1: production standalone ZIP browser imported optional module; no write authorized');
     await until(() => evaluate("!!document.querySelector('[data-atlas-chart-source=remote]')"), 'Remote chart initial GET');
     const chart = await evaluate("(() => { const svg = [...document.querySelectorAll('svg[role=img]')].find(el => el.getAttribute('aria-label')?.includes('验收多序列曲线')); return svg ? { label: svg.getAttribute('aria-label'), paths: svg.querySelectorAll('polyline').length, points: svg.querySelectorAll('circle').length } : null; })()");
     assert(chart, 'Exported chart was not rendered');
@@ -785,7 +815,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'legacy RecordProvider 422 field, committed 503 draft safety and 403 permission', 'shared mutation single-flight rapid double click and record GET broadcast', 'non-first record refresh retention and disappeared-target safety', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'legacy RecordProvider 422 field, committed 503 draft safety and 403 permission', 'shared mutation single-flight rapid double click and record GET broadcast', 'non-first record refresh retention and disappeared-target safety', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'production Vite served P5 reference module loads only via explicit import and cannot authorize business writes', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
