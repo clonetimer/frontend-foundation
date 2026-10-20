@@ -285,52 +285,24 @@ try {
   // This closure is deliberately serialized and executed in either tab;
   // credentials and real identity are freshly read from the cookie session.
   async function browserScopedAction(args) {
-    const response=await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
-    if(response.status!==200)throw new Error('Current session unavailable');
-    const trusted=await response.json();
-    const capabilityModule=await import('/p5_capability_contract.mjs');
-    const journalModule=await import('/p5_r3c_scoped_journal.mjs');
-    const capability=await capabilityModule.discoverP5Capability({
-      origin:globalThis.location.origin,verifiedIdentity:trusted.identity,
-      fetchImpl:fetch,now:Date.now
-    });
-    const task=await fetch('/api/tasks/1',{credentials:'same-origin',cache:'no-store'});
-    const etag=task.headers.get('etag');
-    const request={method:'PATCH',path:'/api/tasks/1',
-      key:args.key,etag,status:args.status,
-      body:JSON.stringify({status:args.status})};
-    return journalModule.runP5R3cOperation({
-      action:args.action,origin:globalThis.location.origin,
-      lockManager:globalThis.navigator.locks,storage:globalThis.localStorage,
-      verifiedIdentity:trusted.identity,capability,
-      expectedProviderId:capability.providerId,expectedReceiptEpoch:capability.receiptEpoch,
-      getTrustedSession:async()=>{
-        const r=await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
-        if(r.status!==200)throw new Error('Session expired');
-        return r.json();
+    // This exact portable runtime is also emitted into exported React ZIPs.
+    // The host functions are runtime-only (not serialized Studio sources).
+    const module = await import('/p5_r3c2_runtime_adapter.mjs');
+    const adapter = module.createP5R3c2ReferenceAdapter({
+      host: {
+        origin: globalThis.location.origin,
+        getApproval: async ({fixtureOnly}) => fixtureOnly === true,
+        getSession: async ({fetchSession}) => fetchSession()
       },
-      request,
-      executePatch:async({record,session})=>{
-        const r=await fetch(record.path,{
-          method:record.method,credentials:'same-origin',cache:'no-store',
-          headers:{'Content-Type':'application/json',
-            'X-P5-CSRF-Token':session.csrfToken,
-            'Idempotency-Key':record.key,'If-Match':record.etag,
-            'X-P5-Provider-Id':record.providerId,
-            'X-P5-Receipt-Epoch':record.receiptEpoch},
-          body:record.body
-        });
-        return {status:r.status};
-      },
-      queryReceipt:async({record})=>{
-        const r=await fetch('/api/mutations/'+record.key,{
-          method:'GET',credentials:'same-origin',cache:'no-store',
-          headers:{'X-P5-Provider-Id':record.providerId,
-            'X-P5-Receipt-Epoch':record.receiptEpoch}
-        });
-        return {status:r.status,body:await r.json()};
-      }
+      browser: globalThis,
+      fetchImpl: globalThis.fetch
     });
+    if(args.action==='begin')return adapter.begin({
+      recordId:1,status:args.status,key:args.key
+    });
+    if(args.action==='check')return adapter.check();
+    if(args.action==='replay')return adapter.replay();
+    throw new Error('Unknown test action');
   }
   // Hold an exclusive Web Lock in tab A. Tab B MUST fail fast rather than
   // queue a second write or fall back to a non-atomic localStorage lock.

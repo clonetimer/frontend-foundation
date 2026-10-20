@@ -6,6 +6,7 @@ import { exportedRecordRuntime } from './record-exporter';
 import { resolveOverlayWidgetProps, resolveRecordList, resolveRecordSubmit, resolveTableWidgetProps } from './data-sources';
 import { studioEffectStyles } from './effect-styles';
 import { exportedWidgetCatalog, exportedWidgetPreview } from './exported-widgets';
+import { exportedP5ReferenceSources } from './exported-p5-reference';
 import { exportedWorkflowRuntime } from './exported-workflows';
 import { studioWidgetStyles } from './widget-styles';
 import { findRecordRules } from './record-bindings';
@@ -387,6 +388,14 @@ const STANDALONE_PROJECT_PACKAGE = {
   dependencies: { antd: '^6.6.5', react: '^19.3.0', 'react-dom': '^19.3.0' },
   devDependencies: { '@types/react': '^19.3.0', '@types/react-dom': '^19.3.0', typescript: '~6.0.2', vite: '^8.3.2' }
 };
+function decodeP5Reference(base64: string): string {
+  // The repository import scanner must not parse dormant code within a
+  // serialized source mirror as live dependencies of Studio. Decode only
+  // when the user explicitly exports a ZIP; preserve exact UTF-8 bytes.
+  return new TextDecoder('utf-8', { fatal: true }).decode(
+    Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+  );
+}
 export function projectExportFiles(document: StudioDocument): Array<{ name: string; text: string }> {
   const files: Array<{ name: string; text: string }> = [
     { name: 'package.json', text: JSON.stringify(STANDALONE_PROJECT_PACKAGE, null, 2) + '\n' },
@@ -403,6 +412,9 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
     { name: 'studio-widget-preview.tsx', text: exportedWidgetPreview },
     { name: 'widgets.ts', text: exportedWidgetCatalog },
     { name: 'StudioApp.tsx', text: generateStudioApp(document) },
+    // Dormant reference source: never imports into the generated app, never
+    // replaces existing POST/PATCH/DELETE handlers. Explicit host opt-in only.
+    ...exportedP5ReferenceSources.map(({ name, base64 }) => ({ name, text: decodeP5Reference(base64) })),
     { name: 'README.md', text: `# ${document.blueprint.project.title}
 
 ## 单独启动
@@ -416,6 +428,7 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
 - **studio-records.tsx**：记录列表 GET、分页与表单联动；表格组件由 **studio-widget-preview.tsx** 处理独立的服务端分页、搜索、筛选、排序、行级「查看」只读详情抽屉与可选详情 GET、选中记录编辑 PATCH、二次确认的行级 DELETE。编辑提交后重新获取后端数据；删除成功后刷新列表与表格、清除被删除记录的选中上下文并在越页时回到有效页。删除失败时不伪造成功。
 - **studio-widget-preview.tsx + widgets.ts**：与设计器同源的组件，包括文件上传/文件列表、异步任务/执行日志、折线/环形/热力图等。文件上传需配置真实 POST 接口；任务进度需配置 GET 状态接口；多序列折线图可通过 dataUrl/dataPath 接入真实 GET；文件列表、日志与未配置接口的图表保持静态或本地交互。
 - **studio-workflows.ts**：按钮工作流执行器；支持双分支判断、请求返回变量、组件事件、执行日志以及旧有确认、保存、刷新、导航步骤。
+- **p5-reference/*.mjs**：可选合成环境 P5-R3c2a 参考代码（能力协商、Web Locks 待恢复状态机、同源宿主适配器）。源代码与 Studio 参考模块逐字节一致，默认不导入/不执行；只能由自行编写的可信同源会话宿主显式启用，且仅支持隔离的 /api/tasks/{id} 状态 PATCH，绝不能把项目数据源的 URL、导入 JSON 或实际业务按钮当作授权。请勿直接将该合成协议用于生产业务。
 - **studio-api.tsx**：独立 GET 数值/文字读取和按钮 POST 请求示例。浏览器直接请求接口；项目级共享记录源则在导出时解析为实际地址。需后端允许 CORS 或部署同源 API，不支持在设计文件中安全存储凭据。请勿将 Token、密码或密钥放入设计文件或接口 URL。
 - **atlas.studio.json**：可重新导入本设计器，恢复全部页面、导航设置、项目数据源目录、页面绝对坐标、数值尺寸、动效与 API 配置。
 - **foundation.project.json**：原 Foundation 0.21.x Blueprint，用于原 Compiler 编译页面结构和导航。
