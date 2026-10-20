@@ -23,16 +23,16 @@ test('standalone P5 source files are exact source mirrors including imports',()=
   assert.deepEqual(assets.map(x=>x.name),
     sourceNames.map(x=>'p5-reference/'+x));
   for(let i=0;i<sourceNames.length;i++){
-    assert.equal(assets[i].text,read('tooling/scripts/aas_p0/'+sourceNames[i]),
+    assert.equal(Buffer.from(assets[i].base64,'base64').toString('utf8'),read('tooling/scripts/aas_p0/'+sourceNames[i]),
       'Standalone source drift: '+sourceNames[i]);
   }
-  assert.match(assets[2].text,/\.\/p5_capability_contract\.mjs/);
-  assert.match(assets[2].text,/\.\/p5_r3c_scoped_journal\.mjs/);
+  assert.match(Buffer.from(assets[2].base64,'base64').toString('utf8'),/\.\/p5_capability_contract\.mjs/);
+  assert.match(Buffer.from(assets[2].base64,'base64').toString('utf8'),/\.\/p5_r3c_scoped_journal\.mjs/);
 });
 test('exporter packages optional source without importing or activating it',()=>{
   const exporter=read('apps/showcase/src/modules/pattern-atlas/studio/exporter.ts');
   assert.match(exporter,/import \{ exportedP5ReferenceSources \} from '\.\/exported-p5-reference';/);
-  assert.match(exporter,/\.\.\.exportedP5ReferenceSources,/);
+  assert.match(exporter,/\.\.\.exportedP5ReferenceSources\.map\(/);
   assert.doesNotMatch(exporter,/import .*p5_r3c2_runtime_adapter\.mjs/);
   const preview=read('apps/showcase/src/modules/pattern-atlas/studio/WidgetPreview.tsx');
   const provider=read('apps/showcase/src/modules/pattern-atlas/studio/StudioRecords.tsx');
