@@ -1,0 +1,7 @@
+{
+  "name": "ff-requirements-driven-sqlite-example",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Standalone SQLite/FF Studio comparison fixture; not a pnpm workspace package",
+  "type": "commonjs"
+}

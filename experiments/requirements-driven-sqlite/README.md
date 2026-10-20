@@ -8,6 +8,8 @@
 - **B：FF Studio 优先**：`atlas.studio.json` + `foundation.project.json` 使用已有 Studio 文件上传与数据表格；`ff_experiment/ff_adapter.py` 在**业务服务端**实现 `multipart/form-data` 上传及固定字段分页查询适配。此方案**不能**通过 Studio 原生配置表达任意多字段 AND、温度数值比较、任意 CSV 动态表头和全条件同步导出。
 - **比较依据**：`requirements/` 保存 Q-01~Q-14 澄清假设和验收追踪；`HISTORICAL_V03_REPORT.md` 记录 2026-10-20 对照实验实测范围与当时环境的限制。
 
+**仓库内 Node 执行边界**：本目录的独立 `package.json` 将旧式 FF 复现脚本限制在 CommonJS；它不属于 `pnpm-workspace.yaml` 工作区，不改变 FF 根 ESM 模式。Linux/macOS 可以从本目录执行 `bash scripts/verify.sh` 一次完成下述 Python/API 复测和 JS 语法检查（不是浏览器或生产构建验收）。
+
 ## 快速复验（Python 3.11+，无额外 Python 依赖）
 
 从**本目录**执行：
