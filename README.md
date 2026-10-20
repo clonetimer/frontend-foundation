@@ -38,6 +38,8 @@
 
 **P5-R3c2b1 独立 ZIP 真实模块加载验收**：将原先只存在于 ZIP 根目录的合成 P5 参考 `.mjs` 文件改为 Vite `public/p5-reference/` 静态路径；生产构建产物内的三个模块与 Studio 共用源码逐字节一致。独立 React ZIP 的真实 Chromium 验收现显式动态导入并调用同源参考适配器，验证缺少可信宿主授权时 fail-closed、业务 POST/PATCH/DELETE 计数不增加；生成应用本身仍不自动导入或执行。**不接入生产 SSO、真实业务保存/删除，也不提升 Stable 发布级别。** 详见 [P5-R3c2b1 ZIP 浏览器验证](docs/PATTERN_ATLAS_P5_R3C2B1_ZIP_BROWSER_IMPORT.md)。
 
+**P5-R3c2b2 独立 ZIP 恢复协议运行时验收（合成）**：在真正构建出的独立 React ZIP 的 Chromium 页面中，显式导入同源 P5 参考适配器，使用隔离的内存 HTTP 响应模拟器验证写前 Pending 持久记录、已提交但响应为 503、重复 begin 拒绝、租户改变阻止恢复、原 Key 查询已提交回执并清除日志，确保普通业务 POST/PATCH/DELETE 计数不变。该测试并非真实后端 HTTP/SQLite 流程；其对应验收继续由 P5-R3b2b 的独立原生 fixture 承担。**仍不接管 Studio/ZIP 业务接口，不提供正式 SSO、跨设备 exactly-once 或 Stable 发布签收。** 详见 [P5-R3c2b2 ZIP 运行时恢复验收](docs/PATTERN_ATLAS_P5_R3C2B2_ZIP_RUNTIME_RECOVERY.md)。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
