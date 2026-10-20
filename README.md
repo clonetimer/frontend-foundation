@@ -8,6 +8,8 @@
 
 当前进入**维护优先、实际应用验证、交付验收**阶段，不再主动扩张组件、Studio DSL、Compiler/Kernel 或 P5 适配能力。只在有安全、缺陷、兼容性或真实业务证据时进入独立 PR。Foundation `0.21.0` 源码状态仍为 **Stable-Ready**；Studio 编辑器 `1.0.0-rc.1` 仍是**草稿候选**，未取得真实业务与人工签收，不是正式 Stable。两者发布流程不得混同。详见 [功能冻结、维护策略与最终交付清单](docs/FEATURE_FREEZE_DELIVERY_HANDOFF_20261020.md)。
 
+**GitHub Release 完整源码快照**：仓库提供精确主干提交的受控归档工作流 `.github/workflows/foundation-source-snapshot.yml`，生成 ZIP、tar.gz、`SHA256SUMS` 及来源元数据；仅创建独立的 **prerelease 源码包**，不修改 npm Registry dist-tag，也不将 Studio 候选版冒充正式 Stable。范围和使用方法参见 [0.21.0 源码快照说明](docs/releases/0.21.0-source-snapshot-20261020.md)。
+
 ## 依赖更新与 CI 真实性门禁（Issue #68）
 
 pnpm 11 的 catalog-managed 依赖曾被 Dependabot 反复生成只有锁文件顺序变化、实际未升级的 PR。当前临时关闭 **npm 常规版本更新 PR**（`open-pull-requests-limit: 0`），保留 GitHub Actions 升级和仓库启用条件下的 Dependabot 安全更新。CI 在无需安装依赖的 Static gates 中要求 `pnpm-workspace.yaml` catalog 与 `pnpm-lock.yaml` 完全一致；对 Dependabot PR 另行核对声称升级的**真实解析版本**，不把 reorder-only 锁文件视为升级。维护者可使用 `pnpm -r update '<package>'` 在 feature 分支受控升级，再运行 `node tooling/scripts/dependabot-catalog-gate.mjs --expect '<package>' <version>`、frozen install 与跨平台门禁。详见 [pnpm catalog / Dependabot 无效升级治理](docs/DEPENDABOT_PNPM_CATALOG_RECOVERY.md)。该缓解措施不等于修复上游 Dependabot 内部 bug，也未自动完成任何运行依赖的版本升级。
