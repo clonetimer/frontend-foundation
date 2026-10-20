@@ -74,10 +74,20 @@ export function checkUpgrade(baseLock, headLock, title) {
         throw new Error('Dependabot claimed upgrade ' + name + ' ' + oldVersion + ' -> ' +
           targetVersion + ', resolved catalog: ' + String(before.get(name)?.version) + ' -> ' +
           String(after.get(name)?.version));
+      // A catalog version alone is not sufficient: the actual pnpm packages
+      // resolution must also move to the advertised version. A catalog-only
+      // diff can otherwise pass even when the installed package stays old.
+      const oldPackages = resolvedPackages(baseLock);
+      const newPackages = resolvedPackages(headLock);
+      if (!oldPackages.has(name + '@' + oldVersion) ||
+          !newPackages.has(name + '@' + targetVersion) ||
+          oldPackages.has(name + '@' + targetVersion))
+        throw new Error('Dependabot catalog changed without a new resolved package: ' + name);
       return name + ' ' + oldVersion + ' -> ' + targetVersion;
     }
     const p0 = resolvedPackages(baseLock), p1 = resolvedPackages(headLock);
-    if (!p0.has(name + '@' + oldVersion) || !p1.has(name + '@' + targetVersion))
+    if (!p0.has(name + '@' + oldVersion) || !p1.has(name + '@' + targetVersion) ||
+        p0.has(name + '@' + targetVersion))
       throw new Error('Dependabot claimed upgrade without new resolved package: ' + name);
     return name + ' ' + oldVersion + ' -> ' + targetVersion;
   }
@@ -123,9 +133,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log(checkEvent(event, workspace, headLock, baseLock, changedPaths));
     if (args.length) {
       const version = catalogs(headLock, 'lock').get(args[1])?.version;
-      if (version !== args[2]) throw new Error('Expected ' + args[1] + '@' + args[2] +
-        ', actual ' + String(version));
-      console.log('Verified resolved upgrade: ' + args[1] + '@' + version);
+      if (version !== args[2] || !resolvedPackages(headLock).has(args[1] + '@' + args[2]))
+        throw new Error('Expected catalog and resolved package ' + args[1] + '@' + args[2] +
+          ', actual catalog ' + String(version));
+      console.log('Verified catalog and resolved package: ' + args[1] + '@' + version);
     }
   } catch (error) {
     console.error('Dependabot pnpm catalog gate failed:', error.message);
