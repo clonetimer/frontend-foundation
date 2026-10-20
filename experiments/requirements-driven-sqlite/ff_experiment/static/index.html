@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <title>数据工作台 | 需求驱动开发实验</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">F<span>·</span></div><div><strong>Foundation Lab</strong><small>需求驱动实验 · 01</small></div></div>
+      <div class="nav-caption">工作区</div>
+      <nav aria-label="工作区导航">
+        <a class="nav-link active" href="#import-panel"><span class="nav-number">01</span> 文件导入</a>
+        <a class="nav-link" href="#database-panel"><span class="nav-number">02</span> 数据库管理</a>
+        <a class="nav-link" href="#search-panel"><span class="nav-number">03</span> 检索与导出</a>
+      </nav>
+      <div class="sidebar-note"><span class="status-dot"></span><span>本地运行 · 不上传云端</span></div>
+      <div class="sidebar-foot">实验原型 v0.1<br />不是生产业务平台</div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar"><div class="crumb">需求实验 <span>/</span> 文件数据工作台</div><span class="pill">LOCAL SQLITE</span></header>
+      <div class="page-width">
+        <div class="hero">
+          <div class="eyebrow"><span class="little-line"></span> DATA WORKBENCH</div>
+          <h1>让本地文件，变成<br /><em>可查询的数据资产。</em></h1>
+          <p>导入 CSV 或 TXT，生成独立 SQLite 数据库，再按条件检索、浏览与导出。没有虚构数据，也没有依赖云服务。</p>
+          <div class="hero-stats"><div><b>01</b><span>导入并校验</span></div><div><b>02</b><span>数据入库</span></div><div><b>03</b><span>检索与导出</span></div></div>
+        </div>
+        <section id="import-panel" class="panel"><div class="section-head"><div><span class="step-label">STEP 01</span><h2>导入本地数据文件</h2><p>逐行校验，全部成功后生成数据库；有错误时不留下半成品。</p></div><div class="head-chip">CSV / TXT / TSV</div></div>
+          <div class="upload-grid"><div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="选择文件上传，或将文件拖至此区域"><div class="upload-symbol">⇧</div><strong id="file-label">将文件拖到这里，或点击选择文件</strong><span>支持 .csv / .txt / .tsv，单文件最大 20 MB</span><input type="file" id="file" accept=".csv,.txt,.tsv,text/csv,text/plain" hidden /></div>
+            <div class="upload-config"><label>文件编码<select id="encoding"><option value="utf-8-sig">UTF-8 / UTF-8 BOM</option><option value="utf-8">UTF-8（严格）</option><option value="gb18030">GB18030 / GBK</option></select></label><label>分隔符<select id="delimiter"><option value="auto">自动检测</option><option value=",">逗号 ,</option><option value="tab">制表符 Tab</option><option value=";">分号 ;</option></select></label><button class="btn primary" id="import-btn" disabled>导入并生成 SQLite <span>→</span></button></div></div>
+          <div id="import-result" class="inline-message" aria-live="polite" hidden></div>
+        </section>
+        <section id="database-panel" class="panel"><div class="section-head"><div><span class="step-label">STEP 02</span><h2>已生成的数据库</h2><p>每次导入会得到一个独立的 .sqlite3 文件；重启应用后仍可查询。</p></div><button class="btn soft" id="refresh-btn">↻ 刷新列表</button></div><div id="datasets" class="datasets"><div class="empty">尚无数据库。请先导入示例 CSV 或自己的数据文件。</div></div></section>
+        <section id="search-panel" class="panel"><div class="section-head"><div><span class="step-label">STEP 03</span><h2>条件检索与结果导出</h2><p>多个条件之间采用 AND；导出的是全部匹配记录，而非仅当前页。</p></div><span class="head-chip" id="active-label">请先选择数据库</span></div>
+          <div id="query-locked" class="locked-state">↖ 先在上方选择一个数据库，之后可以按字段建立检索条件。</div>
+          <div id="query-controls" hidden><div class="filter-head"><h3>筛选条件</h3><button class="link-btn" id="add-filter">＋ 添加条件</button></div><div id="filters" class="filters"></div><div class="query-actions"><label>排序字段<select id="sort-column"></select></label><label>排序方向<select id="sort-direction"><option value="asc">升序</option><option value="desc">降序</option></select></label><button class="btn primary" id="query-btn">执行检索 <span>→</span></button><button class="btn outline" id="clear-btn">清除条件</button></div>
+            <div class="results-bar"><div><strong id="results-count">等待查询</strong><small id="results-sub">支持分页与独立导出</small></div><div class="result-actions"><button class="btn soft" id="export-btn">↓ 导出匹配 CSV</button><button class="btn outline" id="download-db-btn">↓ 下载 SQLite</button></div></div><div class="table-scroll"><table><thead id="result-head"></thead><tbody id="result-body"><tr><td class="empty">执行查询后展示结果。</td></tr></tbody></table></div><div class="pagination"><span id="page-status">第 1 页</span><div><button class="btn soft small" id="prev-btn">上一页</button><button class="btn soft small" id="next-btn">下一页</button></div></div>
+          </div>
+        </section>
+        <footer class="footer"><span>FF RESEARCH / REQUIREMENTS-FIRST EXPERIMENT</span><span>Python stdlib + SQLite · 回环地址访问</span></footer>
+      </div>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

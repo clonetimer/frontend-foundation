@@ -1,0 +1,57 @@
+"""Build a Studio v1 design-file candidate from the inspected main schema (not FF-exported ZIP)."""
+import json
+from pathlib import Path
+
+OUT = Path(__file__).resolve().parent
+
+def layout(nid, *children, gap=18):
+    return {'id':nid, 'kind':'layout', 'type':'stack', 'props':{'gap':gap}, 'children':list(children)}
+
+def heading(nid, message, variant='body'):
+    return {'id':nid,'kind':'widget','type':'text','props':{'text':message,'variant':variant}}
+
+def widget(nid, title):
+    return {'id':nid,'kind':'widget','type':'placeholder','props':{'title':title,'description':'Studio 体验模式提供实时功能'}}
+
+pages = [
+    {'id':'import','title':'文件入库','pattern':'page','index':True,'composition':layout('importRoot',
+        heading('importHeading','文件导入 · 生成 SQLite','title'),
+        heading('importNotice','对照实验：UTF-8 CSV/TSV/TXT，每次导入独立 SQLite，最多 20 MB。此页面只展示 FF 原生文件上传及业务适配能力。'),
+        widget('fileUpload','选择本地数据文件'),
+        heading('importFoot','上传成功后，请切换“数据集清单”页。FF 原生上传组件尚不能选择 GB18030 编码、显示原字段映射/数值类型，且不会自动选中新数据库。'))},
+    {'id':'datasets','title':'数据集清单','pattern':'page','route':'datasets','composition':layout('datasetsRoot',
+        heading('datasetsHeading','数据集清单 · SQLite 文件记录','title'),
+        heading('datasetsNotice','以下为真实后端存储的数据库目录。支持搜索、分页和排序，但目前无法点选数据集并驱动另一个表格，也没有原生 SQLite 文件下载动作。'),
+        widget('datasetsTable','已导入数据库'))},
+    {'id':'records','title':'样例遥测查询','pattern':'page','route':'records','composition':layout('recordsRoot',
+        heading('recordsHeading','样例遥测查询 · 固定六列','title'),
+        heading('recordsNotice','仅接入最新一份且字段与随包示例一致的数据。表格搜索只匹配设备编号；单选筛选为状态；支持温度排序。不等价于原业务的任意列多条件 AND 和数值区间检索。'),
+        widget('recordsTable','最新示例遥测记录'),
+        heading('recordsFoot','本页面没有“按当前所有条件导出 CSV”和“下载数据库”能力，这两项由 v0.1 独立业务页面提供，不得标为 FF 原生通过。'))}
+]
+
+sources = [
+    {'id':'local-datasets','name':'SQLite 数据集清单（FF 适配）','listUrl':'/api/ff/datasets','detailUrl':'','saveUrl':'','itemsPath':'data.items','detailPath':'data',
+      'idField':'id','labelField':'filename','pageSize':8,'paginationMode':'server','pageParam':'page','sizeParam':'pageSize','searchParam':'search','totalPath':'data.total',
+      'sortField':'imported_at','sortParam':'sortBy','sortDirectionParam':'sortOrder'},
+    {'id':'sample-telemetry','name':'固定六列示例遥测（FF 适配）','listUrl':'/api/ff/latest-records','detailUrl':'','saveUrl':'','itemsPath':'data.items','detailPath':'data',
+     'idField':'id','labelField':'device','pageSize':10,'paginationMode':'server','pageParam':'page','sizeParam':'pageSize','searchParam':'search','totalPath':'data.total',
+     'filterField':'state','filterParam':'filter','filterValues':['正常','告警'],'sortField':'temp','sortParam':'sort','sortDirectionParam':'order'}
+]
+
+widget_decorations = {
+  'import:fileUpload':{'widgetKind':'file-upload','widgetProps':{'title':'选择 CSV / TSV / TXT 文件','accept':'.csv,.tsv,.txt','maxSizeMb':20,'uploadUrl':'/api/ff/upload'}},
+  'datasets:datasetsTable':{'widgetKind':'table','widgetProps':{'title':'已导入 SQLite 数据库','sourceId':'local-datasets','tableColumns':'filename|文件名称\nrow_count|行数\nimported_at|导入时间','pageSize':8,'idField':'id','dataUrl':'','detailUrl':'','deleteUrl':'','filterField':'','filterValues':'','sortField':'imported_at'}},
+  'records:recordsTable':{'widgetKind':'table','widgetProps':{'title':'示例遥测数据','sourceId':'sample-telemetry','tableColumns':'time|采集时间\ndevice|设备编号\ntemp|温度\nspeed|转速\nstate|状态\nnote|备注','pageSize':10,'idField':'id','dataUrl':'','detailUrl':'','deleteUrl':'','filterField':'state','filterValues':'正常,告警','sortField':'temp'}}
+}
+blueprint={'schemaVersion':1,'project':{'id':'ff.data-workbench.compare','packageName':'ff-data-workbench-compare','title':'FF需求驱动实验·Studio对照版'},
+ 'foundation':{'version':'0.21.0','profile':'management','shell':'workspace','router':'browser','deployment':'none','contract':'none'},
+ 'theme':{'primaryColor':'#11765c','layout':{'contentPadding':20}},
+ 'navigation':{'items':[{'target':page['id'],'label':page['title'],'order':i*10} for i,page in enumerate(pages)]},
+ 'pages':pages,'resources':[]}
+studio={'format':'pattern-atlas-studio','version':1,'blueprint':blueprint,
+ 'design':{'accent':'jade','surface':'light','density':'comfortable','radius':'soft','motion':'system','speed':'normal','font':'sans','typeScale':'regular','spacing':'balanced','elevation':'soft'},
+ 'decorations':widget_decorations,'shell':{'navigation':'sidebar','sidebarWidth':210},'dataSources':sources}
+(OUT/'atlas.studio.json').write_text(json.dumps(studio,indent=2,ensure_ascii=False)+'\n',encoding='utf8')
+(OUT/'foundation.project.json').write_text(json.dumps(blueprint,indent=2,ensure_ascii=False)+'\n',encoding='utf8')
+print('Generated Studio v1 candidate:',len(pages),'pages,',len(sources),'sources,',len(widget_decorations),'enhanced widgets')
