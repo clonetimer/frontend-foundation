@@ -4,6 +4,10 @@
 
 **0.21.0 已完成源码、离线/真实依赖、打包消费者、双 Domain SDK 与制品反向验收的 Stable 收口。功能面继续冻结，不再扩充 Blueprint/Designer DSL。按照仓库既有发布规则，`0.21.0` 的不可变包应先以 `candidate` dist-tag 发布；用户接手的真实浏览器/视觉验收、GitHub exact-commit 与目标 registry smoke 通过后，再把同一批 `0.21.0` 字节提升到 `latest`。在完成外部 promotion 前，本源码交付状态称为 Stable-Ready。**
 
+## pnpm / Dependabot 版本真实性门禁（Issue #68）
+
+针对 pnpm 11 `catalog:` 依赖更新出现仅重排 `pnpm-lock.yaml`、实际解析版本未变化的问题，新增 **Dependabot resolved-version admission**：依赖更新 PR 必须证明目标包的真实解析版本发生变化，且 `pnpm-workspace.yaml` 与 lockfile 的 catalog 声明一致。保留现有 `--frozen-lockfile`、最小发布日期和安全扫描。Dependabot 改用 `versioning-strategy: increase` 作为待验证缓解措施；这不等于上游兼容问题已经修复。详见 [依赖版本门禁与安全升级流程](docs/DEPENDABOT_PNPM_CATALOG_ADMISSION.md)。
+
 ## AI UI 开发规范（Skill P0 试点）
 
 新增 [DESIGN.md](DESIGN.md)、[组件工程指南](docs/COMPONENT_AUTHORING_GUIDE.md)、[仓库自有 UI Design Skill](.agents/skills/foundation-ui-design/SKILL.md) 与 [/create 源码审查试点](docs/STUDIO_CREATE_UI_REVIEW.md)。这些内容用于约束 AI 和开发者的设计/审查工作，**不是**新增 Studio Runtime、Tailwind/shadcn 依赖或 Stable 通过证明。/create 增强了键盘焦点及辅助说明可读性；真实浏览器验收仍依赖对应 PR 的 Actions 和人工试用。
