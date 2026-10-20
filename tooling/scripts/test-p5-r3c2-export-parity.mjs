@@ -33,6 +33,8 @@ test('exporter packages optional source without importing or activating it',()=>
   const exporter=read('apps/showcase/src/modules/pattern-atlas/studio/exporter.ts');
   assert.match(exporter,/import \{ exportedP5ReferenceSources \} from '\.\/exported-p5-reference';/);
   assert.match(exporter,/\.\.\.exportedP5ReferenceSources\.map\(/);
+  assert.match(exporter,/name: 'public\/' \+ name/);
+  assert.match(exporter,/decodeP5Reference\(base64\)/);
   assert.doesNotMatch(exporter,/import .*p5_r3c2_runtime_adapter\.mjs/);
   const preview=read('apps/showcase/src/modules/pattern-atlas/studio/WidgetPreview.tsx');
   const provider=read('apps/showcase/src/modules/pattern-atlas/studio/StudioRecords.tsx');

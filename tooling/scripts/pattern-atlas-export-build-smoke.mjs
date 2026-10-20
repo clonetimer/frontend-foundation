@@ -124,6 +124,19 @@ function exec(program, args, cwd) {
       });
     }
     const files = projectExportFiles(document);
+    // P5-R3c2b1: the real ZIP must expose dormant modules through Vite's
+    // public/ copy path, without including them in the built React bundle.
+    const referenceNames=[
+      'p5_capability_contract.mjs',
+      'p5_r3c_scoped_journal.mjs',
+      'p5_r3c2_runtime_adapter.mjs'
+    ];
+    for(const name of referenceNames){
+      const expected=readFileSync(resolve(__dirname,'aas_p0',name),'utf8');
+      const output=files.find(item=>item.name==='public/p5-reference/'+name);
+      assert(output, 'Standalone source not reachable via Vite public path: '+name);
+      assert.equal(output.text,expected,'Standalone reference code diverged: '+name);
+    }
     const data = new Uint8Array(await zipTextFiles(files).arrayBuffer());
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     let cursor = 0, extracted = 0;
@@ -159,6 +172,13 @@ function exec(program, args, cwd) {
     const built = join(destination,'dist','index.html');
     assert(existsSync(built),'Vite production output missing');
     assert.match(readFileSync(built,'utf8'),/assets\//,'Vite bundle missing');
+    for(const name of referenceNames){
+      assert.equal(
+        readFileSync(join(destination,'dist','p5-reference',name),'utf8'),
+        readFileSync(resolve(__dirname,'aas_p0',name),'utf8'),
+        'Vite production build omitted or rewrote P5 source: '+name
+      );
+    }
     if (browserAcceptance) await runExportedBrowserSmoke(destination);
     console.log('STANDALONE EXPORT BUILD PASSED');
   } finally {
