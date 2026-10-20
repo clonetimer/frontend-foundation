@@ -19,17 +19,17 @@ export function catalogs(text, type) {
     if (top) { section = top[1]; active = false; item = ''; }
     if (type === 'workspace') {
       if (section !== 'catalog') continue;
-      const entry = /^  ([^:]+):\s*(\S.*)$/.exec(line);
+      const entry = /^ {2}([^:]+):\s*(\S.*)$/.exec(line);
       if (entry) output.set(unquote(entry[1]), {specifier:unquote(entry[2].replace(/\s+#.*$/, '').trim())});
       continue;
     }
     if (section !== 'catalogs') continue;
-    if (/^  default:\s*$/.test(line)) { active = true; continue; }
-    if (/^  \S/.test(line)) { active = false; item = ''; }
+    if (/^ {2}default:\s*$/.test(line)) { active = true; continue; }
+    if (/^ {2}\S/.test(line)) { active = false; item = ''; }
     if (!active) continue;
-    const entry = /^    (.+):\s*$/.exec(line);
+    const entry = /^ {4}(.+):\s*$/.exec(line);
     if (entry) { item = unquote(entry[1]); output.set(item, {specifier:null,version:null}); continue; }
-    const field = /^      (specifier|version):\s*(\S.*)$/.exec(line);
+    const field = /^ {6}(specifier|version):\s*(\S.*)$/.exec(line);
     if (item && field) output.get(item)[field[1]] = unquote(field[2].trim());
   }
   return output;
@@ -42,7 +42,7 @@ export function resolvedPackages(lock) {
     const top = /^([^\s#][^:]*):\s*(?:#.*)?$/.exec(line);
     if (top) section = top[1];
     if (section !== 'packages') continue;
-    const entry = /^  (.+):\s*$/.exec(line);
+    const entry = /^ {2}(.+):\s*$/.exec(line);
     if (entry) keys.add(unquote(entry[1]));
   }
   return keys;
