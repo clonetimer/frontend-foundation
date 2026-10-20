@@ -24,10 +24,29 @@ jobs:
           node-version: 24
       - run: node tooling/scripts/architecture-check.mjs
       - run: node tooling/scripts/repository-check.mjs
+      - run: node tooling/scripts/dependabot-catalog-guard.mjs --check-catalog
+      - run: node --test tooling/scripts/test-dependabot-catalog-guard.mjs
       - run: node tooling/scripts/capability-check.mjs
       - run: node tooling/oss/verify.mjs
       - run: node tooling/deployment/verify.mjs
       - run: node --test tooling/scripts/test-chromium-cdp-start.mjs
+
+  dependabot-resolved-version:
+    name: Dependabot resolved-version admission
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && startsWith(github.event.pull_request.head.ref, 'dependabot/npm_and_yarn/') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Verify locked target version, not importer ordering
+        run: node tooling/scripts/dependabot-catalog-guard.mjs --dependabot-pr
 
   node22-compat:
     name: Node 22 compatibility
