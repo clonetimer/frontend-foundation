@@ -36,6 +36,8 @@
 
 **P5-R3c2a 跨 Studio / 独立 React ZIP 的同源恢复适配（合成参考，默认关闭）**：新增仅限 `/api/tasks/{id}` 状态 PATCH 的同源宿主适配器，复用 R3a 实时能力协商和 R3c Web Locks Journal；项目数据源/导入文件无权启用幂等重放。Studio「接口管理」显示不符合自动接入的业务数据源，导出 ZIP 附带三份与仓库逐字节一致且不自动导入执行的 P5 参考模块。Linux/Windows P5 CI 新增适配边界及源码一致性测试，真实双标签 Chromium 验收复用此适配器。**尚未接入正式 SSO、业务数据库或通用保存/删除接口；不提升 Stable 发布状态。** 详见 [P5-R3c2a 适配边界](docs/PATTERN_ATLAS_P5_R3C2A_PORTABLE_ADAPTER.md)。
 
+**P5-R3c2b1 独立 ZIP 真实模块加载验收**：将原先只存在于 ZIP 根目录的合成 P5 参考 `.mjs` 文件改为 Vite `public/p5-reference/` 静态路径；生产构建产物内的三个模块与 Studio 共用源码逐字节一致。独立 React ZIP 的真实 Chromium 验收现显式动态导入并调用同源参考适配器，验证缺少可信宿主授权时 fail-closed、业务 POST/PATCH/DELETE 计数不增加；生成应用本身仍不自动导入或执行。**不接入生产 SSO、真实业务保存/删除，也不提升 Stable 发布级别。** 详见 [P5-R3c2b1 ZIP 浏览器验证](docs/PATTERN_ATLAS_P5_R3C2B1_ZIP_BROWSER_IMPORT.md)。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
