@@ -1,0 +1,9 @@
+One-time source-only GitHub prerelease trigger.
+
+Source parent main: 5a87866fde6f0afb0a8070882e4a18bffe0e25ae
+Tag: foundation-source-v0.21.0-20261020
+
+This file and trigger commit are excluded from the archive.
+The snapshot release points to and archives the validated parent commit.
+Do not modify an already published tag or Release.
+Do not publish npm latest or promote Studio Stable.
