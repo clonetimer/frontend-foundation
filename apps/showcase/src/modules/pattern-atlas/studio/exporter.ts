@@ -388,6 +388,14 @@ const STANDALONE_PROJECT_PACKAGE = {
   dependencies: { antd: '^6.6.5', react: '^19.3.0', 'react-dom': '^19.3.0' },
   devDependencies: { '@types/react': '^19.3.0', '@types/react-dom': '^19.3.0', typescript: '~6.0.2', vite: '^8.3.2' }
 };
+function decodeP5Reference(base64: string): string {
+  // The repository import scanner must not parse dormant code within a
+  // serialized source mirror as live dependencies of Studio. Decode only
+  // when the user explicitly exports a ZIP; preserve exact UTF-8 bytes.
+  return new TextDecoder('utf-8', { fatal: true }).decode(
+    Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+  );
+}
 export function projectExportFiles(document: StudioDocument): Array<{ name: string; text: string }> {
   const files: Array<{ name: string; text: string }> = [
     { name: 'package.json', text: JSON.stringify(STANDALONE_PROJECT_PACKAGE, null, 2) + '\n' },
@@ -406,7 +414,7 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
     { name: 'StudioApp.tsx', text: generateStudioApp(document) },
     // Dormant reference source: never imports into the generated app, never
     // replaces existing POST/PATCH/DELETE handlers. Explicit host opt-in only.
-    ...exportedP5ReferenceSources,
+    ...exportedP5ReferenceSources.map(({ name, base64 }) => ({ name, text: decodeP5Reference(base64) })),
     { name: 'README.md', text: `# ${document.blueprint.project.title}
 
 ## 单独启动
