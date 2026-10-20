@@ -19,11 +19,19 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Pull-request checkout points to a test merge commit. Its first
+          # parent is the base used to verify the bot's *actual* lockfile diff.
+          fetch-depth: 2
       - uses: actions/setup-node@v7
         with:
           node-version: 24
       - run: node tooling/scripts/architecture-check.mjs
       - run: node tooling/scripts/repository-check.mjs
+      - name: Verify pnpm catalog is in sync and Dependabot changes real resolutions
+        run: node tooling/scripts/dependabot-catalog-gate.mjs
+      - name: Unit-test dependency update gate (no installation required)
+        run: node --test tooling/scripts/test-dependabot-catalog-gate.mjs
       - run: node tooling/scripts/capability-check.mjs
       - run: node tooling/oss/verify.mjs
       - run: node tooling/deployment/verify.mjs
