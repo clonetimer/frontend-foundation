@@ -34,6 +34,8 @@
 
 **Chromium 验收启动诊断增强（P5-R3c1 后续稳定化）**：修复 `main` 上 Linux Studio RC 和 Stable 的 Chromium DevTools 启动阶段超时，统一 CDP 启动器在纯启动阶段进行有限次数尝试、独立 profile、进程退出与 stderr 诊断，保留真实浏览器断言与失败门禁；增加 2 项独立启动合同测试。该修复不更改 Studio 功能、P5 回执协议、业务数据或发布策略。详见 [Chromium 启动问题与验收边界](docs/PATTERN_ATLAS_CHROMIUM_STARTUP_RECOVERY.md)。
 
+**P5-R3c2a 跨 Studio / 独立 React ZIP 的同源恢复适配（合成参考，默认关闭）**：新增仅限 `/api/tasks/{id}` 状态 PATCH 的同源宿主适配器，复用 R3a 实时能力协商和 R3c Web Locks Journal；项目数据源/导入文件无权启用幂等重放。Studio「接口管理」显示不符合自动接入的业务数据源，导出 ZIP 附带三份与仓库逐字节一致且不自动导入执行的 P5 参考模块。Linux/Windows P5 CI 新增适配边界及源码一致性测试，真实双标签 Chromium 验收复用此适配器。**尚未接入正式 SSO、业务数据库或通用保存/删除接口；不提升 Stable 发布状态。** 详见 [P5-R3c2a 适配边界](docs/PATTERN_ATLAS_P5_R3C2A_PORTABLE_ADAPTER.md)。
+
 ## Showcase · 交互形式图鉴（应用层增量）
 
 Showcase 的 `/patterns` 提供 38 种模式、六种同数据布局、收藏与组合，并可导出两种由现有 Compiler 验证的 Composition 骨架。新增 `/patterns/effects` 提供 18 种局部特效演示、6 项实时预览参数、UI Brief JSON 导入导出及统一 AI 提示词。只扩展应用层，不修改冻结的 Designer / Blueprint / Compiler 核心契约。详见 [`docs/PATTERN_ATLAS_SHOWCASE.md`](docs/PATTERN_ATLAS_SHOWCASE.md) 与 [`docs/PATTERN_ATLAS_EFFECT_STUDIO.md`](docs/PATTERN_ATLAS_EFFECT_STUDIO.md)。
