@@ -8,6 +8,7 @@ import { accentChoices, designCssVariables, type DesignConfig } from '../effects
 import { effectCategories, effects } from '../effects/catalog';
 import { StudioCanvas } from './StudioCanvas';
 import { NativeAasRecoveryPanel } from './NativeAasRecoveryPanel';
+import { p5R3c2SourceIsEligible } from '../../../../../../tooling/scripts/aas_p0/p5_r3c2_runtime_adapter.mjs';
 import { WorkflowGraph } from './WorkflowGraph';
 import { useStudioRecordFlow } from './StudioRecords';
 import { addRecordEditorExample, addLinkedRecordExample } from './record-template';
@@ -610,6 +611,7 @@ export function Component() {
     {chosen.type !== 'placeholder' && !['input', 'select', 'text', 'metric', 'button'].includes(chosen.type) ? <div className="pa-studio-note">选择记录列表、表单输入框、选择器或按钮以设置数据联动。</div> : null}
   </div> : null;
   const sourceTab = <div className="pa-studio-inspector-inner"><div className="pa-studio-note">接口管理相当于项目的后端连接簿：配置一次列表、详情、保存等 URL，多个组件可重复使用。具体字段显示在「组件数据」中设置。</div>
+    <div className="pa-studio-note" data-testid="p5-r3c2-source-boundary">P5-R3c2a 恢复协议默认关闭；当前 {doc.dataSources.length} 个项目数据源中，允许自动接入的数量为 {doc.dataSources.filter(p5R3c2SourceIsEligible).length}。项目 JSON、URL 与手工填写的幂等标记不能构成服务端授权。仅可信同源宿主可独立启用合成任务参考适配器。</div>
     <div className="pa-studio-source-head"><strong>项目数据源（{doc.dataSources.length}）</strong><Button size="small" onClick={addSource}>＋ 新增</Button></div>
     <details className="pa-studio-api-guide"><summary>如何连接后端接口？</summary>
       <ol><li>先用「普通接口示例」测试 GET，确认能返回记录。</li><li>替换成你后端的列表、详情和保存地址；根据真实 JSON 结果填写数组路径与字段映射。</li><li>点击「测试 GET」，再点击「绑定到本页」；切换到「体验」验证编辑与保存。</li></ol>
