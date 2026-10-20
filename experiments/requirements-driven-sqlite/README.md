@@ -43,6 +43,13 @@ node scripts/ff_import_export.js /path/to/FF/repo atlas.studio.json /tmp/ff-case
 4. 解压后使用 `node scripts/check_export.js /path/to/unzipped-ff-export` 做 TS/TSX 语法和相对引用检查。**这不是** React/Vite 完整生产构建或 GUI 端到端验收。
 5. 生产构建和 GUI 验收需要另外执行 `npm install && npm run build`、启动同源测试服务，并保存可重查的浏览器操作记录。历史 v0.3 因 npm 离线缓存缺失及 Chromium 环境政策阻断，均未宣称 PASS。
 
+## 独立实验 CI 与浏览器验收
+
+- `.github/workflows/sqlite-requirements-experiment.yml` 对本实验目录的 PR、main 变更及手动触发，**独立运行** Linux/Windows Python 3.11 的原业务 13 项测试、FF 适配与设计合同 11 项测试、真实 SQLite 共同查询复测及 JavaScript 语法检查。
+- Linux 作业另安装**仅用于测试的** Playwright 1.57.0，使用 runner 自带的 Chrome/Chromium，在真实浏览器中执行选择文件、SQLite 入库、数值过滤、CSV 与数据库下载、刷新后持久化的流程。测试截图/下载文件存放 `ff_experiment/evidence/`，由 Actions 上传临时 artifact，**不提交到 Git**。
+- 本地仍可运行 `python ff_experiment/tests/browser_smoke.py`（需要另行安装 Playwright 与 Chromium，并可访问 127.0.0.1）；若浏览器受本机策略阻止，应按 **BLOCKED** 记录，不可用 HTTP 测试冒充浏览器 PASS。
+- 新增自动化门禁**不证明**实际 FF Studio GUI 导入、独立 React ZIP 的 npm 安装/生产构建；这些维持单独的正式验收要求。历史 v0.3 证据与新工作流结果必须按提交 SHA 分别引用，不能回填历史状态。
+
 ## 结果、能力边界与证据级别
 
 | 验收项目 | 历史 v0.3 实测结果 |

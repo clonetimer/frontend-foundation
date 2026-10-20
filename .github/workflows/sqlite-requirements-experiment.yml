@@ -1,0 +1,101 @@
+name: SQLite requirements-driven experiment
+
+# These experimental business checks do not alter FF product release gates.
+on:
+  pull_request:
+    paths:
+      - 'experiments/requirements-driven-sqlite/**'
+      - '.github/workflows/sqlite-requirements-experiment.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'experiments/requirements-driven-sqlite/**'
+      - '.github/workflows/sqlite-requirements-experiment.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sqlite-experiment-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-contract:
+    name: SQLite example · ${{ matrix.os }} · Python 3.11
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    env:
+      PYTHONUTF8: '1'
+    defaults:
+      run:
+        working-directory: experiments/requirements-driven-sqlite
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Test baseline business import/query/export (13)
+        run: python -m unittest discover -s ff_experiment/tests -v
+        env:
+          PYTHONPATH: ff_experiment
+      - name: Test FF adapter and Studio design contract (11)
+        run: python -m unittest discover -s tests -v
+      - name: Verify actual SQLite and query equivalence
+        run: python run_comparison.py
+      - name: Validate standalone JavaScript syntax
+        run: |
+          node --check ff_experiment/static/app.js
+          node --check scripts/check_export.js
+          node --check scripts/ff_import_export.js
+      - name: Preserve regenerated JSON proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sqlite-contract-${{ matrix.os }}-${{ github.sha }}
+          path: experiments/requirements-driven-sqlite/evidence/comparison-proof.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  browser-smoke:
+    name: SQLite example · real Chromium upload/query/download
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: '1'
+    defaults:
+      run:
+        working-directory: experiments/requirements-driven-sqlite/ff_experiment
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install test-only Playwright (not an application dependency)
+        run: python -m pip install 'playwright==1.57.0'
+      - name: Locate runner Chrome or Chromium
+        shell: bash
+        run: |
+          CHROME="$(command -v google-chrome || command -v chromium || true)"
+          if [ -z "$CHROME" ]; then
+            echo "The runner does not provide Chrome or Chromium" >&2
+            exit 1
+          fi
+          echo "CHROMIUM_BIN=$CHROME" >> "$GITHUB_ENV"
+      - name: Exercise real browser → HTTP → SQLite → CSV and SQLite downloads
+        run: python tests/browser_smoke.py
+      - name: Preserve browser evidence, even on failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sqlite-browser-${{ github.sha }}
+          path: experiments/requirements-driven-sqlite/ff_experiment/evidence/
+          if-no-files-found: warn
+          retention-days: 30

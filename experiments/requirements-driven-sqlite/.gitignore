@@ -11,3 +11,6 @@ dist/
 *.zip
 *.tar.gz
 *.tsbuildinfo
+
+# Optional Chromium smoke artifacts are local/CI evidence only.
+ff_experiment/evidence/

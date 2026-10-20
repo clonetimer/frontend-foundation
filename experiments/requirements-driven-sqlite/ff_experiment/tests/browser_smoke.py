@@ -12,9 +12,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import make_server
 
 ROOT = Path(__file__).resolve().parent.parent
+EVIDENCE = ROOT / 'evidence'
 
 def main():
     with tempfile.TemporaryDirectory() as folder:
+        EVIDENCE.mkdir(parents=True, exist_ok=True)
         server = make_server(0, Path(folder))
         thread = threading.Thread(target=server.serve_forever,daemon=True)
         thread.start()
