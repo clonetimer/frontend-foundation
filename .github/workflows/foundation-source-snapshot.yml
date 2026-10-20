@@ -34,7 +34,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           SOURCE_SHA="$(git rev-parse HEAD^)"
           MAIN_SHA="$(git rev-parse origin/main)"
           if [ "$SOURCE_SHA" != "$MAIN_SHA" ]; then
