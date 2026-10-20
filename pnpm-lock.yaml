@@ -295,12 +295,12 @@ importers:
       '@foundation/forms':
         specifier: workspace:*
         version: link:../../packages/forms
-      '@foundation/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
       '@foundation/theme':
         specifier: workspace:*
         version: link:../../packages/theme
+      '@foundation/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@foundation/visualization':
         specifier: workspace:*
         version: link:../../packages/visualization
@@ -623,6 +623,18 @@ importers:
 
   packages/design-model: {}
 
+  packages/domain-widgets-fixture:
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      react:
+        specifier: 'catalog:'
+        version: 19.3.0
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
   packages/file:
     devDependencies:
       '@types/react':
@@ -683,18 +695,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.3(@types/node@22.20.5)(msw@2.15.0(@types/node@22.20.5)(typescript@6.0.3))(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2))
-
-  packages/domain-widgets-fixture:
-    devDependencies:
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.3.0
-      react:
-        specifier: 'catalog:'
-        version: 19.3.0
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
 
   packages/observability:
     devDependencies:
@@ -908,9 +908,9 @@ importers:
 
   tooling/deployment: {}
 
-  tooling/release: {}
-
   tooling/oss: {}
+
+  tooling/release: {}
 
   tooling/scripts: {}
 
