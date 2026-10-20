@@ -7,7 +7,11 @@ updates:
       day: monday
       time: '04:00'
       timezone: UTC
-    versioning-strategy: increase-if-necessary
+    # Request an explicit newer lower bound, rather than retaining a catalog
+    # range while pnpm v11 updater emits an importer-order-only no-op.
+    # This is a mitigation, NOT evidence that upstream pnpm catalog bugs are fixed.
+    # CI independently requires actual old -> new lockfile package resolutions.
+    versioning-strategy: increase
     # Our supported runtimes are Node 22/24; @types/node 26 is out of scope.
     # Allow compatible Node 22 type fixes, but block major-line upgrades.
     ignore:
