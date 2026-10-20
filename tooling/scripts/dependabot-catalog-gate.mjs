@@ -89,12 +89,16 @@ export function checkUpgrade(baseLock, headLock, title) {
   throw new Error('Dependabot PR only reordered lockfile; no dependency version changed');
 }
 
-export function checkEvent(event, workspace, headLock, baseLock) {
+export function checkEvent(event, workspace, headLock, baseLock, changedPaths = []) {
   const count = checkCatalog(workspace, headLock);
   if (event?.pull_request?.user?.login !== 'dependabot[bot]')
     return 'Catalog consistent (' + count + ' entries); bot-only audit skipped';
   if (typeof baseLock !== 'string')
     throw new Error('Dependabot PR needs baseline lockfile from first merge parent');
+  // GitHub Actions updates have no npm lockfile: do not reject their
+  // workflow-only version bumps. Any npm/lockfile change remains audited.
+  if (changedPaths.length && changedPaths.every(path => path.startsWith('.github/workflows/')))
+    return 'Workflow-only Dependabot update (npm catalog audit not applicable)';
   return 'Catalog consistent; real upgrade: ' +
     checkUpgrade(baseLock, headLock, event.pull_request.title || '');
 }
@@ -113,7 +117,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const baseLock = event?.pull_request?.user?.login === 'dependabot[bot]'
       ? execFileSync('git', ['show', 'HEAD^1:pnpm-lock.yaml'], {cwd:root,encoding:'utf8'})
       : null;
-    console.log(checkEvent(event, workspace, headLock, baseLock));
+    const changedPaths = baseLock === null ? [] : execFileSync('git',
+      ['diff', '--name-only', 'HEAD^1', 'HEAD'], {cwd:root,encoding:'utf8'})
+      .split(/\r?\n/).filter(Boolean);
+    console.log(checkEvent(event, workspace, headLock, baseLock, changedPaths));
     if (args.length) {
       const version = catalogs(headLock, 'lock').get(args[1])?.version;
       if (version !== args[2]) throw new Error('Expected ' + args[1] + '@' + args[2] +
