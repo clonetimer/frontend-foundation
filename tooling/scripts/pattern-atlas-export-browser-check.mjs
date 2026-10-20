@@ -274,7 +274,7 @@ export async function runExportedBrowserSmoke(directory) {
         throw Error('ZIP P5 synthetic test found an unexpected pending journal');
       }
       const key = 'p5_zip_browser_recovery_00002';
-      const etag = '\"' + 'a'.repeat(64) + '\"';
+      const etag = String.fromCharCode(34) + 'a'.repeat(64) + String.fromCharCode(34);
       const csrf = 'synthetic-only-csrf-' + 'c'.repeat(40);
       let actor = {tenantId:'tenant-a', subjectId:'alice',
         sessionEpoch:'11111111-1111-4111-8111-111111111111', role:'writer'};
