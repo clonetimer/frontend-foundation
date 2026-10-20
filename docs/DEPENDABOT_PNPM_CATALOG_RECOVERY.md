@@ -16,7 +16,7 @@
 
 1. 所有 CI（包含 main）要求 workspace `catalog` 的每一条 specifier 与锁文件 `catalogs.default` 完全相同且具备解析版本；修复 pnpm frozen install 可能遗漏的 catalog 声明不一致风险。
 2. 仅当 PR 作者为 `dependabot[bot]` 时，使用 GitHub `pull_request` 合成 merge commit 的**第一个 parent**作为 base，在 `HEAD^1` 与当前候选锁文件之间比对；为此 checkout 设置 `fetch-depth: 2`。
-3. 对 `bump <package> from <old> to <new>`，目标 catalog/resolution 必须由 old 实际变为 new。对于分组/安全更新 PR，至少必须有一个 catalog 解析版本或 `packages` 的真实包版本键变化；仅 importer 排序变动会被拒绝。
+3. 对 `bump <package> from <old> to <new>`，目标 catalog/resolution 必须由 old 实际变为 new，并且 `packages:` 中必须出现该依赖的新版本解析键（旧版本在基线存在，新版本在基线不存在）。只有 catalog 元数据变化而实际包快照仍旧的 PR 同样会被拒绝；`--expect` 也同时验证 catalog 和实际包解析。对于分组/安全更新 PR，至少必须有一个 catalog 解析版本或 `packages` 的真实包版本键变化；仅 importer 排序变动会被拒绝。
 4. 只改动 `.github/workflows/` 的 GitHub Actions 升级 PR 豁免 npm lockfile 门禁，业务 PR 不使用 bot-only 检查，但仍必须满足 catalog 一致性。
 5. 通过 `node --test tooling/scripts/test-dependabot-catalog-gate.mjs` 回归正反样例，不引入 npm 安装与网络依赖。
 

@@ -35,6 +35,16 @@ test('target catalog version must really match the PR title', () => {
   assert.match(checkUpgrade(lock(),lock('5.104.3'),title),/5.104.3/);
   assert.throws(()=>checkUpgrade(lock(),lock('5.104.1','10.6.2'),title),/claimed upgrade/);
 });
+test('catalog-only metadata bump with stale packages snapshot is rejected', () => {
+  const stale = lock('5.104.3').replace(
+    "'@tanstack/react-query@5.104.3':",
+    "'@tanstack/react-query@5.104.1':"
+  );
+  assert.equal(catalogs(stale,'lock').get('@tanstack/react-query').version,'5.104.3');
+  assert(!resolvedPackages(stale).has('@tanstack/react-query@5.104.3'));
+  assert.throws(()=>checkUpgrade(lock(),stale,title),/catalog changed without a new resolved package/);
+});
+
 test('standalone non-catalog bump requires package snapshot change', () => {
   assert.throws(()=>checkUpgrade(lock(),lock(),'build(deps): bump other from 1.0.0 to 1.0.1'),/without new resolved package/);
 });
