@@ -745,10 +745,19 @@ export async function runExportedBrowserSmoke(directory) {
     const selectedCount = (count) => evaluate("document.querySelector('.pa-studio-remote-table')?.textContent?.includes('当前页已选择 " + String(count) + " 条')");
     assert(await selectBulkRow('第二对象'), 'Bulk row checkbox missing');
     await until(() => selectedCount(1), 'Bulk first selected row count');
+    // The selection count can reset before the page-2 fetch and React DOM
+    // commit. Require both the fresh server GET and page-2 rendered rows.
+    const readsBeforeBulkNext = tableCalls.length;
     assert(await evaluate("(() => {const button=document.querySelector('.pa-studio-remote-table .ant-pagination-next button');if(!button)return false;button.click();return true;})()"), 'Bulk next-page button missing');
+    await until(() => tableCalls.slice(readsBeforeBulkNext).some((item) => item.page === '2'), 'Bulk page-2 authoritative GET missing');
+    await until(() => evaluate("(() => {const table=document.querySelector('.pa-studio-remote-table');const active=table?.querySelector('.ant-pagination-item-active')?.textContent?.trim();const rows=table?.querySelector('tbody')?.textContent??'';return active==='2'&&rows.includes('批量后续对象')&&rows.includes('批量末页对象')&&!rows.includes('第二对象')&&!table?.querySelector('.ant-spin-spinning')&&table?.querySelectorAll('tbody tr').length===2;})()"), 'Bulk page-2 authoritative rows not rendered');
     await until(() => selectedCount(0), 'Cross-page multi-selection was not cleared');
+    // Page 1 must similarly reflect a completed new GET, not residual rows
+    // from before navigation or an optimistic pagination selection reset.
+    const readsBeforeBulkPrev = tableCalls.length;
     assert(await evaluate("(() => {const button=document.querySelector('.pa-studio-remote-table .ant-pagination-prev button');if(!button)return false;button.click();return true;})()"), 'Bulk previous-page button missing');
-    await until(() => evaluate("document.querySelector('.pa-studio-remote-table tbody')?.textContent?.includes('批量失败对象')"), 'Bulk page-one rows not refreshed');
+    await until(() => tableCalls.slice(readsBeforeBulkPrev).some((item) => item.page === '1'), 'Bulk page-1 authoritative GET missing');
+    await until(() => evaluate("(() => {const table=document.querySelector('.pa-studio-remote-table');const active=table?.querySelector('.ant-pagination-item-active')?.textContent?.trim();const rows=table?.querySelector('tbody')?.textContent??'';return active==='1'&&rows.includes('第二对象')&&rows.includes('批量失败对象')&&!rows.includes('批量末页对象')&&!table?.querySelector('.ant-spin-spinning')&&table?.querySelectorAll('tbody tr').length===2;})()"), 'Bulk page-1 authoritative rows not rendered');
     assert(await selectBulkRow('第二对象'), 'Bulk row one unavailable');
     await until(() => selectedCount(1), 'Bulk first row not reselected');
     assert(await selectBulkRow('批量失败对象'), 'Bulk row two unavailable');
