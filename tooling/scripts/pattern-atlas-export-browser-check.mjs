@@ -263,6 +263,101 @@ export async function runExportedBrowserSmoke(directory) {
       patchCalls:patchCalls.length,deleteCalls:deleteCalls.length},p5Before,
     'Importing dormant P5 reference source caused business mutation');
     console.log('P5-R3c2b1: production standalone ZIP browser imported optional module; no write authorized');
+    // P5-R3c2b2: execute the *actual exported* ESM runtime in Chromium.
+    // Its network fixture is in-memory and synthetic; production mutations stay
+    // untouched. R3b2b separately exercises real HTTP + disposable SQLite.
+    const portableRecovery = await evaluate(`(async () => {
+      const mod = await import('/p5-reference/p5_r3c2_runtime_adapter.mjs');
+      const origin = globalThis.location.origin;
+      const journalKey = 'foundation:p5-r3c:synthetic-pending:v1';
+      if (globalThis.localStorage.getItem(journalKey) !== null) {
+        throw Error('ZIP P5 synthetic test found an unexpected pending journal');
+      }
+      const key = 'p5_zip_browser_recovery_00002';
+      const etag = '\"' + 'a'.repeat(64) + '\"';
+      const csrf = 'synthetic-only-csrf-' + 'c'.repeat(40);
+      let actor = {tenantId:'tenant-a', subjectId:'alice',
+        sessionEpoch:'11111111-1111-4111-8111-111111111111', role:'writer'};
+      const capability = {contract:'foundation.idempotent-write/v1',
+        providerId:'22222222-2222-4222-8222-222222222222',
+        receiptEpoch:'33333333-3333-4333-8333-333333333333',
+        scope:{tenantId:'tenant-a',subjectId:'alice'},
+        guarantees:{atomicMutationAndReceipt:true,sameKeySameIntentReplay:true,
+          authenticatedReceiptLookup:true,principalScopedKeys:true,conditionalMutation:true},
+        minReceiptRetentionSeconds:604800,
+        routes:[{method:'PATCH',path:'/api/tasks/{id}',receiptPath:'/api/mutations/{key}'}]};
+      let writes = 0, receiptReads = 0, committed = false;
+      const response = (status, value, extra={}) => new Response(JSON.stringify(value), {
+        status, headers:{'content-type':'application/json','cache-control':'no-store',...extra}
+      });
+      const fetchImpl = async (url, options) => {
+        if (!url.startsWith(origin + '/') || options.credentials !== 'same-origin'
+          || options.redirect !== 'error' || options.cache !== 'no-store') {
+          throw Error('P5 ZIP synthetic transport escaped same-origin requirements');
+        }
+        if (url === origin+'/api/session' && options.method === 'GET') {
+          return response(200,{identity:actor,csrfToken:csrf});
+        }
+        if (url === origin+'/.well-known/foundation-idempotent-write/v1'
+          && options.method === 'GET') return response(200,capability);
+        if (url === origin+'/api/tasks/1' && options.method === 'GET') {
+          return response(200,{data:{id:1,tenant_id:'tenant-a',status:'draft',version:1}},
+            {etag});
+        }
+        if (url === origin+'/api/tasks/1' && options.method === 'PATCH') {
+          if (options.headers['Idempotency-Key'] !== key
+            || options.headers['If-Match'] !== etag
+            || options.headers['X-P5-CSRF-Token'] !== csrf
+            || options.body !== JSON.stringify({status:'approved'})
+            || JSON.parse(globalThis.localStorage.getItem(journalKey) || 'null')?.key !== key) {
+            throw Error('P5 ZIP request not journaled before original-key PATCH');
+          }
+          writes += 1;
+          committed = true;
+          return response(503,{error:'synthetic commit followed by lost response'});
+        }
+        if (url === origin+'/api/mutations/'+key && options.method === 'GET') {
+          receiptReads += 1;
+          return committed ? response(200,{status:'committed',recordId:1,
+            response:{data:{id:1,tenant_id:'tenant-a',status:'approved',version:2}}})
+            : response(404,{status:'not_found'});
+        }
+        throw Error('Unexpected synthetic ZIP endpoint: ' + url);
+      };
+      const host = {origin,getApproval:async()=>true,
+        getSession:async({fetchSession})=>fetchSession()};
+      const browser = {location:globalThis.location,navigator:globalThis.navigator,
+        localStorage:globalThis.localStorage};
+      const adapter = mod.createP5R3c2ReferenceAdapter({host,browser,fetchImpl});
+      const first = await adapter.begin({recordId:1,status:'approved',key});
+      const journal = globalThis.localStorage.getItem(journalKey);
+      const pending = JSON.parse(journal || 'null');
+      const blocked = await adapter.begin({recordId:1,status:'approved',key});
+      actor = {...actor,tenantId:'tenant-b'};
+      const wrongTenant = await adapter.check();
+      const retainedOnScopeChange = globalThis.localStorage.getItem(journalKey) === journal;
+      actor = {...actor,tenantId:'tenant-a'};
+      // Re-instantiating the host simulates a new client session reading durable
+      // browser journal bytes; the separate R3b2b test covers true reload.
+      const restored = mod.createP5R3c2ReferenceAdapter({host,browser,fetchImpl});
+      const recovered = await restored.check();
+      return {first,blocked,wrongTenant,recovered,writes,receiptReads,
+        originalKey:pending?.key,validEtag:pending?.etag===etag,
+        noCredential:!journal?.includes(csrf),retainedOnScopeChange,
+        cleared:globalThis.localStorage.getItem(journalKey)===null};
+    })()`);
+    assert.deepEqual(portableRecovery, {
+      first:{state:'pending',reason:'response-uncertain'},
+      blocked:{state:'blocked',reason:'pending-exists'},
+      wrongTenant:{state:'blocked',reason:'scope-or-ledger-changed'},
+      recovered:{state:'committed'},writes:1,receiptReads:1,
+      originalKey:'p5_zip_browser_recovery_00002',validEtag:true,
+      noCredential:true,retainedOnScopeChange:true,cleared:true
+    }, 'Actual ZIP runtime did not preserve original-key pending and receipt recovery');
+    assert.deepEqual({posts:posts.length,mappedPosts:mappedPosts.length,
+      patchCalls:patchCalls.length,deleteCalls:deleteCalls.length},p5Before,
+      'Explicit synthetic ZIP recovery changed ordinary business mutations');
+    console.log('P5-R3c2b2: exported Chromium runtime proved 503 pending, scope isolation and original-key receipt recovery');
     await until(() => evaluate("!!document.querySelector('[data-atlas-chart-source=remote]')"), 'Remote chart initial GET');
     const chart = await evaluate("(() => { const svg = [...document.querySelectorAll('svg[role=img]')].find(el => el.getAttribute('aria-label')?.includes('验收多序列曲线')); return svg ? { label: svg.getAttribute('aria-label'), paths: svg.querySelectorAll('polyline').length, points: svg.querySelectorAll('circle').length } : null; })()");
     assert(chart, 'Exported chart was not rendered');
@@ -815,7 +910,7 @@ export async function runExportedBrowserSmoke(directory) {
       mkdirSync(artifacts, { recursive: true });
       writeFileSync(join(artifacts, 'pattern-atlas-export-browser.png'), Buffer.from(snapshot.data, 'base64'));
     }
-    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'legacy RecordProvider 422 field, committed 503 draft safety and 403 permission', 'shared mutation single-flight rapid double click and record GET broadcast', 'non-first record refresh retention and disappeared-target safety', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'production Vite served P5 reference module loads only via explicit import and cannot authorize business writes', 'no runtime errors'] }));
+    console.log(JSON.stringify({ result: 'PASS', scenario: 'standalone-zip/Chromium', checks: ['React mount', 'signed two-series chart', 'live chart GET and refresh', 'modal cancel', 'drawer close', 'popconfirm confirm', 'overlay form POST/validation/error/refresh', 'record-list real GET refetch', 'legacy RecordProvider 422 field, committed 503 draft safety and 403 permission', 'shared mutation single-flight rapid double click and record GET broadcast', 'non-first record refresh retention and disappeared-target safety', 'selected record PATCH and linked source', 'shared createUrl and outgoing alias, committed-then-503 write uncertainty suppresses failure workflow', 'consistent POST error contract for 422 backend field alias and 403 permission denial', 'success/failure workflow branching', 'component emit', 'explicitly confirmed follow-up POST', 'remote table query/search/filter/sort/page + selected-record editing', 'cross-page table-only selection/detail/edit, mismatched-ID protection, request-race cancellation and HTTP retry', 'server-backed read-only row detail GET, 503 retry and stale request abort', 'confirmed DELETE with 403, retry, encoded ID, refetch and last-page recovery', 'page-scoped multi-select, confirmed batch DELETE, partial failure and failed-only retry', 'strong If-Match stale 412, re-fetch/manual new-version DELETE, committed-then-503 batch stop, missing ETag fail-closed', 'production Vite served P5 reference module loads only via explicit import and cannot authorize business writes', 'exported ZIP synthetic same-origin 503 pending, tenant isolation and original-key receipt recovery without business writes', 'no runtime errors'] }));
   } finally {
     if (socket?.readyState === WebSocket.OPEN) socket.close();
     chrome?.kill();
