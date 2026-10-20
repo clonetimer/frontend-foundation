@@ -8,6 +8,12 @@ updates:
       time: '04:00'
       timezone: UTC
     versioning-strategy: increase-if-necessary
+    # Our supported runtimes are Node 22/24; @types/node 26 is out of scope.
+    # Allow compatible Node 22 type fixes, but block major-line upgrades.
+    ignore:
+      - dependency-name: '@types/node'
+        update-types:
+          - version-update:semver-major
     groups:
       frontend-foundation-runtime:
         patterns:
