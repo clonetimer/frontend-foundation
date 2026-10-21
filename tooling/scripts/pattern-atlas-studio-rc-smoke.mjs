@@ -272,9 +272,33 @@ try {
   assert(initialLayers > 1, 'Studio must expose nested layers for navigator trial');
   assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-layer-tool-row button')].find(x=>x.textContent?.includes('折叠全部'));if(!b)return false;b.click();return true;})()"), 'Fold-all control missing');
   await until(() => evaluate("document.querySelectorAll('.pa-studio-layers .pa-studio-layer-row').length === 1"), 'UX fold all layers');
+  // Force a short Layers viewport so an expanded descendant is outside view.
+  // This must scroll the Layers pane, not the whole browser or component palette.
+  const browserScrollBeforeLayerReveal = await evaluate(`(() => {
+    const layers=document.querySelector('.pa-studio-layers');
+    if (!layers) return null;
+    layers.style.height='50px'; layers.style.maxHeight='50px'; layers.style.flex='0 0 50px';
+    layers.scrollTop=0;return window.scrollY;
+  })()`);
+  assert(browserScrollBeforeLayerReveal !== null, 'Cannot size Layers pane for scroll regression');
   const selectedCanvasNode = await evaluate("(() => {const all=[...document.querySelectorAll('.pa-studio-device [data-studio-node]')];const candidate=all.findLast(n=>!n.querySelector('[data-studio-node]'));if(!candidate)return '';candidate.click();return candidate.getAttribute('data-studio-node')||'';})()");
   assert(selectedCanvasNode, 'Cannot select nested component on canvas');
   await until(() => evaluate("(() => {const selected=document.querySelector('.pa-studio-layers .pa-studio-layer.is-selected');return selected && selected.closest('.pa-studio-layer-row') && document.querySelectorAll('.pa-studio-layers .pa-studio-layer-row').length > 1;})()"), 'UX selected canvas node is hidden by folded parent');
+  await until(() => evaluate(`(() => {
+    const pane=document.querySelector('.pa-studio-layers');
+    const row=pane?.querySelector('.pa-studio-layer.is-selected');
+    if (!row || pane.scrollHeight <= pane.clientHeight || pane.scrollTop <= 0) return false;
+    const a=pane.getBoundingClientRect(), b=row.getBoundingClientRect();
+    return b.top >= a.top - 2 && b.bottom <= a.bottom + 2;
+  })()`), 'UX selected row must scroll into independent Layers viewport');
+  assert.equal(await evaluate('window.scrollY'), browserScrollBeforeLayerReveal,
+    'Layers selection must not scroll the document');
+  assert(await evaluate(`(() => {
+    const pane=document.querySelector('.pa-studio-layers');
+    pane.style.removeProperty('height');pane.style.removeProperty('max-height');pane.style.removeProperty('flex');
+    return true;
+  })()`), 'Cannot restore Layers pane after viewport test');
+  pass('studio-layer-selection-scroll-without-document-movement');
   assert(await evaluate("(() => {const nav=document.querySelector('.pa-studio-selection-path');return Boolean(nav&&nav.querySelectorAll('button').length>1)})()"), 'Selected canvas node must expose parent breadcrumb');
   const findLayer = "input[aria-label='搜索页面图层']";
   assert(await evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");if(!e)return false;e.focus();return document.activeElement===e;})()"), 'Layer search is not keyboard focusable');
@@ -287,6 +311,19 @@ try {
   await key('Backspace', 'Backspace', 8);
   await until(() => evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");return e?.value === '' && document.querySelectorAll('.pa-studio-layers .pa-studio-layer-row').length > 1;})()"), 'UX clear layer search');
   pass('studio-layer-fold-canvas-reveal-and-search');
+  // A canvas selection outside an active layer filter should release the stale
+  // filter and reveal the selected node instead of silently hiding it.
+  assert(await evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");e.focus();return true;})()"));
+  await call('Input.insertText', { text: '__never_a_layer__' });
+  await until(() => evaluate("document.querySelector('.pa-studio-layers')?.textContent?.includes('没有匹配的页面图层')"), 'UX create nonmatching layer filter');
+  assert(await evaluate(`(() => {
+    const node=[...document.querySelectorAll('.pa-studio-device [data-studio-node]')].find(n =>
+      n.getAttribute('data-studio-node')===${JSON.stringify(selectedCanvasNode)});
+    if (!node) return false;node.click();return true;
+  })()`), 'Selected canvas node missing for filter reset');
+  await until(() => evaluate("(() => {const input=document.querySelector(" + JSON.stringify(findLayer) + ");return input?.value === '' && Boolean(document.querySelector('.pa-studio-layers .pa-studio-layer.is-selected'));})()"), 'UX canvas selection must clear hiding layer filter');
+  pass('studio-canvas-selection-clears-unmatched-filter');
+
 
   const before = await stored();
   assert(before?.blueprint?.pages?.[0]?.composition, 'P0 initial autosave absent');
