@@ -249,7 +249,7 @@ try {
   const findLayer = "input[aria-label='搜索页面图层']";
   assert(await evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");if(!e)return false;e.focus();return document.activeElement===e;})()"), 'Layer search is not keyboard focusable');
   await call('Input.insertText', { text: selectedCanvasNode });
-  await until(() => evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");return e?.value === " + JSON.stringify(selectedCanvasNode) + " && document.querySelector('.pa-studio-layers .pa-studio-layer.is-search-match');})()"), 'UX selected layer search');
+  await until(() => evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");return e?.value === " + JSON.stringify(selectedCanvasNode) + " && Boolean(document.querySelector('.pa-studio-layers .pa-studio-layer.is-search-match'));})()"), 'UX selected layer search');
   assert(await evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");e.focus();e.select();return true;})()"));
   await call('Input.insertText', { text: '___STUDIO-UX-no-matching-component___' });
   await until(() => evaluate("document.querySelector('.pa-studio-layers')?.textContent?.includes('没有匹配的页面图层')"), 'UX unmatched layer search');
