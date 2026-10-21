@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type CSSProperties } from 'react';
-import { Button, Input, InputNumber, Popconfirm, Modal, Radio, Segmented, Select, Space, Switch, Tag, message } from 'antd';
+import { Button, Input, InputNumber, Popconfirm, Modal, Popover, Radio, Segmented, Select, Space, Switch, Tag, message } from 'antd';
 import { Link } from 'react-router';
 import { Page, PageContent } from '@foundation/ui';
 import type { CompositionNode } from '../bridge';
@@ -7,6 +7,7 @@ import { buildProjectBlueprint, type PageTemplate } from '../builder/project-blu
 import { accentChoices, designCssVariables, type DesignConfig } from '../effects/config';
 import { effectCategories, effects } from '../effects/catalog';
 import { StudioCanvas } from './StudioCanvas';
+import { expandableLayerIds, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from './studio-layer-navigation';
 import { NativeAasRecoveryPanel } from './NativeAasRecoveryPanel';
 import { p5R3c2SourceIsEligible } from '../../../../../../tooling/scripts/aas_p0/p5_r3c2_runtime_adapter.mjs';
 import { WorkflowGraph } from './WorkflowGraph';
@@ -40,17 +41,36 @@ const typeLabels: Record<string, string> = { records: '记录列表', stack: '�
 const inspectorSections = [{ id: '页面', icon: '▤' }, { id: '内容', icon: '≡' }, { id: '位置', icon: '⊞' }, { id: '形式', icon: '▦' }, { id: '交互', icon: '↪' }, { id: '特效', icon: '✧' }, { id: '组件数据', icon: '⇄' }, { id: '接口管理', icon: '⌁' }, { id: '流程', icon: '⤳' }, { id: '风格', icon: '◈' }] as const;
 const labels: Record<string, string> = { title: '标题', text: '文字', label: '名称', value: '指标数值', suffix: '数值单位', placeholder: '占位提示', description: '补充说明', defaultValue: '默认值' };
 
-function Outline({ node, selectedId, onSelect, onDelete, decorations, pageId, level = 0 }: {
+function Outline({ node, selectedId, onSelect, onDelete, onToggle, collapsedIds, visibleIds, matchedIds, searching, decorations, pageId, level = 0 }: {
   node: CompositionNode; selectedId: string; onSelect: (id: string) => void; onDelete: (id: string) => void;
+  onToggle: (id: string) => void; collapsedIds: ReadonlySet<string>; visibleIds: ReadonlySet<string>;
+  matchedIds: ReadonlySet<string>; searching: boolean;
   decorations: StudioDocument['decorations']; pageId: string; level?: number;
 }) {
+  if (searching && !visibleIds.has(node.id)) return null;
   const kind = (decorations[`${pageId}:${node.id}`] ?? decorations[node.id])?.widgetKind;
+  const name = nodeLabel(node);
+  const hasChildren = Boolean(node.children?.length);
+  // Searching always reveals the matching path without rewriting the user's collapsed state.
+  const expanded = searching || !collapsedIds.has(node.id);
   return <>
-    <div className="pa-studio-layer-row">
-      <button className={`pa-studio-layer ${node.id === selectedId ? 'is-selected' : ''}`} style={{ paddingLeft: 9 + level * 13 }} type="button" onClick={() => onSelect(node.id)}><span aria-hidden="true">{node.kind === 'layout' ? '▦' : '▫'}</span><span>{nodeLabel(node)}</span><small>{kind ? widgetDefinition(kind).label : typeLabels[node.type] ?? node.type}</small></button>
-      {level > 0 ? <Popconfirm title={`删除「${nodeLabel(node)}」及其子组件？`} onConfirm={() => onDelete(node.id)} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}><button type="button" className="pa-studio-layer-delete" title="删除组件" aria-label={`删除组件 ${nodeLabel(node)}`}>×</button></Popconfirm> : null}
+    <div className="pa-studio-layer-row" style={{ paddingLeft: level * 12 }}>
+      {hasChildren ? <button type="button" className="pa-studio-layer-expander"
+        onClick={() => onToggle(node.id)} disabled={searching}
+        aria-label={`${expanded ? '折叠' : '展开'} ${name}`} aria-expanded={expanded}
+        title={searching ? '筛选时自动展开匹配路径' : `${expanded ? '折叠' : '展开'}子图层`}>{expanded ? '⌄' : '›'}</button>
+        : <span className="pa-studio-layer-expander-spacer" aria-hidden="true"/>}
+      <button className={`pa-studio-layer ${node.id === selectedId ? 'is-selected' : ''} ${matchedIds.has(node.id) ? 'is-search-match' : ''}`}
+        type="button" onClick={() => onSelect(node.id)} aria-pressed={node.id === selectedId}
+        title={`${name} · ${kind ? widgetDefinition(kind).label : typeLabels[node.type] ?? node.type}`}>
+        <span aria-hidden="true">{node.kind === 'layout' ? '▦' : '▫'}</span>
+        <span>{name}</span><small>{kind ? widgetDefinition(kind).label : typeLabels[node.type] ?? node.type}</small>
+      </button>
+      {level > 0 ? <Popconfirm title={`删除「${name}」及其子组件？`} onConfirm={() => onDelete(node.id)} okText="删除" cancelText="取消" okButtonProps={{ danger: true }}><button type="button" className="pa-studio-layer-delete" title={`删除组件 ${name}`} aria-label={`删除组件 ${name}`}>×</button></Popconfirm> : null}
     </div>
-    {(node.children ?? []).map((child) => <Outline key={child.id} node={child} selectedId={selectedId} onSelect={onSelect} onDelete={onDelete} decorations={decorations} pageId={pageId} level={level + 1}/>) }
+    {hasChildren && expanded ? node.children!.map((child) => <Outline key={child.id} node={child} selectedId={selectedId}
+      onSelect={onSelect} onDelete={onDelete} onToggle={onToggle} collapsedIds={collapsedIds} visibleIds={visibleIds}
+      matchedIds={matchedIds} searching={searching} decorations={decorations} pageId={pageId} level={level + 1}/>) : null}
   </>;
 }
 function TextSetting({ title, value, change, multiline = false }: { title: string; value: string; change: (value: string) => void; multiline?: boolean }) {
@@ -72,6 +92,8 @@ export function Component() {
   const [replayKey, setReplayKey] = useState(0);
   const [inspector, setInspector] = useState('内容');
   const [paletteSearch, setPaletteSearch] = useState('');
+  const [layerSearch, setLayerSearch] = useState('');
+  const [collapsedByPage, setCollapsedByPage] = useState<Record<string, string[]>>({});
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [workflowTraces, setWorkflowTraces] = useState<WorkflowTrace[]>([]);
   const [apiTestResult, setApiTestResult] = useState('');
@@ -103,6 +125,22 @@ export function Component() {
   const meta = doc.decorations[metaKey] ?? (chosen ? doc.decorations[chosen.id] : undefined) ?? {};
   const richProps = meta.widgetKind ? normalizeWidgetProps(meta.widgetKind, meta.widgetProps) : {};
   const filteredPalette = paletteGroups.map((group) => ({ ...group, nodes: group.nodes.filter((entry) => `${group.title} ${entry.label} ${entry.type}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.nodes.length > 0);
+  const searchingLayers = Boolean(layerSearch.trim());
+  const layerResults = useMemo(() => root ? searchStudioLayers(root, layerSearch, nodeLabel) : { visibleIds: new Set<string>(), matchedIds: new Set<string>() }, [root, layerSearch]);
+  const collapsedLayers = useMemo(() => new Set(collapsedByPage[page?.id ?? ''] ?? []), [collapsedByPage, page?.id]);
+  const layerPath = useMemo(() => root ? selectedLayerPath(root, chosen?.id ?? '') : [], [root, chosen?.id]);
+  const toggleLayer = (id: string) => setCollapsedByPage((previous) => {
+    const key = page?.id ?? '';
+    const entries = new Set(previous[key] ?? []);
+    if (entries.has(id)) entries.delete(id); else entries.add(id);
+    return { ...previous, [key]: [...entries] };
+  });
+  const collapseAllLayers = () => {
+    if (!root || !page) return;
+    setCollapsedByPage((previous) => ({ ...previous, [page.id]: expandableLayerIds(root) }));
+  };
+  const expandAllLayers = () => { if (page) setCollapsedByPage((previous) => ({ ...previous, [page.id]: [] })); };
+
   const orderedNavigation = useMemo(() => {
     const entries = [...(doc.blueprint.navigation?.items ?? [])].sort((a, b) => a.order - b.order);
     return entries.map((entry) => ({ ...entry, page: doc.blueprint.pages.find((item) => item.id === entry.target) })).filter((entry) => Boolean(entry.page));
@@ -184,6 +222,35 @@ export function Component() {
   const redo = () => {
     const next = future.current.pop(); if (!next) return;
     history.current.push(doc); setDoc(next);
+  };
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const editableTarget = Boolean(target?.closest('input, textarea, select, [contenteditable], [role="textbox"], [role="dialog"], .ant-popconfirm'));
+      const action = studioUndoShortcut({
+        key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
+        shiftKey: event.shiftKey, altKey: event.altKey,
+        editableTarget: editableTarget || event.isComposing, editingDisabled: live
+      });
+      if (!action) return;
+      if (action === 'undo' && history.current.length) {
+        event.preventDefault();
+        const previous = history.current.pop()!;
+        future.current.push(doc); setDoc(previous);
+      } else if (action === 'redo' && future.current.length) {
+        event.preventDefault();
+        const next = future.current.pop()!;
+        history.current.push(doc); setDoc(next);
+      }
+    };
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  }, [doc, live]);
+  const selectLayer = (id: string) => {
+    setSelectedId(id);
+    setLive(false);
+    if (inspector === '页面' || inspector === '接口管理' || inspector === '风格') setInspector('内容');
+    setInspectorOpen(true);
   };
   const editTree = (fn: (root: CompositionNode) => CompositionNode) => {
     if (!page) return;
@@ -730,10 +797,25 @@ export function Component() {
     <div className="pa-studio-head"><div className="pa-studio-title"><span className="pa-studio-eyebrow">可视化工作台 / 页面设计</span><h1>{doc.blueprint.project.title}</h1><span className={`pa-studio-saved ${saved.startsWith('自动保存不可用') ? 'is-warning' : ''}`}>● {saved || '正在编辑'}</span></div>
       <div className="pa-studio-head-actions">{hasBackup ? <Popconfirm title="恢复上一个项目草稿？" onConfirm={restoreBackup}><Button>恢复上次草稿</Button></Popconfirm> : null}<Button onClick={() => { setNewPageId(`page-${doc.blueprint.pages.length + 1}`); setNewPageTitle('新业务页面'); setNewPageTemplate('blank'); setNewPageOpen(true); }}>＋ 添加页面</Button>{doc.blueprint.pages.length > 1 && page ? <Popconfirm title={`删除「${page.title}」页面？`} description="将同时删除本页的组件及导航，可撤销。" okText="删除" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={() => deletePage(page.id)}><Button danger>删除当前页</Button></Popconfirm> : null}<input hidden ref={imported} type="file" accept=".json,application/json" aria-label="打开项目文件" onChange={(event) => void importProject(event)}/><Button onClick={() => imported.current?.click()}>打开项目</Button><Button type="primary" onClick={exportZip}>导出页面代码 <span aria-hidden="true">↗</span></Button></div>
     </div>
-    <div className="pa-studio-toolbar"><div className="pa-studio-page-tabs" aria-label="项目页面">{doc.blueprint.pages.map((entry) => <button type="button" key={entry.id} className={page?.id === entry.id ? 'active' : ''} aria-current={page?.id === entry.id ? 'page' : undefined} onClick={() => selectPage(entry.id)}>{entry.title}</button>)}</div><div className="pa-studio-toolbar-actions"><Space.Compact><Button onClick={rollback} disabled={!history.current.length} title="撤销上一次修改">↶ 撤销</Button><Button onClick={redo} disabled={!future.current.length} title="重做">↷ 重做</Button></Space.Compact><Segmented value={viewport} onChange={(value) => setViewport(value as typeof viewport)} options={[{ label: '桌面', value: 'desktop' }, { label: '平板', value: 'tablet' }, { label: '手机', value: 'mobile' }]}/><Radio.Group value={live ? 'live' : 'edit'} onChange={(event) => setLive(event.target.value === 'live')} optionType="button" buttonStyle="solid" options={[{ value: 'edit', label: '编辑' }, { value: 'live', label: '体验' }]}/></div></div>
+    <div className="pa-studio-toolbar"><div className="pa-studio-page-tabs" aria-label="项目页面">{doc.blueprint.pages.map((entry) => <button type="button" key={entry.id} className={page?.id === entry.id ? 'active' : ''} aria-current={page?.id === entry.id ? 'page' : undefined} onClick={() => selectPage(entry.id)}>{entry.title}</button>)}</div><div className="pa-studio-toolbar-actions"><Space.Compact><Button onClick={rollback} disabled={!history.current.length} title="撤销（Ctrl/Cmd + Z）">↶ 撤销</Button><Button onClick={redo} disabled={!future.current.length} title="重做（Ctrl/Cmd + Shift + Z / Ctrl + Y）">↷ 重做</Button></Space.Compact><Popover title="编辑快捷键" trigger="click" content={<div className="pa-studio-shortcuts"><span>撤销</span><kbd>Ctrl / ⌘ + Z</kbd><span>重做</span><kbd>Ctrl / ⌘ + Shift + Z</kbd><span>Windows 重做</span><kbd>Ctrl + Y</kbd><small>在输入文字和体验模式时，不截获原生快捷键。</small></div>}><Button size="small" title="查看快捷键" aria-label="查看编辑快捷键">快捷键</Button></Popover><Segmented value={viewport} onChange={(value) => setViewport(value as typeof viewport)} options={[{ label: '桌面', value: 'desktop' }, { label: '平板', value: 'tablet' }, { label: '手机', value: 'mobile' }]}/><Radio.Group value={live ? 'live' : 'edit'} onChange={(event) => setLive(event.target.value === 'live')} optionType="button" buttonStyle="solid" options={[{ value: 'edit', label: '编辑' }, { value: 'live', label: '体验' }]}/></div></div>
     <div className={`pa-studio-workspace ${inspectorOpen ? '' : 'is-inspector-collapsed'}`}>
-      <aside className="pa-studio-sidebar" aria-label="组件与页面结构"><div className="pa-studio-panel-title">组件库 <Tag>{insertKinds.length} 种</Tag></div><div className="pa-studio-palette-search"><Input allowClear value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder="搜索组件名称或类型" aria-label="搜索组件"/></div><div className="pa-studio-palette">{filteredPalette.map((group) => <section key={group.title}><h3>{group.title}</h3><div className="pa-studio-palette-grid">{group.nodes.map((entry) => <button type="button" className="pa-studio-palette-item" key={entry.type} draggable onDragStart={(event) => { event.dataTransfer.setData('application/x-atlas-palette', entry.type); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => append(entry.type)}><span>{entry.icon}</span><strong>{entry.label}</strong></button>)}</div></section>)}{!filteredPalette.length ? <div className="pa-studio-no-results">没有匹配的组件</div> : null}</div><div className="pa-studio-panel-title pa-studio-layer-head">页面图层</div><div className="pa-studio-layers">{root ? <Outline node={root} selectedId={chosen?.id ?? ''} onSelect={(id) => { setSelectedId(id); setLive(false); }} onDelete={deleteComponent} decorations={doc.decorations} pageId={page?.id ?? ''}/> : <p>此页面尚无画布结构。</p>}</div></aside>
-      <main className="pa-studio-stage"><div className="pa-studio-stage-crumb"><span>{page?.title ?? '页面'}</span><span>{viewport === 'desktop' ? '桌面预览' : viewport === 'tablet' ? '平板预览' : '手机预览'}</span><span>{live ? '交互体验' : '自由编辑'}</span></div><div className="pa-studio-canvas-area"><div className={`pa-studio-device device-${viewport} ${doc.design.motion !== 'system' ? 'atlas-no-motion' : ''}`} style={cssVars}>
+      <aside className="pa-studio-sidebar" aria-label="组件与页面结构"><div className="pa-studio-panel-title">组件库 <Tag>{insertKinds.length} 种</Tag></div><div className="pa-studio-palette-search"><Input allowClear value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder="搜索组件名称或类型" aria-label="搜索组件"/></div><div className="pa-studio-palette">{filteredPalette.map((group) => <section key={group.title}><h3>{group.title}</h3><div className="pa-studio-palette-grid">{group.nodes.map((entry) => <button type="button" className="pa-studio-palette-item" key={entry.type} draggable onDragStart={(event) => { event.dataTransfer.setData('application/x-atlas-palette', entry.type); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => append(entry.type)}><span>{entry.icon}</span><strong>{entry.label}</strong></button>)}</div></section>)}{!filteredPalette.length ? <div className="pa-studio-no-results">没有匹配的组件</div> : null}</div><div className="pa-studio-panel-title pa-studio-layer-head"><span>页面图层</span><Tag>{root ? `${expandableLayerIds(root).length} 组` : '无'}</Tag></div>
+        <div className="pa-studio-layer-tools">
+          <Input size="small" allowClear value={layerSearch} onChange={(event) => setLayerSearch(event.target.value)} aria-label="搜索页面图层" placeholder="搜索图层名称、类型或 ID"/>
+          <div className="pa-studio-layer-tool-row"><small aria-live="polite">{searchingLayers ? `${layerResults.matchedIds.size} 个匹配` : '选择图层以编辑属性'}</small>
+            <Button size="small" type="text" onClick={expandAllLayers} disabled={searchingLayers || !root}>展开全部</Button>
+            <Button size="small" type="text" onClick={collapseAllLayers} disabled={searchingLayers || !root}>折叠全部</Button></div>
+        </div>
+        <div className="pa-studio-layers" aria-label="页面图层导航">{root && (!searchingLayers || layerResults.visibleIds.size) ? <Outline node={root} selectedId={chosen?.id ?? ''}
+          onSelect={selectLayer} onDelete={deleteComponent} onToggle={toggleLayer} collapsedIds={collapsedLayers} visibleIds={layerResults.visibleIds}
+          matchedIds={layerResults.matchedIds} searching={searchingLayers} decorations={doc.decorations} pageId={page?.id ?? ''}/> : <p className="pa-studio-no-results">{root ? '没有匹配的页面图层' : '此页面尚无画布结构'}</p>}</div></aside>
+      <main className="pa-studio-stage"><div className="pa-studio-stage-crumb"><span>{page?.title ?? '页面'}</span><span>{viewport === 'desktop' ? '桌面预览' : viewport === 'tablet' ? '平板预览' : '手机预览'}</span><span>{live ? '交互体验' : '自由编辑'}</span></div>
+      {!live && layerPath.length > 0 ? <nav className="pa-studio-selection-path" aria-label="选中图层的父子路径">
+        <small>选中</small>{layerPath.map((item, index) => <span key={item.id} className="pa-studio-selection-segment">
+          {index > 0 ? <span aria-hidden="true" className="pa-studio-path-separator">›</span> : null}
+          <button type="button" aria-current={item.id === chosen?.id ? 'location' : undefined}
+            onClick={() => selectLayer(item.id)} title={`定位到 ${nodeLabel(item)}`}>{nodeLabel(item)}</button>
+        </span>)}</nav> : null}<div className="pa-studio-canvas-area"><div className={`pa-studio-device device-${viewport} ${doc.design.motion !== 'system' ? 'atlas-no-motion' : ''}`} style={cssVars}>
         <div className="pa-studio-browserbar"><span/><span/><span/><div>{doc.blueprint.project.id} / {page?.id}</div></div>
         <div className={`pa-studio-preview-shell pa-shell-${doc.shell.navigation}`} style={{ '--studio-sidebar-width': `${doc.shell.sidebarWidth}px` } as CSSProperties}>
           {doc.shell.navigation !== 'none' ? <nav aria-label="项目页面导航" className="pa-studio-preview-navigation"><div className="pa-studio-preview-brand">{doc.blueprint.project.title}</div><div className="pa-studio-preview-links">{orderedNavigation.map((entry) => <button type="button" key={entry.target} className={entry.target === page?.id ? 'active' : ''} onClick={() => selectPage(entry.target)}>{entry.label}</button>)}</div></nav> : null}

@@ -370,3 +370,30 @@
     padding: 12px !important;
   }
 }
+
+/* Editor navigation usability: discoverable layer search, independent folding and scope breadcrumb. */
+.pa-studio-layer-tools{padding:0 11px 7px;display:flex;flex-direction:column;gap:5px}
+.pa-studio-layer-tool-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:2px}
+.pa-studio-layer-tool-row>small{font-size:11px;color:#657b6d;margin-right:auto}
+.pa-studio-layer-tool-row .ant-btn{font-size:11px;padding-inline:4px;min-height:28px}
+.pa-studio-layer-row{min-height:36px;gap:0}
+.pa-studio-layer-row>.pa-studio-layer{font-size:12px;min-height:34px;padding-inline:4px}
+.pa-studio-layer-row>.pa-studio-layer>small{font-size:10px}
+.pa-studio-layer-expander,.pa-studio-layer-expander-spacer{width:25px;min-width:25px;height:32px;display:grid;place-items:center}
+.pa-studio-layer-expander{cursor:pointer;background:transparent;border:0;border-radius:6px;font-size:17px;color:#597666}
+.pa-studio-layer-expander:hover:not(:disabled){background:#e5f2ea;color:#15583d}
+.pa-studio-layer-expander:disabled{cursor:default;opacity:.5}
+.pa-studio-layer-expander:focus-visible,.pa-studio-layer-delete:focus-visible,.pa-studio-selection-path button:focus-visible{outline:2px solid #247950;outline-offset:1px}
+.pa-studio-layer-row>.pa-studio-layer-delete{min-width:28px;min-height:32px;padding:3px 6px}
+.pa-studio-layer.is-search-match:not(.is-selected){background:#fff8e4;color:#654917}
+.pa-studio-selection-path{padding:7px 12px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--studio-line);background:#fbfcfb;color:#4b6959;font-size:12px}
+.pa-studio-selection-path>small{color:#819589;margin-right:4px;font-size:11px}
+.pa-studio-selection-segment{display:inline-flex;align-items:center;gap:4px;max-width:180px}
+.pa-studio-selection-path button{border:0;background:transparent;border-radius:5px;padding:4px 5px;color:#3d6250;cursor:pointer;font:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pa-studio-selection-path button:hover{background:#e7f3eb}
+.pa-studio-selection-path button[aria-current="location"]{background:#dceee2;color:#195f42;font-weight:750}
+.pa-studio-path-separator{color:#8ba697}
+.pa-studio-shortcuts{display:grid;grid-template-columns:auto auto;gap:7px 16px;font-size:12px;align-items:center}
+.pa-studio-shortcuts kbd{background:#f1f5f2;border:1px solid #dce8df;border-radius:4px;padding:3px 6px;font-family:ui-monospace,monospace}
+.pa-studio-shortcuts small{grid-column:1/-1;color:#677f6f;max-width:240px}
+@media(max-width:640px){.pa-studio-layer-head,.pa-studio-layer-tools,.pa-studio-layers{display:block}.pa-studio-layer-tool-row{display:flex}.pa-studio-layers{max-height:290px}}
