@@ -49,6 +49,16 @@ export function selectedLayerPath(root: CompositionNode, selectedId: string): Co
   return visit(root, []);
 }
 
+/** Reveal a canvas-selected component by unfolding only its ancestor groups.
+ * Collapsing a group that already contains the selection remains possible until
+ * a fresh canvas/breadcrumb/layer selection. Unknown IDs never alter folds. */
+export function revealSelectedLayerAncestors(root: CompositionNode, selectedId: string, collapsed: readonly string[]): string[] {
+  const path = selectedLayerPath(root, selectedId);
+  if (!path.length) return [...collapsed];
+  const ancestors = new Set(path.slice(0, -1).map((node) => node.id));
+  return collapsed.filter((id) => !ancestors.has(id));
+}
+
 export type StudioUndoAction = 'undo' | 'redo' | null;
 export function studioUndoShortcut(input: {
   key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expandableLayerIds, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from '../studio/studio-layer-navigation';
+import { expandableLayerIds, revealSelectedLayerAncestors, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from '../studio/studio-layer-navigation';
 import type { CompositionNode } from '../bridge';
 
 const root: CompositionNode = {
@@ -32,6 +32,15 @@ describe('Studio editor navigation ergonomics · no serialized schema changes', 
     expect(selectedLayerPath(root, 'temperatureChart').map((node) => node.id)).toEqual(['pageRoot', 'details', 'temperatureChart']);
     expect(selectedLayerPath(root, 'missing')).toEqual([]);
     expect(selectedLayerPath(root, 'pageRoot').map((node) => node.id)).toEqual(['pageRoot']);
+  });
+  it('reveals only selected ancestors without expanding unrelated collapsed groups', () => {
+    const collapsed = ['pageRoot', 'details', 'other'];
+    expect(revealSelectedLayerAncestors(root, 'healthMetric', collapsed)).toEqual(['other']);
+    expect(revealSelectedLayerAncestors(root, 'details', collapsed)).toEqual(['details', 'other']);
+    expect(revealSelectedLayerAncestors(root, 'missing', collapsed)).toEqual(collapsed);
+    expect(collapsed).toEqual(['pageRoot', 'details', 'other']);
+    // Collapse-all remains effective until an explicit new selection.
+    expect(revealSelectedLayerAncestors(root, 'pageRoot', collapsed)).toEqual(collapsed);
   });
   it('does not steal native undo when typing or using an actual application preview', () => {
     const shortcut = (key: string, opts: Partial<Parameters<typeof studioUndoShortcut>[0]> = {}) => studioUndoShortcut({

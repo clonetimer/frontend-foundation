@@ -7,7 +7,7 @@ import { buildProjectBlueprint, type PageTemplate } from '../builder/project-blu
 import { accentChoices, designCssVariables, type DesignConfig } from '../effects/config';
 import { effectCategories, effects } from '../effects/catalog';
 import { StudioCanvas } from './StudioCanvas';
-import { expandableLayerIds, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from './studio-layer-navigation';
+import { expandableLayerIds, revealSelectedLayerAncestors, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from './studio-layer-navigation';
 import { NativeAasRecoveryPanel } from './NativeAasRecoveryPanel';
 import { p5R3c2SourceIsEligible } from '../../../../../../tooling/scripts/aas_p0/p5_r3c2_runtime_adapter.mjs';
 import { WorkflowGraph } from './WorkflowGraph';
@@ -247,6 +247,13 @@ export function Component() {
     return () => window.removeEventListener('keydown', keydown);
   }, [doc, live]);
   const selectLayer = (id: string) => {
+    // A node chosen from the canvas, breadcrumb or tree must not stay hidden
+    // behind a previously collapsed ancestor in the layer navigator.
+    if (root && page) setCollapsedByPage((previous) => {
+      const before = previous[page.id] ?? [];
+      const after = revealSelectedLayerAncestors(root, id, before);
+      return after.length === before.length ? previous : { ...previous, [page.id]: after };
+    });
     setSelectedId(id);
     setLive(false);
     if (inspector === '页面' || inspector === '接口管理' || inspector === '风格') setInspector('内容');
@@ -821,7 +828,7 @@ export function Component() {
           {doc.shell.navigation !== 'none' ? <nav aria-label="项目页面导航" className="pa-studio-preview-navigation"><div className="pa-studio-preview-brand">{doc.blueprint.project.title}</div><div className="pa-studio-preview-links">{orderedNavigation.map((entry) => <button type="button" key={entry.target} className={entry.target === page?.id ? 'active' : ''} onClick={() => selectPage(entry.target)}>{entry.label}</button>)}</div></nav> : null}
           <div className="pa-studio-screen" key={`${page?.id}-${replayKey}`} style={{ minHeight: Math.max(400, ...Object.entries(doc.decorations).filter(([key, meta]) => key.startsWith(`${page?.id}:`) && meta.geometry?.mode === 'absolute').map(([, meta]) => (meta.geometry?.y ?? 0) + (meta.geometry?.height ?? 150) + 52)) }}>
             <div ref={setAbsoluteLayer} className="pa-studio-absolute-layer" aria-label="页面绝对定位图层"/>
-            {root ? <StudioCanvas node={root} selectedId={chosen?.id} decorations={doc.decorations} pageId={page?.id} live={live} readOnly={live} onSelect={setSelectedId} onDropItem={drop} onNavigate={selectPage} recordFlow={recordFlow} dataSources={doc.dataSources} tableSelection={tableSelection} onTableSelection={setTableSelection} workflowPages={doc.blueprint.pages.map((entry) => entry.id)} absoluteLayer={absoluteLayer} onWorkflowTrace={(trace) => setWorkflowTraces((before) => appendWorkflowTrace(before, trace))}/> : <div>暂不支持编辑这一页的内容</div>}
+            {root ? <StudioCanvas node={root} selectedId={chosen?.id} decorations={doc.decorations} pageId={page?.id} live={live} readOnly={live} onSelect={selectLayer} onDropItem={drop} onNavigate={selectPage} recordFlow={recordFlow} dataSources={doc.dataSources} tableSelection={tableSelection} onTableSelection={setTableSelection} workflowPages={doc.blueprint.pages.map((entry) => entry.id)} absoluteLayer={absoluteLayer} onWorkflowTrace={(trace) => setWorkflowTraces((before) => appendWorkflowTrace(before, trace))}/> : <div>暂不支持编辑这一页的内容</div>}
           </div>
         </div>
       </div></div></main>
