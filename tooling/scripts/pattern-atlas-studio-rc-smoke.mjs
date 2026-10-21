@@ -277,7 +277,7 @@ try {
   const browserScrollBeforeLayerReveal = await evaluate(`(() => {
     const layers=document.querySelector('.pa-studio-layers');
     if (!layers) return null;
-    layers.style.height='50px'; layers.style.maxHeight='50px'; layers.style.flex='0 0 50px';
+    layers.style.height='50px'; layers.style.minHeight='50px'; layers.style.maxHeight='50px'; layers.style.flex='0 0 50px';
     layers.scrollTop=0;return window.scrollY;
   })()`);
   assert(browserScrollBeforeLayerReveal !== null, 'Cannot size Layers pane for scroll regression');
@@ -295,7 +295,7 @@ try {
     'Layers selection must not scroll the document');
   assert(await evaluate(`(() => {
     const pane=document.querySelector('.pa-studio-layers');
-    pane.style.removeProperty('height');pane.style.removeProperty('max-height');pane.style.removeProperty('flex');
+    pane.style.removeProperty('height');pane.style.removeProperty('min-height');pane.style.removeProperty('max-height');pane.style.removeProperty('flex');
     return true;
   })()`), 'Cannot restore Layers pane after viewport test');
   pass('studio-layer-selection-scroll-without-document-movement');
