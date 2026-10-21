@@ -7,7 +7,7 @@ import { buildProjectBlueprint, type PageTemplate } from '../builder/project-blu
 import { accentChoices, designCssVariables, type DesignConfig } from '../effects/config';
 import { effectCategories, effects } from '../effects/catalog';
 import { StudioCanvas } from './StudioCanvas';
-import { expandableLayerIds, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from './studio-layer-navigation';
+import { expandableLayerIds, revealSelectedLayerAncestors, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from './studio-layer-navigation';
 import { NativeAasRecoveryPanel } from './NativeAasRecoveryPanel';
 import { p5R3c2SourceIsEligible } from '../../../../../../tooling/scripts/aas_p0/p5_r3c2_runtime_adapter.mjs';
 import { WorkflowGraph } from './WorkflowGraph';
@@ -247,6 +247,13 @@ export function Component() {
     return () => window.removeEventListener('keydown', keydown);
   }, [doc, live]);
   const selectLayer = (id: string) => {
+    // A node chosen from the canvas, breadcrumb or tree must not stay hidden
+    // behind a previously collapsed ancestor in the layer navigator.
+    if (root && page) setCollapsedByPage((previous) => {
+      const before = previous[page.id] ?? [];
+      const after = revealSelectedLayerAncestors(root, id, before);
+      return after.length === before.length ? previous : { ...previous, [page.id]: after };
+    });
     setSelectedId(id);
     setLive(false);
     if (inspector === '页面' || inspector === '接口管理' || inspector === '风格') setInspector('内容');
