@@ -237,6 +237,27 @@ try {
   pass('studio-inspector-responsive-viewport');
 
 
+  // UX: exercise actual packaged Studio navigator, not only the pure tree helper.
+  const initialLayers = await evaluate("document.querySelectorAll('.pa-studio-layers .pa-studio-layer-row').length");
+  assert(initialLayers > 1, 'Studio must expose nested layers for navigator trial');
+  assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-layer-tool-row button')].find(x=>x.textContent?.includes('折叠全部'));if(!b)return false;b.click();return true;})()"), 'Fold-all control missing');
+  await until(() => evaluate("document.querySelectorAll('.pa-studio-layers .pa-studio-layer-row').length === 1"), 'UX fold all layers');
+  const selectedCanvasNode = await evaluate("(() => {const all=[...document.querySelectorAll('.pa-studio-device [data-studio-node]')];const candidate=all.findLast(n=>!n.querySelector('[data-studio-node]'));if(!candidate)return '';candidate.click();return candidate.getAttribute('data-studio-node')||'';})()");
+  assert(selectedCanvasNode, 'Cannot select nested component on canvas');
+  await until(() => evaluate("(() => {const selected=document.querySelector('.pa-studio-layers .pa-studio-layer.is-selected');return selected && selected.closest('.pa-studio-layer-row') && document.querySelectorAll('.pa-studio-layers .pa-studio-layer-row').length > 1;})()"), 'UX selected canvas node is hidden by folded parent');
+  assert(await evaluate("(() => {const nav=document.querySelector('.pa-studio-selection-path');return Boolean(nav&&nav.querySelectorAll('button').length>1)})()"), 'Selected canvas node must expose parent breadcrumb');
+  const findLayer = "input[aria-label='搜索页面图层']";
+  assert(await evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");if(!e)return false;e.focus();return document.activeElement===e;})()"), 'Layer search is not keyboard focusable');
+  await call('Input.insertText', { text: selectedCanvasNode });
+  await until(() => evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");return e?.value === " + JSON.stringify(selectedCanvasNode) + " && document.querySelector('.pa-studio-layers .pa-studio-layer.is-search-match');})()"), 'UX selected layer search');
+  assert(await evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");e.focus();e.select();return true;})()"));
+  await call('Input.insertText', { text: '___STUDIO-UX-no-matching-component___' });
+  await until(() => evaluate("document.querySelector('.pa-studio-layers')?.textContent?.includes('没有匹配的页面图层')"), 'UX unmatched layer search');
+  assert(await evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");e.focus();e.select();return true;})()"));
+  await key('Backspace', 'Backspace', 8);
+  await until(() => evaluate("(() => {const e=document.querySelector(" + JSON.stringify(findLayer) + ");return e?.value === '' && document.querySelectorAll('.pa-studio-layers .pa-studio-layer-row').length > 1;})()"), 'UX clear layer search');
+  pass('studio-layer-fold-canvas-reveal-and-search');
+
   const before = await stored();
   assert(before?.blueprint?.pages?.[0]?.composition, 'P0 initial autosave absent');
   const originalCount = countNodes(before.blueprint.pages[0].composition);
@@ -246,6 +267,16 @@ try {
     return saved?.blueprint?.pages?.[0]?.composition && countNodes(saved.blueprint.pages[0].composition) === originalCount + 1;
   }, 'P0 component insertion/autosave');
   pass('insert-component-and-autosave');
+
+  // Keyboard shortcut works only when the active control is not a text editor.
+  assert(await evaluate("(() => {const b=[...document.querySelectorAll('.pa-studio-toolbar-actions button')].find(x=>x.textContent?.includes('撤销'));if(!b)return false;b.focus();return document.activeElement===b;})()"), 'Undo toolbar cannot be focused');
+  await call('Input.dispatchKeyEvent', { type:'rawKeyDown', key:'z', code:'KeyZ', windowsVirtualKeyCode:90, modifiers:2 });
+  await call('Input.dispatchKeyEvent', { type:'keyUp', key:'z', code:'KeyZ', windowsVirtualKeyCode:90 });
+  await until(async () => countNodes((await stored())?.blueprint?.pages?.[0]?.composition) === originalCount, 'Studio Ctrl+Z undo');
+  await call('Input.dispatchKeyEvent', { type:'rawKeyDown', key:'Z', code:'KeyZ', windowsVirtualKeyCode:90, modifiers:10 });
+  await call('Input.dispatchKeyEvent', { type:'keyUp', key:'Z', code:'KeyZ', windowsVirtualKeyCode:90 });
+  await until(async () => countNodes((await stored())?.blueprint?.pages?.[0]?.composition) === originalCount + 1, 'Studio Ctrl+Shift+Z redo');
+  pass('studio-keyboard-undo-redo');
 
   assert(await evaluate("(() => {const e=document.querySelector('.pa-studio-inspector-rail button[title=风格]');if(!e)return false;e.click();return true;})()"), 'P0 style tab');
   await until(() => evaluate("!![...document.querySelectorAll('.pa-studio-setting')].find(x=>x.textContent?.includes('项目名称'))?.querySelector('input')"), 'P0 style editor');
