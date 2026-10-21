@@ -237,6 +237,36 @@ try {
   pass('studio-inspector-responsive-viewport');
 
 
+  // Two independent scroll regions: long palette never pushes the layer tools
+  // out of view, and scrolling one list must not scroll the other.
+  const sidebarLayout = await evaluate(`(() => {
+    const sidebar=document.querySelector('.pa-studio-sidebar');
+    const palette=sidebar?.querySelector('.pa-studio-palette');
+    const layers=sidebar?.querySelector('.pa-studio-layers');
+    const search=sidebar?.querySelector('input[aria-label="搜索页面图层"]');
+    if (!sidebar||!palette||!layers||!search) return null;
+    const s=sidebar.getBoundingClientRect(),p=palette.getBoundingClientRect(),
+          l=layers.getBoundingClientRect(),q=search.getBoundingClientRect();
+    const firstLayerTop=l.top,firstSearchTop=q.top;
+    palette.scrollTop=palette.scrollHeight;
+    return {paletteHeight:p.height,layersHeight:l.height,sidebarHeight:s.height,
+      paletteOverflow:palette.scrollHeight>palette.clientHeight,
+      sidebarOverflow:sidebar.scrollHeight>sidebar.clientHeight+3,
+      paletteWithin:p.top>=s.top-2&&p.bottom<=s.bottom+2,
+      layersWithin:l.top>=s.top-2&&l.bottom<=s.bottom+2,
+      searchWithin:q.top>=s.top-2&&q.bottom<=s.bottom+2,
+      layerPositionStable:Math.abs(layers.getBoundingClientRect().top-firstLayerTop)<2,
+      searchPositionStable:Math.abs(search.getBoundingClientRect().top-firstSearchTop)<2};
+  })()`);
+  assert(sidebarLayout && sidebarLayout.paletteHeight>=90 && sidebarLayout.layersHeight>=100,
+    'Studio palette and layers must each have their own usable vertical space: '+JSON.stringify(sidebarLayout));
+  assert(sidebarLayout.paletteOverflow && !sidebarLayout.sidebarOverflow,
+    'Long palette must scroll internally without scrolling the entire sidebar: '+JSON.stringify(sidebarLayout));
+  assert(sidebarLayout.paletteWithin && sidebarLayout.layersWithin && sidebarLayout.searchWithin
+    && sidebarLayout.layerPositionStable && sidebarLayout.searchPositionStable,
+    'Palette scrolling must not hide layer search/tree: '+JSON.stringify(sidebarLayout));
+  pass('studio-sidebar-independent-scroll-regions');
+
   // UX: exercise actual packaged Studio navigator, not only the pure tree helper.
   const initialLayers = await evaluate("document.querySelectorAll('.pa-studio-layers .pa-studio-layer-row').length");
   assert(initialLayers > 1, 'Studio must expose nested layers for navigator trial');

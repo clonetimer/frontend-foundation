@@ -397,3 +397,42 @@
 .pa-studio-shortcuts kbd{background:#f1f5f2;border:1px solid #dce8df;border-radius:4px;padding:3px 6px;font-family:ui-monospace,monospace}
 .pa-studio-shortcuts small{grid-column:1/-1;color:#677f6f;max-width:240px}
 @media(max-width:640px){.pa-studio-layer-head,.pa-studio-layer-tools,.pa-studio-layers{display:block}.pa-studio-layer-tool-row{display:flex}.pa-studio-layers{max-height:290px}}
+
+
+/* Editor UX: keep Palette and Layers reachable without scrolling through one
+   enormous sidebar. Each collection scrolls independently; search and toolbars
+   remain visible. The workspace is unchanged in exported applications. */
+.pa-studio-sidebar{
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.pa-studio-sidebar>.pa-studio-panel-title,
+.pa-studio-sidebar>.pa-studio-palette-search,
+.pa-studio-sidebar>.pa-studio-layer-tools{
+  flex:0 0 auto;
+}
+.pa-studio-sidebar>.pa-studio-palette{
+  flex:1 1 48%;
+  min-height:110px;
+  min-width:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-color:#d4e1d9 transparent;
+}
+.pa-studio-sidebar>.pa-studio-layers{
+  flex:1 1 52%;
+  min-height:140px;
+  min-width:0;
+  max-height:none;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-color:#d4e1d9 transparent;
+}
+.pa-studio-sidebar>.pa-studio-layer-head{
+  background:#f9fcfa;
+}
+@media(max-width:640px){
+  .pa-studio-sidebar>.pa-studio-palette{min-height:90px}
+  .pa-studio-sidebar>.pa-studio-layers{min-height:110px;max-height:none}
+}
