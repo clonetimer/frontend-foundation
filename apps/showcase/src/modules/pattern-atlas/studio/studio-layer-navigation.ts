@@ -59,6 +59,22 @@ export function revealSelectedLayerAncestors(root: CompositionNode, selectedId: 
   return collapsed.filter((id) => !ancestors.has(id));
 }
 
+/** An explicit selection outside the active filter must not remain hidden. */
+export function layerSearchAfterSelection(query: string, selectedId: string, visibleIds: ReadonlySet<string>): string {
+  return query.trim() && !visibleIds.has(selectedId) ? '' : query;
+}
+
+/** Scroll only the Layers pane, by the minimum amount necessary to reveal a row.
+ * Item coordinates are measured relative to the scroller's content origin. */
+export function layerScrollPosition(scrollTop: number, viewportHeight: number, itemTop: number, itemBottom: number, margin = 8): number {
+  if (![scrollTop, viewportHeight, itemTop, itemBottom, margin].every(Number.isFinite)
+      || viewportHeight <= 0 || itemBottom < itemTop) return scrollTop;
+  const inset = Math.min(Math.max(0, margin), viewportHeight / 4);
+  if (itemTop < scrollTop + inset) return Math.max(0, itemTop - inset);
+  if (itemBottom > scrollTop + viewportHeight - inset) return Math.max(0, itemBottom - viewportHeight + inset);
+  return scrollTop;
+}
+
 export type StudioUndoAction = 'undo' | 'redo' | null;
 export function studioUndoShortcut(input: {
   key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean;

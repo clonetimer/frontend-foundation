@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expandableLayerIds, revealSelectedLayerAncestors, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from '../studio/studio-layer-navigation';
+import { expandableLayerIds, layerScrollPosition, layerSearchAfterSelection, revealSelectedLayerAncestors, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from '../studio/studio-layer-navigation';
 import type { CompositionNode } from '../bridge';
 
 const root: CompositionNode = {
@@ -41,6 +41,22 @@ describe('Studio editor navigation ergonomics · no serialized schema changes', 
     expect(collapsed).toEqual(['pageRoot', 'details', 'other']);
     // Collapse-all remains effective until an explicit new selection.
     expect(revealSelectedLayerAncestors(root, 'pageRoot', collapsed)).toEqual(collapsed);
+  });
+  it('keeps a valid search but clears a filter hiding a new canvas selection', () => {
+    const visible = searchStudioLayers(root, '温度', label).visibleIds;
+    expect(layerSearchAfterSelection('温度', 'temperatureChart', visible)).toBe('温度');
+    expect(layerSearchAfterSelection('温度', 'details', visible)).toBe('温度');
+    expect(layerSearchAfterSelection('温度', 'healthMetric', visible)).toBe('');
+    expect(layerSearchAfterSelection('  ', 'healthMetric', visible)).toBe('  ');
+    expect(layerSearchAfterSelection('无结果', 'other', new Set())).toBe('');
+  });
+  it('scrolls minimally within the layer list and never shifts a visible row', () => {
+    expect(layerScrollPosition(100, 200, 130, 160)).toBe(100); // fully visible
+    expect(layerScrollPosition(100, 200, 75, 105)).toBe(67); // above viewport
+    expect(layerScrollPosition(100, 200, 280, 330)).toBe(138); // below viewport
+    expect(layerScrollPosition(0, 100, 1, 24)).toBe(0); // clamp to start
+    expect(layerScrollPosition(100, 0, 50, 80)).toBe(100); // hidden pane
+    expect(layerScrollPosition(100, 100, 130, 120)).toBe(100); // invalid row
   });
   it('does not steal native undo when typing or using an actual application preview', () => {
     const shortcut = (key: string, opts: Partial<Parameters<typeof studioUndoShortcut>[0]> = {}) => studioUndoShortcut({
