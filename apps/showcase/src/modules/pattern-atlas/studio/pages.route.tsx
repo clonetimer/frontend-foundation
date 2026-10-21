@@ -7,7 +7,7 @@ import { buildProjectBlueprint, type PageTemplate } from '../builder/project-blu
 import { accentChoices, designCssVariables, type DesignConfig } from '../effects/config';
 import { effectCategories, effects } from '../effects/catalog';
 import { StudioCanvas } from './StudioCanvas';
-import { expandableLayerIds, revealSelectedLayerAncestors, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from './studio-layer-navigation';
+import { expandableLayerIds, layerScrollPosition, layerSearchAfterSelection, revealSelectedLayerAncestors, searchStudioLayers, selectedLayerPath, studioUndoShortcut } from './studio-layer-navigation';
 import { NativeAasRecoveryPanel } from './NativeAasRecoveryPanel';
 import { p5R3c2SourceIsEligible } from '../../../../../../tooling/scripts/aas_p0/p5_r3c2_runtime_adapter.mjs';
 import { WorkflowGraph } from './WorkflowGraph';
@@ -61,7 +61,7 @@ function Outline({ node, selectedId, onSelect, onDelete, onToggle, collapsedIds,
         title={searching ? '筛选时自动展开匹配路径' : `${expanded ? '折叠' : '展开'}子图层`}>{expanded ? '⌄' : '›'}</button>
         : <span className="pa-studio-layer-expander-spacer" aria-hidden="true"/>}
       <button className={`pa-studio-layer ${node.id === selectedId ? 'is-selected' : ''} ${matchedIds.has(node.id) ? 'is-search-match' : ''}`}
-        type="button" onClick={() => onSelect(node.id)} aria-pressed={node.id === selectedId}
+        data-studio-layer-id={node.id} type="button" onClick={() => onSelect(node.id)} aria-pressed={node.id === selectedId}
         title={`${name} · ${kind ? widgetDefinition(kind).label : typeLabels[node.type] ?? node.type}`}>
         <span aria-hidden="true">{node.kind === 'layout' ? '▦' : '▫'}</span>
         <span>{name}</span><small>{kind ? widgetDefinition(kind).label : typeLabels[node.type] ?? node.type}</small>
@@ -94,6 +94,8 @@ export function Component() {
   const [paletteSearch, setPaletteSearch] = useState('');
   const [layerSearch, setLayerSearch] = useState('');
   const [collapsedByPage, setCollapsedByPage] = useState<Record<string, string[]>>({});
+  const layerListRef = useRef<HTMLDivElement>(null);
+  const [layerRevealRequest, setLayerRevealRequest] = useState<{ pageId: string; nodeId: string; serial: number } | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [workflowTraces, setWorkflowTraces] = useState<WorkflowTrace[]>([]);
   const [apiTestResult, setApiTestResult] = useState('');
@@ -140,6 +142,21 @@ export function Component() {
     setCollapsedByPage((previous) => ({ ...previous, [page.id]: expandableLayerIds(root) }));
   };
   const expandAllLayers = () => { if (page) setCollapsedByPage((previous) => ({ ...previous, [page.id]: [] })); };
+
+  // Run after React has rendered the newly expanded ancestors. Scrolling this
+  // specific pane must not move the document, component palette or canvas.
+  useEffect(() => {
+    if (!layerRevealRequest || layerRevealRequest.pageId !== page?.id) return;
+    const pane = layerListRef.current;
+    const selected = pane?.querySelector<HTMLButtonElement>('.pa-studio-layer.is-selected');
+    if (!pane || !selected || selected.dataset.studioLayerId !== layerRevealRequest.nodeId) return;
+    const paneRect = pane.getBoundingClientRect();
+    const rowRect = selected.getBoundingClientRect();
+    const itemTop = pane.scrollTop + rowRect.top - paneRect.top;
+    const next = layerScrollPosition(pane.scrollTop, pane.clientHeight, itemTop, itemTop + rowRect.height);
+    if (next !== pane.scrollTop) pane.scrollTop = next;
+    setLayerRevealRequest(null);
+  }, [layerRevealRequest, collapsedByPage, layerSearch, page?.id]);
 
   const orderedNavigation = useMemo(() => {
     const entries = [...(doc.blueprint.navigation?.items ?? [])].sort((a, b) => a.order - b.order);
@@ -254,6 +271,11 @@ export function Component() {
       const after = revealSelectedLayerAncestors(root, id, before);
       return after.length === before.length ? previous : { ...previous, [page.id]: after };
     });
+    const nextSearch = layerSearchAfterSelection(layerSearch, id, layerResults.visibleIds);
+    if (nextSearch !== layerSearch) setLayerSearch(nextSearch);
+    if (page) setLayerRevealRequest((previous) => ({
+      pageId: page.id, nodeId: id, serial: (previous?.serial ?? 0) + 1
+    }));
     setSelectedId(id);
     setLive(false);
     if (inspector === '页面' || inspector === '接口管理' || inspector === '风格') setInspector('内容');
@@ -813,7 +835,7 @@ export function Component() {
             <Button size="small" type="text" onClick={expandAllLayers} disabled={searchingLayers || !root}>展开全部</Button>
             <Button size="small" type="text" onClick={collapseAllLayers} disabled={searchingLayers || !root}>折叠全部</Button></div>
         </div>
-        <div className="pa-studio-layers" aria-label="页面图层导航">{root && (!searchingLayers || layerResults.visibleIds.size) ? <Outline node={root} selectedId={chosen?.id ?? ''}
+        <div ref={layerListRef} className="pa-studio-layers" aria-label="页面图层导航">{root && (!searchingLayers || layerResults.visibleIds.size) ? <Outline node={root} selectedId={chosen?.id ?? ''}
           onSelect={selectLayer} onDelete={deleteComponent} onToggle={toggleLayer} collapsedIds={collapsedLayers} visibleIds={layerResults.visibleIds}
           matchedIds={layerResults.matchedIds} searching={searchingLayers} decorations={doc.decorations} pageId={page?.id ?? ''}/> : <p className="pa-studio-no-results">{root ? '没有匹配的页面图层' : '此页面尚无画布结构'}</p>}</div></aside>
       <main className="pa-studio-stage"><div className="pa-studio-stage-crumb"><span>{page?.title ?? '页面'}</span><span>{viewport === 'desktop' ? '桌面预览' : viewport === 'tablet' ? '平板预览' : '手机预览'}</span><span>{live ? '交互体验' : '自由编辑'}</span></div>
