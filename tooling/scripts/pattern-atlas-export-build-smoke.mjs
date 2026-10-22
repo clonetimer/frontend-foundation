@@ -203,7 +203,7 @@ function exec(program, args, cwd) {
       let available=false;
       for(let attempt=0;attempt<100;attempt++){
         try {const result=await fetch('http://127.0.0.1:8765/healthz');
-          if(result.ok){available=true;break;}}catch{}
+          if(result.ok){available=true;break;}}catch{ /* backend readiness probe, retry after startup */ }
         await new Promise(resolve=>setTimeout(resolve,100));
       }
       assert(available,'Packaged Python management service failed to start');
