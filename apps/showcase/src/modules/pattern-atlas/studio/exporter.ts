@@ -319,7 +319,7 @@ export function generateStudioApp(document: StudioDocument): string {
 import { useEffect, useState, type CSSProperties } from 'react';
 ${imports}
 import './studio-effects.css';
-import ManagementAuth from './management-auth';
+import ManagementAuth from ${json('./management-auth')};
 const pageComponents = { ${components} };
 const navItems = ${json(navigation)};
 const systemNavIds = ${json(SYSTEM_MANAGEMENT_PAGES.map((entry) => entry.id))};
