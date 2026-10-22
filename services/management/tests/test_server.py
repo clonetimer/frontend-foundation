@@ -142,6 +142,28 @@ class TestManagementApi(unittest.TestCase):
         self.assertEqual(self.request("POST","/api/system/roles",{"name":"Bad","code":"bad"},
                           origin="http://evil.test")["status"],403)
 
+    def test_password_rotation_revokes_old_sessions(self):
+        self.login()
+        first = "LongTemporaryPassword00001!"
+        second = "LongTemporaryPassword00002!"
+        third = "LongTemporaryPassword00003!"
+        created = self.request("POST", "/api/system/users", {"username":"alice", "name":"Alice", "password":first})
+        self.assertEqual(created["status"], 201)
+        uid = created["body"]["data"]["id"]
+        signed = self.request("POST", "/api/system/auth/login", {"username":"alice", "password":first})
+        cookie = signed["headers"]["Set-Cookie"].split(";")[0]
+        changed = self.request("POST", "/api/system/auth/change-password",
+                               {"currentPassword":first, "newPassword":second}, cookie=cookie)
+        self.assertEqual(changed["status"], 200)
+        rotated = changed["headers"]["Set-Cookie"].split(";")[0]
+        self.assertEqual(self.request("GET", "/api/system/auth/me", cookie=cookie)["status"], 401)
+        self.assertEqual(self.request("GET", "/api/system/auth/me", cookie=rotated)["status"], 200)
+        reset = self.request("POST", "/api/system/users/" + uid + "/reset-password", {"newPassword":third})
+        self.assertEqual(reset["status"], 200)
+        self.assertEqual(self.request("GET", "/api/system/auth/me", cookie=rotated)["status"], 401)
+        self.assertEqual(self.request("POST", "/api/system/auth/login", {"username":"alice", "password":third})["status"], 200)
+        self.assertEqual(self.request("POST", "/api/system/roles", {"name":"Invalid role","code":"superadmin"})["status"], 403)
+
     def test_parameters_reject_secrets_and_hierarchy_cycle(self):
         self.login()
         self.assertEqual(self.request("POST","/api/system/parameters",{
