@@ -337,8 +337,8 @@ export default function StudioApp() {
     <aside className="atlas-app-sidebar" aria-label="页面目录">
       <div className="atlas-app-brand">{${json(document.blueprint.project.title)}}</div>
       <nav className="atlas-app-nav">
-        {navItems.filter((item) => json(shell.navigation) === 'sidebar' ? !systemNavIds.includes(item.target) : true).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}
-        {json(shell.navigation) === 'sidebar' && navItems.some((item) => systemNavIds.includes(item.target)) ? <details className="atlas-system-group" open><summary>系统管理</summary><div>{navItems.filter((item) => systemNavIds.includes(item.target)).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}</div></details> : null}
+        {navItems.filter((item) => ${json(shell.navigation)} === 'sidebar' ? !systemNavIds.includes(item.target) : true).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}
+        {${json(shell.navigation)} === 'sidebar' && navItems.some((item) => systemNavIds.includes(item.target)) ? <details className="atlas-system-group" open><summary>系统管理</summary><div>{navItems.filter((item) => systemNavIds.includes(item.target)).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}</div></details> : null}
       </nav>
     </aside>
     <main className="atlas-app-main"><View/></main>
