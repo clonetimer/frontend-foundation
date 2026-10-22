@@ -190,7 +190,8 @@ export function SystemManagementAction({ props, live, recordSelection }: {
     {error ? <Alert type="error" showIcon message={error}/> : null}
   </div>;
 
-  const treeData = (list: ManagementNode[]): Array<{key:string;title:string;children?:ReturnType<typeof treeData>}> =>
+  type TreeItem = { key: string; title: string; children?: TreeItem[] };
+  const treeData = (list: ManagementNode[]): TreeItem[] =>
     list.map((node) => ({ key: node.id, title: node.name, ...(node.children ? { children: treeData(node.children) } : {}) }));
   const filter = (list: ManagementNode[]): ManagementNode[] => list.flatMap((node) => [
     ...(node.name.toLowerCase().includes(search.trim().toLowerCase()) ? [node] : []),
