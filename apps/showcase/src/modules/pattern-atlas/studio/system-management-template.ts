@@ -46,12 +46,14 @@ function composition(spec: SystemPageDefinition): CompositionNode {
   const children: CompositionNode[] = [
     { id: 'systemHeading', kind: 'widget', type: 'text', props: { text: spec.title, variant: 'title' } },
     { id: 'systemNote', kind: 'widget', type: 'text', props: { text: spec.description + ' 请先在「接口管理」配置对应数据源。', variant: 'secondary' } },
-    widget('systemTable', spec.title + '列表')
   ];
   if (!spec.readonly) {
-    children.push(widget('systemCreate', '新增' + spec.title.replace('管理','')));
-    children.push(widget('systemEdit', '修改' + spec.title.replace('管理','')));
+    children.push({ id: 'systemActions', kind: 'layout', type: 'grid', props: { columns: 2, gap: 8 }, children: [
+      widget('systemCreate', '新增' + spec.title.replace('管理','')),
+      widget('systemEdit', '修改' + spec.title.replace('管理',''))
+    ] });
   }
+  children.push(widget('systemTable', spec.title + '列表'));
   return { id: 'systemRoot', kind: 'layout', type: 'stack', props: { gap: 16 }, children };
 }
 
