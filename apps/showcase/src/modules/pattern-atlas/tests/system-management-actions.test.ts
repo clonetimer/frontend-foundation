@@ -45,9 +45,9 @@ describe('system-management privileged interactions', () => {
       for (const id of ids) {
         expect(page.composition?.children?.some((item) => item.id === id)).toBe(true);
         expect(doc.decorations[pageId+':'+id]?.widgetKind).toBe('management-actions');
-        const props = doc.decorations[pageId+':'+id]?.widgetProps!;
-        expect(props.optionsUrl).toBe('');
-        expect(props.submitUrl).toBe('');
+        const props = doc.decorations[pageId+':'+id]?.widgetProps;
+        expect(props?.optionsUrl).toBe('');
+        expect(props?.submitUrl).toBe('');
       }
     }
     expect(doc.decorations['system-operation-logs:systemRoleUsers']).toBeUndefined();
