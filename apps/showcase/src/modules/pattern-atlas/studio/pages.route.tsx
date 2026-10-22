@@ -13,7 +13,7 @@ import { p5R3c2SourceIsEligible } from '../../../../../../tooling/scripts/aas_p0
 import { WorkflowGraph } from './WorkflowGraph';
 import { useStudioRecordFlow } from './StudioRecords';
 import { addRecordEditorExample, addLinkedRecordExample } from './record-template';
-import { addSystemManagementPages, isSystemManagementPage } from './system-management-template';
+import { addSystemManagementPages, addSystemManagementActions, isSystemManagementPage } from './system-management-template';
 import { countDataSourceUses, detailRequestUrl, mergeRecordDetail, newDemoSource, newServerDemoSource, validDetailTemplate, type StudioDataSource } from './data-sources';
 import { buildStudioListUrl, readStudioListPayload, validQueryParameter, type StudioFieldMapping } from './source-query';
 import { validRecordField, validRecordPath, validRecordUrl, type StudioRecordFieldBinding, type StudioRecordListBinding, type StudioRecordSubmitBinding } from './record-bindings';
@@ -220,6 +220,14 @@ export function Component() {
       setInspector('接口管理'); setInspectorOpen(true); setLive(false);
       void notice.success(`已添加 ${result.added.length} 个系统管理页面；请配置真实后端接口。`);
     } catch (error) { void notice.error(error instanceof Error ? error.message : '添加系统管理页面失败'); }
+  };
+  const upgradeSystemActions = () => {
+    try {
+      const result = addSystemManagementActions(doc);
+      if (!result.added.length) { void notice.info('当前系统管理页面已具备高级操作，或页面已被自定义替换。'); return; }
+      commit(result.document); setInspector('内容'); setInspectorOpen(true); setLive(false);
+      void notice.success('已补充 ' + result.added.length + ' 个高级操作，可配置接口后使用。');
+    } catch (error) { void notice.error(error instanceof Error ? error.message : '补齐系统管理失败'); }
   };
   const addThreeApiExample = () => {
     try {
@@ -497,7 +505,19 @@ export function Component() {
       {meta.widgetKind ? <>
         {['title', 'text', 'description', 'value', 'suffix', 'placeholder', 'src', 'values', 'series', 'unit', 'triggerText', 'okText', 'cancelText', 'formFields', 'tableColumns', 'filterValues'].filter((field) => richProps[field] !== undefined).map((field) => <TextSetting key={`rich-${field}`} title={({ title: '名称', text: '文字', description: '说明', value: '数值', suffix: '单位', placeholder: '占位文字', src: '图片 URL', values: '旧版单序列数值', series: '多序列（名称:1,2;名称2:3,4）', unit: '坐标单位', triggerText: '触发按钮', okText: '确认按钮', cancelText: '取消按钮', formFields: '弹窗表单字段（每行：key|标签|text/email/number|required/optional）', tableColumns: '表格列（每行：字段|标题）', filterValues: '筛选候选值（逗号分隔）' } as Record<string,string>)[field] ?? field} value={String(richProps[field] ?? '')} change={(value) => updateRich(field, value)} multiline={field === 'description' || field === 'series' || field === 'formFields' || field === 'tableColumns'}/>) }
         {richProps.items !== undefined ? <TextSetting title="条目（每行一项，表格可用「名称|状态」）" multiline value={Array.isArray(richProps.items) ? richProps.items.join('\n') : ''} change={(value) => updateRich('items', value.split('\n').slice(0, 30).map((item) => item.slice(0, 160)))}/> : null}
-        {['accept','uploadUrl','statusUrl','statusPath','percentPath','dataUrl','dataPath','submitUrl','itemsPath','totalPath','detailUrl','detailPath','deleteUrl','deleteEtagField','idField','filterField','sortField'].filter((field) => richProps[field] !== undefined).map((field) => <TextSetting key={field} title={({ accept: '允许的文件类型', uploadUrl: '上传 POST 地址', statusUrl: '任务状态 GET 地址', statusPath: '响应中的状态路径', percentPath: '进度数值路径', dataUrl: '数据 GET 地址（表格或曲线）', dataPath: '曲线 JSON 数据路径（默认 data）', submitUrl: '表单提交 POST 地址', itemsPath: '表格记录路径（默认 data.items）', totalPath: '表格总数路径（默认 data.total）', detailUrl: '表格行详情 GET 地址（可选；含 {id}）', detailPath: '行详情响应路径（默认 data）', deleteUrl: '表格行删除 DELETE 地址（可选；含 {id}，删除前确认）', deleteEtagField: 'DELETE If-Match 的强 ETag 字段（可选）', idField: '唯一记录 ID 字段', filterField: '筛选字段', sortField: '可排序列字段' } as Record<string,string>)[field] ?? field} value={String(richProps[field] ?? '')} change={(value) => updateRich(field, value)}/>)}
+        {['accept','uploadUrl','statusUrl','statusPath','percentPath','dataUrl','dataPath','submitUrl','itemsPath','totalPath','detailUrl','detailPath','deleteUrl','deleteEtagField','idField','filterField','sortField'].filter((field) => richProps[field] !== undefined && (meta.widgetKind !== 'management-actions' || !['submitUrl','detailUrl'].includes(field))).map((field) => <TextSetting key={field} title={({ accept: '允许的文件类型', uploadUrl: '上传 POST 地址', statusUrl: '任务状态 GET 地址', statusPath: '响应中的状态路径', percentPath: '进度数值路径', dataUrl: '数据 GET 地址（表格或曲线）', dataPath: '曲线 JSON 数据路径（默认 data）', submitUrl: '表单提交 POST 地址', itemsPath: '表格记录路径（默认 data.items）', totalPath: '表格总数路径（默认 data.total）', detailUrl: '表格行详情 GET 地址（可选；含 {id}）', detailPath: '行详情响应路径（默认 data）', deleteUrl: '表格行删除 DELETE 地址（可选；含 {id}，删除前确认）', deleteEtagField: 'DELETE If-Match 的强 ETag 字段（可选）', idField: '唯一记录 ID 字段', filterField: '筛选字段', sortField: '可排序列字段' } as Record<string,string>)[field] ?? field} value={String(richProps[field] ?? '')} change={(value) => updateRich(field, value)}/>)}
+        {meta.widgetKind === 'management-actions' ? <>
+          <SettingSelect title="管理操作类型" value={String(richProps.actionMode ?? 'role-users')}
+            options={[{ value: 'role-users', label: '角色关联人员' }, { value: 'role-permissions', label: '角色菜单权限' }, { value: 'menu-tree', label: '只读菜单树' }, { value: 'status', label: '状态开关' }]} onChange={(value) => updateRich('actionMode', value)}/>
+          {richProps.actionMode !== 'status' ? <TextSetting title="候选条目 GET 地址（返回 data.items）" value={String(richProps.optionsUrl ?? '')} change={(value) => updateRich('optionsUrl', value)}/> : null}
+          {richProps.actionMode !== 'menu-tree' && richProps.actionMode !== 'status' ? <TextSetting title="已关联结果 GET 地址（含 {id}）" value={String(richProps.assignedUrl ?? '')} change={(value) => updateRich('assignedUrl', value)}/> : null}
+          {richProps.actionMode === 'status' ? <><TextSetting title="状态详情 GET 地址（含 {id}，需强 ETag）" value={String(richProps.detailUrl ?? '')} change={(value) => updateRich('detailUrl', value)}/>
+            <TextSetting title="状态字段名" value={String(richProps.statusField ?? '')} change={(value) => updateRich('statusField', value)}/>
+            <TextSetting title="启用值" value={String(richProps.activeValue ?? '')} change={(value) => updateRich('activeValue', value)}/>
+            <TextSetting title="停用值" value={String(richProps.inactiveValue ?? '')} change={(value) => updateRich('inactiveValue', value)}/></> : null}
+          {richProps.actionMode !== 'menu-tree' ? <TextSetting title={richProps.actionMode === 'status' ? 'PATCH 状态接口（含 {id}）' : 'PUT 关联接口（含 {id}）'} value={String(richProps.submitUrl ?? '')} change={(value) => updateRich('submitUrl', value)}/> : null}
+          <div className="pa-studio-note">仅在体验模式和导出项目发起真实请求。关联接口必须返回同一版本的 data.ids 与强 ETag；状态切换先读详情，再用 If-Match 写入。未配置地址禁止操作，后端必须落实鉴权和审计。</div>
+        </> : null}
         {meta.widgetKind === 'table' ? <>
           <SettingSelect title="共享表格数据源" value={String(richProps.sourceId ?? '')}
             options={[{value:'',label:'独立配置（兼容模式）'}, ...doc.dataSources.map((entry) => ({value:entry.id,label:entry.name}))]}
@@ -803,6 +823,7 @@ export function Component() {
     <div className="pa-studio-subtitle">本页数据连接</div>
     <div className="pa-studio-page-connections">{Object.entries(doc.decorations).filter(([id, value]) => id.startsWith(`${page?.id}:`) && (value.recordList || value.recordSubmit || value.api)).map(([id, value]) => <button type="button" key={id} onClick={() => { setSelectedId(id.slice((page?.id ?? '').length + 1)); setInspector('组件数据'); }}><span>{value.recordList ? 'GET 列表' : value.recordSubmit ? 'POST 保存' : `${value.api?.method ?? 'GET'} 请求`}</span><small>{value.recordList?.sourceId ?? value.recordSubmit?.sourceId ?? value.recordList?.url ?? value.recordSubmit?.url ?? value.api?.url}</small></button>)}{!Object.entries(doc.decorations).some(([id, value]) => id.startsWith(`${page?.id}:`) && (value.recordList || value.recordSubmit || value.api)) ? <small>暂无数据连接</small> : null}</div>
     <Button block type="primary" ghost onClick={installSystemManagement}>＋ 添加系统管理（7 个固定页面）</Button>
+    <Button block onClick={upgradeSystemActions}>＋ 补齐系统管理高级操作</Button>
     <div className="pa-studio-note">人员、角色、菜单、操作日志、登录日志、字典及参数设置。只安装缺失页面；导出项目保留同名“系统管理”左侧导航分组。后端连接需另行配置，日志页默认只读。</div>
     <Button block type="primary" ghost onClick={addThreeApiExample}>＋ 创建列表／详情／保存联动示例</Button>
     <Button block onClick={addLinkedExample}>＋ 创建兼容版记录编辑页</Button>
