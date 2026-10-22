@@ -110,6 +110,8 @@ export function SystemManagementAction({ props, live, recordSelection }: {
   const [confirmed, setConfirmed] = useState(false);
   const [search, setSearch] = useState('');
   const lock = useRef(false);
+  const selectionGuard = useRef({ id, live });
+  selectionGuard.current = { id, live };
   const field = typeof props.statusField === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(props.statusField) ? props.statusField : 'status';
   const active = typeof props.activeValue === 'string' ? props.activeValue : 'enabled';
   const inactive = typeof props.inactiveValue === 'string' ? props.inactiveValue : 'disabled';
@@ -164,16 +166,19 @@ export function SystemManagementAction({ props, live, recordSelection }: {
   const toggleStatus = async () => {
     if (lock.current || !enabled || !validStatus || !detailUrl || !writeUrl) return;
     lock.current = true; setBusy(true); setError('');
+    let writeAttempted = false;
     try {
       const response = await requestJson(detailUrl);
       const data = object(response) && object(response.data) ? response.data : null;
       if (!data || !strongEtag(data.etag) || data[field] !== selectedStatus || (goodId(data.id) && String(data.id) !== id))
         throw new Error('状态或版本发生变化，请刷新列表后重新选择。');
+      if (selectionGuard.current.id !== id || !selectionGuard.current.live) throw new Error('选择记录或模式已变化，取消写入。');
+      writeAttempted = true;
       await writeJson('PATCH', writeUrl, { [field]: checked ? inactive : active }, data.etag);
       window.dispatchEvent(new Event('atlas:records-refresh'));
     } catch (err) {
-      setError(writeError(err));
-      window.dispatchEvent(new Event('atlas:records-refresh'));
+      setError(writeAttempted ? writeError(err) : '状态核对未通过：' + (err instanceof Error ? err.message : '读取失败'));
+      if (selectionGuard.current.id === id) window.dispatchEvent(new Event('atlas:records-refresh'));
     } finally { lock.current = false; setBusy(false); }
   };
 
