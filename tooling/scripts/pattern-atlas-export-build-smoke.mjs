@@ -229,7 +229,10 @@ function exec(program, args, cwd) {
         try { rmSync(destination,{recursive:true,force:true,maxRetries:6,retryDelay:250}); lastError=null; break; }
         catch(error){lastError=error;await new Promise(resolve=>setTimeout(resolve,350));}
       }
-      if (lastError) throw lastError;
+      if (lastError) {
+        console.error('Failed to clean standalone management fixture after retry:', lastError);
+        process.exitCode = 1;
+      }
     }
   }
 })().catch((error) => { console.error('STANDALONE EXPORT BUILD FAILED',error);process.exitCode=1; });
