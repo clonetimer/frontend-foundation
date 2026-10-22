@@ -924,6 +924,13 @@ export async function runExportedBrowserSmoke(directory) {
     assert(await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(b=>b.textContent?.includes('登录系统管理'));if(!e||e.disabled)return false;e.click();return true;})()"), 'Cannot submit first-party login');
     await until(() => evaluate("!!document.querySelector('[data-system-action=role-users]')"), 'Management session did not enable real role page');
     await until(() => evaluate("document.body.textContent.includes('超级管理员')"), 'Role list did not load from packaged SQLite backend');
+    // Password operations are shipped as real controls, but must not expose
+    // privileged reset without selecting a concrete personnel record.
+    assert(await evaluate("(() => { const b=[...document.querySelectorAll('button')].find(e=>e.textContent?.includes('修改我的密码')); if(!b)return false;b.click();return true;})()"), 'Self-service password change control missing');
+    await until(() => evaluate("!!document.querySelector('input[aria-label=当前密码]')"), 'Password change modal not accessible');
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-modal button')].find(e=>e.textContent?.trim()==='取消');if(!b)return false;b.click();return true;})()"), 'Cannot cancel password change');
+    await evaluate("location.hash = '#/system-users'");
+    await until(() => evaluate("!!document.querySelector('[data-system-action=reset-password]')"), 'Administrator reset password control missing');
     await evaluate("location.hash = '#/system-menus'");
     await until(() => evaluate("!!document.querySelector('[data-system-action=menu-tree]')"), 'Menu tree page did not mount after authenticated navigation');
     assert(await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(b=>b.textContent?.includes('退出系统管理'));if(!e)return false;e.click();return true;})()"), 'Logout action missing');
