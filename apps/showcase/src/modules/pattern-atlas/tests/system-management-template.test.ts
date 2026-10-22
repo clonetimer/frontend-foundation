@@ -14,7 +14,8 @@ describe('System management starter pages', () => {
     expect(result.document.blueprint.navigation.items.slice(-7).map((item) => item.label)).toEqual(SYSTEM_MANAGEMENT_PAGES.map((item) => item.title));
     expect(serializeStudioDocument(initial)).toEqual(original);
     expect(result.document.dataSources).toHaveLength(7);
-    expect(result.document.dataSources.every((item) => item.listUrl === '' && item.saveUrl === '' && item.deleteUrl === '')).toBe(true);
+    expect(result.document.dataSources.every((item) => item.listUrl.startsWith('/api/system/'))).toBe(true);
+    expect(result.document.dataSources.filter((item) => item.id.includes('logs')).every((item) => !item.saveUrl && !item.deleteUrl)).toBe(true);
     expect(result.document.shell.navigation).toBe('sidebar');
     expect(result.document.blueprint.schemaVersion).toBe(1);
     expect(isSystemManagementPage('system-roles')).toBe(true);
@@ -46,6 +47,10 @@ describe('System management starter pages', () => {
     expect(exported.find((file) => file.name === 'StudioApp.tsx')?.text).not.toContain('json(shell.navigation) ===');
     expect(generateStudioApp(doc)).toContain('"system-roles"');
     expect(exported.find((file) => file.name === 'pages/system-roles.tsx')?.text).toContain('sourceError');
+    expect(exported.some((file) => file.name === 'management/server.py')).toBe(true);
+    expect(exported.some((file) => file.name === 'management/db.py')).toBe(true);
+    expect(exported.some((file) => file.name === 'management-auth.tsx')).toBe(true);
+    expect(exported.some((file) => file.name === 'vite.config.ts')).toBe(true);
   });
 
   it('is idempotent and only fills missing pages, preserving custom data sources', () => {
