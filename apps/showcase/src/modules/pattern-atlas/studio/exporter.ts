@@ -471,7 +471,7 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
 
 ## 单独启动
 
-**优先使用图形向导：Windows 双击 `start-gui.bat`，Linux/macOS 执行 `sh start-gui.sh`。** 部署向导提供环境检查、管理员首次初始化、启动/停止应用、备份与离线恢复按钮；不用手工敲备份命令。需要 Python 3.11+（含 Tkinter）和 Node.js/npm，首次安装依赖需要联网。部署成功后打开 http://127.0.0.1:8765。\n\n仍保留命令行方式：Windows 双击 `start.bat`，或 Linux/macOS 执行 `python3 management/launch.py`。首次启动构建前端、注册页面权限并创建管理员，后续复用已有数据库。**恢复操作必须先停止应用**，会二次确认、备份原数据库并强制所有用户重新登录。
+**优先使用图形向导：Windows 双击 \`start-gui.bat\`，Linux/macOS 执行 \`sh start-gui.sh\`。** 部署向导提供环境检查、管理员首次初始化、启动/停止应用、备份与离线恢复按钮；不用手工敲备份命令。需要 Python 3.11+（含 Tkinter）和 Node.js/npm，首次安装依赖需要联网。部署成功后打开 http://127.0.0.1:8765。\n\n仍保留命令行方式：Windows 双击 \`start.bat\`，或 Linux/macOS 执行 \`python3 management/launch.py\`。首次启动构建前端、注册页面权限并创建管理员，后续复用已有数据库。**恢复操作必须先停止应用**，会二次确认、备份原数据库并强制所有用户重新登录。
 
 本文件包中包含：
 
