@@ -68,12 +68,12 @@ const systemIds = new Set(SYSTEM_MANAGEMENT_PAGES.map((entry) => entry.id));
 export function isSystemManagementPage(id: string): boolean { return systemIds.has(id); }
 
 function widget(id: string, title: string): CompositionNode {
-  return { id, kind: 'widget', type: 'placeholder', props: { title, description: '通过右侧“接口管理”连接自己的后端' } };
+  return { id, kind: 'widget', type: 'placeholder', props: { title, description: '已预置 FF 内置系统管理接口；请先启动服务并登录' } };
 }
 function composition(spec: SystemPageDefinition): CompositionNode {
   const children: CompositionNode[] = [
     { id: 'systemHeading', kind: 'widget', type: 'text', props: { text: spec.title, variant: 'title' } },
-    { id: 'systemNote', kind: 'widget', type: 'text', props: { text: spec.description + ' 请先在「接口管理」配置对应数据源。', variant: 'secondary' } },
+    { id: 'systemNote', kind: 'widget', type: 'text', props: { text: spec.description + ' 已预置内置管理 API。首次使用请初始化管理员并启动管理服务。', variant: 'secondary' } },
   ];
   if (!spec.readonly) {
     children.push({ id: 'systemActions', kind: 'layout', type: 'grid', props: { columns: 2, gap: 8 }, children: [
@@ -118,7 +118,7 @@ export function addSystemManagementPages(document: StudioDocument): { document: 
       const createFields = spec.id === 'system-users' ? fields + '\npassword|初始密码|password|required' : fields;
       next = setDecoration(next, `${spec.id}:systemCreate`, { widgetKind: 'modal', widgetProps: {
         title: '新增' + spec.title.replace('管理',''), triggerText: '＋ 新增',
-        description: '连接并验证后端接口后才允许提交。', okText: '确认新增', cancelText: '取消',
+        description: '需要登录并具有相应管理权限，保存由内置后端执行。', okText: '确认新增', cancelText: '取消',
         formFields: createFields, submitUrl: '', formMode: 'create', submitMethod: 'POST', sourceId: spec.id,
         successWorkflow: '', failureWorkflow: ''
       } });
