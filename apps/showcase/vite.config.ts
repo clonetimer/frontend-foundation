@@ -237,5 +237,6 @@ const packageJson = JSON.parse(
 
 export default defineConfig({
   plugins: [react(), showcaseApiPlugin()],
+  server: { proxy: { '/api/system': { target: 'http://127.0.0.1:8765', changeOrigin: false } } },
   define: { APP_VERSION: JSON.stringify(packageJson.version) }
 });
