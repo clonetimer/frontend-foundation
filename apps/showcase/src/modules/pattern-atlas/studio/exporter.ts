@@ -463,11 +463,13 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
 
 ## 单独启动
 
-解压后进入目录，执行 \`npm install\`、\`npm run build\` 和 \`npm run dev\`，浏览器访问 Vite 终端显示的地址。此项目仅依赖公开的 React/Ant Design/Vite 包。
+解压后，在 Windows 双击 start.bat，或在 Linux/macOS 执行 python3 management/launch.py。需预先安装 Python 3.11+ 及 Node.js/npm；首次运行会安装前端依赖、构建 React、初始化管理员、注册页面权限，然后在 http://127.0.0.1:8765 以**同源**方式提供页面和内置管理 API。第二次运行会复用数据库和已安装依赖，不使用默认管理员密码。
 
 本文件包中包含：
 
 - **StudioApp.tsx**：多页面入口组件，支持左侧目录、顶部菜单或隐藏菜单；通过 #/页面ID 切换，无需额外路由依赖。将它作为目标 React 项目的 App。
+- **management/page-permissions.json**：从自定义页面生成的稳定访问权限，每页对应 page:<页面ID>:view；启动时只新增缺失菜单权限，不修改管理员已有授权和菜单状态。角色管理中的菜单权限分配会使用这些权限。系统管理启用后，业务页面同样必须登录；不具备权限时不挂载页面组件。注意：用户提供的外部业务 API 必须在自身服务端重复校验权限，前端保护不能保证数据接口安全。
+- **management/maintenance.py**：数据库安全维护。在线备份：python management/maintenance.py backup --db management/instance/management.sqlite3 --file backups/backup.sqlite3；离线恢复：停掉应用后执行 python management/maintenance.py restore --db management/instance/management.sqlite3 --file backups/backup.sqlite3 --yes-restore。恢复会先保存恢复前快照、完整性检查，并让所有旧会话失效。切勿直接覆盖正在使用的 SQLite 文件。
 - **pages/*.tsx + studio-effects.css**：React 19 / Ant Design 6 页面与特效源码。
 - **studio-records.tsx**：记录列表 GET、分页与表单联动；表格组件由 **studio-widget-preview.tsx** 处理独立的服务端分页、搜索、筛选、排序、行级「查看」只读详情抽屉与可选详情 GET、选中记录编辑 PATCH、二次确认的行级 DELETE。编辑提交后重新获取后端数据；删除成功后刷新列表与表格、清除被删除记录的选中上下文并在越页时回到有效页。删除失败时不伪造成功。
 - **studio-widget-preview.tsx + widgets.ts**：与设计器同源的组件，包括文件上传/文件列表、异步任务/执行日志、折线/环形/热力图等。文件上传需配置真实 POST 接口；任务进度需配置 GET 状态接口；多序列折线图可通过 dataUrl/dataPath 接入真实 GET；文件列表、日志与未配置接口的图表保持静态或本地交互。
