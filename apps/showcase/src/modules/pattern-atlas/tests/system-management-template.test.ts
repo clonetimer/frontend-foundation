@@ -74,12 +74,12 @@ describe('System management starter pages', () => {
     const doc = addSystemManagementPages(createStudioDocument()).document;
     const files = projectExportFiles(doc);
     const read = (name: string) => files.find((entry) => entry.name === name)?.text;
-    const normalized = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\\r\\n/g, '\\n');
+    const normalized = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
     expect(exportedManagementMaintenance).toBe(normalized('../../../../../../services/management/maintenance.py'));
     expect(exportedManagementLaunch).toBe(normalized('../../../../../../services/management/launch.py'));
     expect(read('management/maintenance.py')).toBe(exportedManagementMaintenance);
     expect(read('management/launch.py')).toBe(exportedManagementLaunch);
-    expect(read('start.bat')).toContain('management\\\\launch.py');
+    expect(read('start.bat')).toContain('management\\launch.py');
     expect(read('start.sh')).toContain('python3 management/launch.py');
     expect(JSON.parse(read('management/page-permissions.json') ?? '{}')).toEqual({
       pages:[{id:'overview',title:'项目概览'}]
