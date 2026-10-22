@@ -82,7 +82,7 @@ describe('System management starter pages', () => {
     expect(read('start.bat')).toContain('management\\\\launch.py');
     expect(read('start.sh')).toContain('python3 management/launch.py');
     expect(JSON.parse(read('management/page-permissions.json') ?? '{}')).toEqual({
-      pages:[{id:'overview',title:'概览'}]
+      pages:[{id:'overview',title:'项目概览'}]
     });
     expect(read('StudioApp.tsx')).toContain('page:overview:view');
     expect(read('StudioApp.tsx')).toContain('managementEnabled = true');
