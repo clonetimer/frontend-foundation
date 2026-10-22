@@ -423,6 +423,11 @@ function decodeP5Reference(base64: string): string {
   );
 }
 export function projectExportFiles(document: StudioDocument): Array<{ name: string; text: string }> {
+  for (const page of document.blueprint.pages) {
+    if (page.composition && !SYSTEM_MANAGEMENT_PAGES.some((item) => item.id === page.id) && !/^[a-z][a-z0-9-]{0,35}$/.test(page.id)) {
+      throw new Error('业务页面 ID 不符合内置权限系统规范（仅小写字母、数字、连字符，最长 36 个字符）。');
+    }
+  }
   const files: Array<{ name: string; text: string }> = [
     { name: 'package.json', text: JSON.stringify(STANDALONE_PROJECT_PACKAGE, null, 2) + '\n' },
     { name: 'index.html', text: '<!doctype html>\n<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pattern Atlas Export</title></head><body><div id="root"></div><script type="module" src="/src.tsx"></script></body></html>\n' },
