@@ -13,7 +13,7 @@ import { p5R3c2SourceIsEligible } from '../../../../../../tooling/scripts/aas_p0
 import { WorkflowGraph } from './WorkflowGraph';
 import { useStudioRecordFlow } from './StudioRecords';
 import { addRecordEditorExample, addLinkedRecordExample } from './record-template';
-import { addSystemManagementPages, addSystemManagementActions, isSystemManagementPage } from './system-management-template';
+import { addSystemManagementPages, addSystemManagementActions, connectBuiltInManagement, isSystemManagementPage } from './system-management-template';
 import { countDataSourceUses, detailRequestUrl, mergeRecordDetail, newDemoSource, newServerDemoSource, validDetailTemplate, type StudioDataSource } from './data-sources';
 import { buildStudioListUrl, readStudioListPayload, validQueryParameter, type StudioFieldMapping } from './source-query';
 import { validRecordField, validRecordPath, validRecordUrl, type StudioRecordFieldBinding, type StudioRecordListBinding, type StudioRecordSubmitBinding } from './record-bindings';
@@ -228,6 +228,12 @@ export function Component() {
       commit(result.document); setInspector('内容'); setInspectorOpen(true); setLive(false);
       void notice.success('已补充 ' + result.added.length + ' 个高级操作，可配置接口后使用。');
     } catch (error) { void notice.error(error instanceof Error ? error.message : '补齐系统管理失败'); }
+  };
+  const connectManagement = () => {
+    const result = connectBuiltInManagement(doc);
+    if (!result.changed) { void notice.info('系统管理 API 已完成预连接，已有自定义接口未被修改。'); return; }
+    commit(result.document);
+    void notice.success('已自动接入 ' + result.changed + ' 项内置系统管理 API；不需要手动填写端点。');
   };
   const addThreeApiExample = () => {
     try {
@@ -824,6 +830,7 @@ export function Component() {
     <div className="pa-studio-page-connections">{Object.entries(doc.decorations).filter(([id, value]) => id.startsWith(`${page?.id}:`) && (value.recordList || value.recordSubmit || value.api)).map(([id, value]) => <button type="button" key={id} onClick={() => { setSelectedId(id.slice((page?.id ?? '').length + 1)); setInspector('组件数据'); }}><span>{value.recordList ? 'GET 列表' : value.recordSubmit ? 'POST 保存' : `${value.api?.method ?? 'GET'} 请求`}</span><small>{value.recordList?.sourceId ?? value.recordSubmit?.sourceId ?? value.recordList?.url ?? value.recordSubmit?.url ?? value.api?.url}</small></button>)}{!Object.entries(doc.decorations).some(([id, value]) => id.startsWith(`${page?.id}:`) && (value.recordList || value.recordSubmit || value.api)) ? <small>暂无数据连接</small> : null}</div>
     <Button block type="primary" ghost onClick={installSystemManagement}>＋ 添加系统管理（7 个固定页面）</Button>
     <Button block onClick={upgradeSystemActions}>＋ 补齐系统管理高级操作</Button>
+    <Button block onClick={connectManagement}>↪ 一键接入内置系统管理 API（仅填充空地址）</Button>
     <div className="pa-studio-note">人员、角色、菜单、操作日志、登录日志、字典及参数设置。只安装缺失页面；导出项目保留同名“系统管理”左侧导航分组。后端连接需另行配置，日志页默认只读。</div>
     <Button block type="primary" ghost onClick={addThreeApiExample}>＋ 创建列表／详情／保存联动示例</Button>
     <Button block onClick={addLinkedExample}>＋ 创建兼容版记录编辑页</Button>
