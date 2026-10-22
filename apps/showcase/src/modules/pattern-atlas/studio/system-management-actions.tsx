@@ -83,7 +83,7 @@ const writeError = (error: unknown): string => {
 const unsafeOutcome = (error: unknown): boolean => !(error instanceof Error && /HTTP (400|401|403|409|412|422|428)\b/.test(error.message));
 
 export function SystemManagementAction({ props, live, recordSelection }: {
-  props: Record<string, unknown>; live: boolean; recordSelection?: ManagementSelection;
+  props: Record<string, unknown>; live: boolean; recordSelection?: ManagementSelection | undefined;
 }) {
   const mode: ManagementMode = props.actionMode === 'role-users' || props.actionMode === 'role-permissions' ||
     props.actionMode === 'menu-tree' || props.actionMode === 'status' ? props.actionMode : 'menu-tree';
