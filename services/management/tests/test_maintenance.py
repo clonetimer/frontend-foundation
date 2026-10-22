@@ -102,6 +102,39 @@ class MaintenanceTests(unittest.TestCase):
             db.execute("UPDATE menus SET status='disabled' WHERE id='page-overview'")
         self.assertEqual(call("/api/system/pages/overview/authorize",cookie="ff_session="+token)[0],404)
 
+    def test_nonadmin_role_grants_and_revocation_are_server_authoritative(self):
+        sync_pages(self.db,self.manifest)
+        from db import hash_password, token_hash
+        with database(str(self.db)) as db:
+            now = "2026-10-22T12:00:00Z"
+            db.execute("INSERT INTO users(id,username,name,password_hash,status,createdAt,updatedAt) "
+                       "VALUES('u-basic','basic','Basic',?,'enabled',?,?)",
+                       (hash_password("OnlyInTemporaryTestPassword123!"),now,now))
+            db.execute("INSERT INTO roles(id,name,code,status,createdAt,updatedAt) "
+                       "VALUES('role-basic','Basic','basic','enabled',?,?)",(now,now))
+            db.execute("INSERT INTO role_users(role_id,user_id) VALUES('role-basic','u-basic')")
+            db.execute("INSERT INTO role_menus(role_id,menu_id) VALUES('role-basic','page-overview')")
+            db.execute("INSERT INTO sessions(token_hash,user_id,expires_at,createdAt) VALUES(?,?,?,?)",
+                       (token_hash("basic-test-session"),"u-basic",4102444800,now))
+        app=ManagementApp(str(self.db))
+        def get(path):
+            env={"REQUEST_METHOD":"GET","PATH_INFO":path,"QUERY_STRING":"",
+                 "CONTENT_LENGTH":"0","wsgi.input":io.BytesIO(b""),
+                 "HTTP_COOKIE":"ff_session=basic-test-session"}
+            status=[]
+            def begin(first, headers):status.append(int(first[:3]))
+            body=json.loads(b"".join(app(env,begin)))
+            return status[0],body
+        status,body=get("/api/system/auth/me")
+        self.assertEqual(status,200)
+        self.assertEqual(body["data"]["permissions"],["page:overview:view"])
+        self.assertEqual(get("/api/system/pages/overview/authorize")[0],200)
+        self.assertEqual(get("/api/system/pages/data-search/authorize")[0],403)
+        self.assertEqual(get("/api/system/roles")[0],403)
+        with database(str(self.db)) as db:
+            db.execute("DELETE FROM role_menus WHERE role_id='role-basic'")
+        self.assertEqual(get("/api/system/pages/overview/authorize")[0],403)
+
     def test_launcher_preflight_does_not_touch_database(self):
         base=self.root/"export"
         (base/"management").mkdir(parents=True)
