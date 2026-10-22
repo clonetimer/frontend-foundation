@@ -57,8 +57,8 @@ describe('System management starter pages', () => {
   });
 
   it('ships exactly the source-tested Python service and session/password management UI', () => {
-    const backend = readFileSync(new URL('../../../../../../services/management/server.py', import.meta.url), 'utf8');
-    const database = readFileSync(new URL('../../../../../../services/management/db.py', import.meta.url), 'utf8');
+    const backend = readFileSync(new URL('../../../../../../services/management/server.py', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    const database = readFileSync(new URL('../../../../../../services/management/db.py', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
     expect(exportedManagementServer).toBe(backend);
     expect(exportedManagementDb).toBe(database);
     expect(exportedManagementAuth).toContain('/api/system/auth/change-password');
