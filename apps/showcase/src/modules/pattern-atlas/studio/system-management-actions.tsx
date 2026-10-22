@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Checkbox, Input, Modal, Popconfirm, Space, Switch, Tree } from 'antd';
 
-export type ManagementMode = 'role-users' | 'role-permissions' | 'menu-tree' | 'status';
+export type ManagementMode = 'role-users' | 'role-permissions' | 'menu-tree' | 'status' | 'reset-password';
 export type ManagementNode = { id: string; name: string; children?: ManagementNode[] };
 export type ManagementSelection = { selectedId: string; selected: Record<string, unknown> | null; detailStatus?: string };
 
@@ -86,7 +86,8 @@ export function SystemManagementAction({ props, live, recordSelection }: {
   props: Record<string, unknown>; live: boolean; recordSelection?: ManagementSelection | undefined;
 }) {
   const mode: ManagementMode = props.actionMode === 'role-users' || props.actionMode === 'role-permissions' ||
-    props.actionMode === 'menu-tree' || props.actionMode === 'status' ? props.actionMode : 'menu-tree';
+    props.actionMode === 'menu-tree' || props.actionMode === 'status' ||
+    props.actionMode === 'reset-password' ? props.actionMode : 'menu-tree';
   const id = recordSelection?.selectedId ?? '';
   const readySelection = Boolean(id && recordSelection?.selected && !['loading', 'error'].includes(recordSelection.detailStatus ?? ''));
   const optionsUrl = resolveManagementUrl(props.optionsUrl, id);
@@ -95,8 +96,9 @@ export function SystemManagementAction({ props, live, recordSelection }: {
   const detailUrl = resolveManagementUrl(props.detailUrl, id, true);
   const isTree = mode === 'role-permissions' || mode === 'menu-tree';
   const isStatus = mode === 'status';
+  const isReset = mode === 'reset-password';
   const needsSelected = mode !== 'menu-tree';
-  const configured = isStatus ? Boolean(detailUrl && writeUrl) :
+  const configured = isReset ? Boolean(writeUrl) : isStatus ? Boolean(detailUrl && writeUrl) :
     mode === 'menu-tree' ? Boolean(optionsUrl) : Boolean(optionsUrl && assignedUrl && writeUrl);
   const enabled = live && configured && (!needsSelected || readySelection);
   const [opened, setOpened] = useState(false);
@@ -109,6 +111,8 @@ export function SystemManagementAction({ props, live, recordSelection }: {
   const [etag, setEtag] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [search, setSearch] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
   const lock = useRef(false);
   const selectionGuard = useRef({ id, live });
   selectionGuard.current = { id, live };
@@ -122,7 +126,7 @@ export function SystemManagementAction({ props, live, recordSelection }: {
   const selectedName = String(recordSelection?.selected?.name ?? recordSelection?.selected?.title ?? id).slice(0, 100);
 
   useEffect(() => {
-    if (!opened) return;
+    if (!opened || isReset) return;
     const controller = new AbortController();
     setLoading(true); setError(''); setBlocked(false); setSelectedIds([]); setNodes([]); setEtag(''); setConfirmed(false);
     const load = async () => {
@@ -147,11 +151,11 @@ export function SystemManagementAction({ props, live, recordSelection }: {
     };
     void load();
     return () => controller.abort();
-  }, [opened, mode, id, optionsUrl, assignedUrl]);
+  }, [opened, mode, id, optionsUrl, assignedUrl, isReset]);
 
-  useEffect(() => { setOpened(false); setBlocked(false); }, [id, mode, live]);
+  useEffect(() => { setOpened(false); setBlocked(false); setNewPassword(''); setConfirmation(''); }, [id, mode, live]);
 
-  const close = () => { if (lock.current) return; setOpened(false); };
+  const close = () => { if (lock.current) return; setOpened(false); setNewPassword(''); setConfirmation(''); };
   const submit = async () => {
     if (lock.current || !opened || !confirmed || !live || !writeUrl || !etag || !readySelection || blocked || loading) return;
     lock.current = true; setBusy(true); setError('');
@@ -161,6 +165,25 @@ export function SystemManagementAction({ props, live, recordSelection }: {
     } catch (err) {
       setError(writeError(err)); setBlocked(unsafeOutcome(err));
       if (!unsafeOutcome(err)) setEtag(''); // Must reopen and GET a fresh snapshot for any conflict.
+    } finally { lock.current = false; setBusy(false); }
+  };
+  const resetPassword = async () => {
+    if (lock.current || !opened || !enabled || !writeUrl || blocked ||
+      newPassword.length < 12 || newPassword !== confirmation) return;
+    lock.current = true; setBusy(true); setError('');
+    try {
+      if (selectionGuard.current.id !== id || !selectionGuard.current.live)
+        throw new Error('选中人员已变化，取消提交');
+      const response = await fetch(writeUrl, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword })
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      setOpened(false); setNewPassword(''); setConfirmation('');
+      window.dispatchEvent(new Event('atlas:records-refresh'));
+    } catch (problem) {
+      setError(writeError(problem)); setBlocked(unsafeOutcome(problem));
     } finally { lock.current = false; setBusy(false); }
   };
   const toggleStatus = async () => {
@@ -183,7 +206,7 @@ export function SystemManagementAction({ props, live, recordSelection }: {
   };
 
   const title = mode === 'role-users' ? '关联人员' : mode === 'role-permissions' ? '分配菜单权限' :
-    mode === 'menu-tree' ? '菜单权限树' : '启用状态';
+    mode === 'menu-tree' ? '菜单权限树' : isReset ? '重置人员密码' : '启用状态';
   if (isStatus) return <div className="pa-studio-rich pa-system-action" data-system-action="status">
     <Space wrap><strong>{title}</strong><span>选中：{readySelection ? selectedName : '无'}</span>
       <Popconfirm title={'确定将此记录' + (checked ? '停用' : '启用') + '？'} description="将向后端发送一次带 If-Match 的 PATCH 请求。" onConfirm={() => void toggleStatus()} okText="确定" cancelText="取消">
@@ -193,6 +216,27 @@ export function SystemManagementAction({ props, live, recordSelection }: {
     {!configured ? <small>请配置详情 GET 和状态 PATCH 地址；必须从后端取得强 ETag。</small> :
       !validStatus && readySelection ? <small>当前状态不属于启用／停用值，请核对映射后再操作。</small> : null}
     {error ? <Alert type="error" showIcon message={error}/> : null}
+  </div>;
+
+  if (isReset) return <div className="pa-studio-rich pa-system-action" data-system-action="reset-password">
+    <Space wrap><strong>{title}</strong>
+      <Button size="small" disabled={!enabled} onClick={() => { setError(''); setOpened(true); }}>重置选中人员密码</Button>
+    </Space>
+    {!configured ? <small>管理员密码重置端点尚未配置。</small> : null}
+    {error && !opened ? <Alert type="error" showIcon message={error}/> : null}
+    <Modal title={'重置人员密码 · ' + selectedName} open={opened} onCancel={close}
+      okText="确认重置并注销该人员会话" onOk={() => { void resetPassword(); }}
+      okButtonProps={{ disabled: busy || blocked || !enabled || newPassword.length < 12 || newPassword !== confirmation }}
+      confirmLoading={busy} closable={!busy} maskClosable={!busy} destroyOnHidden>
+      <p>重置后该人员的全部现有会话将失效。新密码不会保存在 Studio 设计文件中。</p>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <Input.Password aria-label="新密码" value={newPassword} autoComplete="new-password"
+          onChange={(event) => setNewPassword(event.target.value)} maxLength={200} placeholder="不少于 12 个字符"/>
+        <Input.Password aria-label="确认新密码" value={confirmation} autoComplete="new-password"
+          onChange={(event) => setConfirmation(event.target.value)} maxLength={200}/>
+        {error ? <Alert type="error" showIcon message={error}/> : null}
+      </Space>
+    </Modal>
   </div>;
 
   type TreeItem = { key: string; title: string; children?: TreeItem[] };
