@@ -1,0 +1,31 @@
+name: FF Management Service
+on:
+  pull_request:
+    paths:
+      - 'services/management/**'
+      - '.github/workflows/management-service.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/management/**'
+      - '.github/workflows/management-service.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.11', '3.13']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile source
+        run: python -m compileall -q services/management
+      - name: Run isolated SQLite / WSGI contract tests
+        run: python -m unittest discover -s services/management/tests -v
