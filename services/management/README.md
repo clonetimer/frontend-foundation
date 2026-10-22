@@ -57,3 +57,34 @@ GitHub PR 工作流 `FF Management Service` 在 Linux/Windows × Python 3.11/3.1
 ### Windows Stable 临时文件清理
 
 独立 React ZIP 验收启动临时 Python 服务。Windows 下应等待进程退出后清理 SQLite 数据库及 WAL，避免文件句柄引起的 EPERM。以最新提交的 GitHub Linux/Windows Stable 流水线作为最终验收依据。
+
+## R4 — 一键部署、SQLite 备份恢复、业务页面权限
+
+### 从导出 ZIP 本地启动（推荐）
+
+需要 **Python 3.11+、Node.js/npm**，首次构建需要访问依赖仓库。导出项目解压后：
+
+- Windows：双击 `start.bat`，或从终端运行 `python management/launch.py`。
+- Linux/macOS：在项目目录运行 `python3 management/launch.py`。
+- 首次运行自动执行 npm install（如果没有 node_modules）、npm run build，提示创建管理员账号，然后同步页面权限到 SQLite，并以 `http://127.0.0.1:8765` 提供前端与后端。后续启动复用数据库和编译产物，不会自动覆盖现有管理员密码。
+- 仅校验部署文件：`python management/launch.py --check-only --skip-build`（需要先有 dist/index.html）。默认**仅支持本机回环访问**；公网生产应使用独立的 HTTPS 反向代理、正式应用服务器及安全运维评审。
+
+### 在线备份 / 离线恢复（导出 ZIP 内）
+
+```powershell
+python management/maintenance.py backup --db management/instance/management.sqlite3 --file backups/ff-20261022.sqlite3
+# 请先退出正在运行的 FF 应用，再执行：
+python management/maintenance.py restore --db management/instance/management.sqlite3 --file backups/ff-20261022.sqlite3 --yes-restore
+```
+
+备份使用 SQLite Backup API 获取一致性快照，目标文件必须尚不存在，写入后执行 integrity_check。恢复首先校验备份，再锁定服务进程、创建带纳秒时间戳的原数据库快照，使用 SQLite Backup API 恢复，并清空所有会话和登录失败计数；失败时尽量使用恢复前快照回滚。拒绝有服务正在运行时恢复。**备份可能包含账号密码哈希及其他敏感数据，应做访问控制和离线加密存储。** 自动远程备份、数据库迁移升级、定时留存策略不在此阶段实现。
+
+### 自定义业务页面权限
+
+自动从导出的 `management/page-permissions.json` 读取页面 ID 和名称，将新页面注册为 `page:<页面ID>:view` 权限；重复启动不会覆盖角色菜单授权、已有菜单名称或启停状态。管理员在系统管理「角色管理 → 分配菜单权限」中为角色勾选这些业务页面对应的菜单，再为人员分配角色。只有登录且授权后，生成前端才挂载相应页面，并在导航中显示。新增页面下次重新导出后同步即可。
+
+- `GET /api/system/pages/access`：返回当前登录人可以访问的业务页面。
+- `GET /api/system/pages/{pageId}/authorize`：服务端检查具体页面权限；无授权为 403，页面未注册或停用为 404。
+- `GET /api/system/auth/me`：在 `data.permissions` 中返回角色合并后的授权集合；管理员为 `["*"]`。
+- 页面隐藏和前端保护**不会自动保护外部业务数据接口**。业务后端必须通过可信会话和授权验证执行每次数据读写；不允许把“菜单能否显示”作为服务端授权条件。
+- 若不安装七个系统管理页面，导出项目仍以独立无认证前端运行；要启用 RBAC，先在 Studio 添加系统管理模板。生产场景建议将登录与授权集成到可信同源服务端。
