@@ -10,6 +10,8 @@ import { exportedP5ReferenceSources } from './exported-p5-reference';
 import { exportedWorkflowRuntime } from './exported-workflows';
 import { studioWidgetStyles } from './widget-styles';
 import { SYSTEM_MANAGEMENT_PAGES } from './system-management-template';
+import { exportedManagementDb, exportedManagementServer } from './exported-management-service';
+import { exportedManagementAuth } from './exported-management-auth';
 import { exportedSystemManagementActions } from './exported-system-management-actions';
 import { findRecordRules } from './record-bindings';
 
@@ -317,6 +319,7 @@ export function generateStudioApp(document: StudioDocument): string {
 import { useEffect, useState, type CSSProperties } from 'react';
 ${imports}
 import './studio-effects.css';
+import ManagementAuth from './management-auth';
 const pageComponents = { ${components} };
 const navItems = ${json(navigation)};
 const systemNavIds = ${json(SYSTEM_MANAGEMENT_PAGES.map((entry) => entry.id))};
@@ -342,7 +345,7 @@ export default function StudioApp() {
         {${json(shell.navigation)} === 'sidebar' && navItems.some((item) => systemNavIds.includes(item.target)) ? <details className="atlas-system-group" open><summary>系统管理</summary><div>{navItems.filter((item) => systemNavIds.includes(item.target)).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}</div></details> : null}
       </nav>
     </aside>
-    <main className="atlas-app-main"><View/></main>
+    <main className="atlas-app-main"><ManagementAuth active={systemNavIds.includes(page)}><View/></ManagementAuth></main>
   </div>;
 }
 `;
@@ -413,14 +416,20 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
     { name: 'index.html', text: '<!doctype html>\n<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pattern Atlas Export</title></head><body><div id="root"></div><script type="module" src="/src.tsx"></script></body></html>\n' },
     { name: 'src.tsx', text: ["import { StrictMode } from 'react';", "import { createRoot } from 'react-dom/client';", "import 'antd/dist/reset.css';", "import StudioApp from './" + "StudioApp';", "const root = document.getElementById('root');", "if (!root) throw new Error('Missing #root');", "createRoot(root).render(<StrictMode><StudioApp/></StrictMode>);", ""].join('\n') },
     { name: 'vite-env.d.ts', text: '/// <reference types="vite/client" />\n' },
-    { name: 'tsconfig.json', text: JSON.stringify({ compilerOptions: { target: 'ES2022', useDefineForClassFields: true, lib: ['ES2022', 'DOM', 'DOM.Iterable'], module: 'ESNext', skipLibCheck: true, moduleResolution: 'Bundler', allowImportingTsExtensions: true, resolveJsonModule: true, isolatedModules: true, noEmit: true, jsx: 'react-jsx', strict: true, noFallthroughCasesInSwitch: true }, include: ['vite-env.d.ts', 'src.tsx', 'StudioApp.tsx', 'studio-*.ts', 'studio-*.tsx', 'widgets.ts', 'pages/**/*.tsx'] }, null, 2) + '\n' },
+    { name: 'tsconfig.json', text: JSON.stringify({ compilerOptions: { target: 'ES2022', useDefineForClassFields: true, lib: ['ES2022', 'DOM', 'DOM.Iterable'], module: 'ESNext', skipLibCheck: true, moduleResolution: 'Bundler', allowImportingTsExtensions: true, resolveJsonModule: true, isolatedModules: true, noEmit: true, jsx: 'react-jsx', strict: true, noFallthroughCasesInSwitch: true }, include: ['vite-env.d.ts', 'src.tsx', 'StudioApp.tsx', 'management-auth.tsx', 'system-management-actions.tsx', 'studio-*.ts', 'studio-*.tsx', 'widgets.ts', 'pages/**/*.tsx'] }, null, 2) + '\n' },
     { name: 'foundation.project.json', text: `${JSON.stringify(document.blueprint, null, 2)}\n` },
     { name: 'atlas.studio.json', text: serializeStudioDocument(document) },
     { name: 'studio-effects.css', text: exportedPageStyles },
+    { name: 'management/README.md', text: '# FF 内置系统管理服务\n\n使用 Python 3.11+，不需要 pip 安装后端依赖。首次运行：\n\n```sh\npython management/server.py init-admin --db management/instance/management.sqlite3\n```\n\n之后运行：\n\n```sh\npython management/server.py serve --db management/instance/management.sqlite3 --host 127.0.0.1 --port 8765\n```\n\n新终端运行 npm run dev，内置 Vite 代理自动转发 /api/system 到管理服务。打开系统管理页面会自动提示登录。正式部署必须通过同源 HTTPS 网关转发 /api/system，并设置 FF_MANAGEMENT_ALLOWED_ORIGIN 和 FF_MANAGEMENT_SECURE_COOKIE=1；不要把 Python WSGI 服务直接暴露到公网。\n' },
     { name: 'studio-api.tsx', text: exportedApiRuntime },
     { name: 'studio-records.tsx', text: exportedRecordRuntime },
     { name: 'studio-workflows.ts', text: exportedWorkflowRuntime },
     { name: 'studio-widget-preview.tsx', text: exportedWidgetPreview },
+    { name: 'management-auth.tsx', text: exportedManagementAuth },
+    { name: 'management/db.py', text: exportedManagementDb },
+    { name: 'management/server.py', text: exportedManagementServer },
+    { name: 'management/.gitignore', text: 'instance/\n__pycache__/\n*.py[cod]\n' },
+    { name: 'vite.config.ts', text: "import { defineConfig } from 'vite';\nconst proxy = { '/api/system': { target: 'http://127.0.0.1:8765', changeOrigin: false } };\nexport default defineConfig({ server: { proxy }, preview: { proxy } });\n" },
     { name: 'system-management-actions.tsx', text: exportedSystemManagementActions },
     { name: 'widgets.ts', text: exportedWidgetCatalog },
     { name: 'StudioApp.tsx', text: generateStudioApp(document) },
