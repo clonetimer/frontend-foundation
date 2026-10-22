@@ -10,6 +10,7 @@ import { exportedP5ReferenceSources } from './exported-p5-reference';
 import { exportedWorkflowRuntime } from './exported-workflows';
 import { studioWidgetStyles } from './widget-styles';
 import { SYSTEM_MANAGEMENT_PAGES } from './system-management-template';
+import { exportedSystemManagementActions } from './exported-system-management-actions';
 import { findRecordRules } from './record-bindings';
 
 function json(value: unknown): string {
@@ -420,6 +421,7 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
     { name: 'studio-records.tsx', text: exportedRecordRuntime },
     { name: 'studio-workflows.ts', text: exportedWorkflowRuntime },
     { name: 'studio-widget-preview.tsx', text: exportedWidgetPreview },
+    { name: 'system-management-actions.tsx', text: exportedSystemManagementActions },
     { name: 'widgets.ts', text: exportedWidgetCatalog },
     { name: 'StudioApp.tsx', text: generateStudioApp(document) },
     // Dormant reference source: never imports into the generated app, never
