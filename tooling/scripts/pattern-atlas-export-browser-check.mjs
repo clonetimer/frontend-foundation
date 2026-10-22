@@ -232,7 +232,15 @@ export async function runExportedBrowserSmoke(directory) {
     await call('Page.enable');
     await call('Runtime.enable');
     await call('Page.navigate', { url: root + '/#/overview' });
-    await until(() => evaluate("document.querySelector('main')?.textContent?.includes('验收多序列曲线')"), 'Exported React mount');
+    // Custom business pages are now protected by the built-in session gate.
+    await until(() => evaluate("!!document.querySelector('input[aria-label=管理账号]')"), 'Business page login gate absent');
+    assert(await evaluate("!document.querySelector('[data-atlas-chart-source=remote]')"), 'Business chart mounted without session');
+    assert(await evaluate("(() => { const e=document.querySelector('input[aria-label=管理账号]');if(!e)return false;e.focus();return true;})()"), 'Cannot focus login field');
+    await call('Input.insertText',{text:'test_admin'});
+    assert(await evaluate("(() => {const e=document.querySelector('input[aria-label=管理密码]');if(!e)return false;e.focus();return true;})()"), 'Cannot focus password field');
+    await call('Input.insertText',{text:'FixtureOnlyStrongPassword123!'});
+    assert(await evaluate("(() => {const b=[...document.querySelectorAll('button')].find(e=>e.textContent?.includes('登录系统管理'));if(!b||b.disabled)return false;b.click();return true;})()"), 'Cannot submit business-page login');
+    await until(() => evaluate("document.querySelector('main')?.textContent?.includes('验收多序列曲线')"), 'Authenticated React mount');
     // P5-R3c2b1: test the *actual built ZIP* from its production Vite origin.
     // Dormant modules must load only via an explicit import; reject any
     // request without runtime-only trusted host approval/session hooks.
@@ -915,13 +923,7 @@ export async function runExportedBrowserSmoke(directory) {
     // Management R3: exercise the real packaged Python backend, configured
     // through the exported Vite same-origin proxy with a synthetic test-only account.
     await evaluate("location.hash = '#/system-roles'");
-    await until(() => evaluate("!!document.querySelector('input[aria-label=管理账号]')"), 'Management login form absent');
-    assert(await evaluate("!document.querySelector('[data-system-action]')"), 'Role actions mounted before authentication');
-    assert(await evaluate("(() => { const e=document.querySelector('input[aria-label=管理账号]'); if(!e)return false;e.focus();return document.activeElement===e;})()"), 'Cannot focus test login');
-    await call('Input.insertText',{text:'test_admin'});
-    assert(await evaluate("(() => { const e=document.querySelector('input[aria-label=管理密码]'); if(!e)return false;e.focus();return document.activeElement===e;})()"), 'Cannot focus test password');
-    await call('Input.insertText',{text:'FixtureOnlyStrongPassword123!'});
-    assert(await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(b=>b.textContent?.includes('登录系统管理'));if(!e||e.disabled)return false;e.click();return true;})()"), 'Cannot submit first-party login');
+    assert(await evaluate("!document.querySelector('input[aria-label=管理账号]')"), 'Unexpected logout on role navigation');
     await until(() => evaluate("!!document.querySelector('[data-system-action=role-users]')"), 'Management session did not enable real role page');
     await until(() => evaluate("document.body.textContent.includes('超级管理员')"), 'Role list did not load from packaged SQLite backend');
     // Password operations are shipped as real controls, but must not expose

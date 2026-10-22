@@ -11,6 +11,7 @@ import { exportedWorkflowRuntime } from './exported-workflows';
 import { studioWidgetStyles } from './widget-styles';
 import { SYSTEM_MANAGEMENT_PAGES } from './system-management-template';
 import { exportedManagementDb, exportedManagementServer } from './exported-management-service';
+import { exportedManagementMaintenance, exportedManagementLaunch } from './exported-management-operations';
 import { exportedManagementAuth } from './exported-management-auth';
 import { exportedSystemManagementActions } from './exported-system-management-actions';
 import { findRecordRules } from './record-bindings';
@@ -315,6 +316,14 @@ export function generateStudioApp(document: StudioDocument): string {
   const items = [...(document.blueprint.navigation?.items ?? [])].sort((a,b) => a.order - b.order).filter((entry) => pages.some((page) => page.id === entry.target));
   const navigation = items.length ? items.map(({target,label}) => ({target,label})) : pages.map((entry) => ({target:entry.id,label:entry.title}));
   const shell = document.shell;
+  const systemPermissions: Record<string, string> = {
+    'system-users':'system:users:read', 'system-roles':'system:roles:read',
+    'system-menus':'system:menus:read', 'system-operation-logs':'system:logs:read',
+    'system-login-logs':'system:logs:read', 'system-dictionaries':'system:dictionaries:read',
+    'system-parameters':'system:parameters:read'
+  };
+  const permissionFor = Object.fromEntries(pages.map((entry) => [entry.id, systemPermissions[entry.id] ?? ('page:' + entry.id + ':view')]));
+  const managementEnabled = pages.some((entry) => SYSTEM_MANAGEMENT_PAGES.some((spec) => spec.id === entry.id));
   return `/** Generated standalone multi-page entry. Use as your React application's App.tsx. */
 import { useEffect, useState, type CSSProperties } from 'react';
 ${imports}
@@ -323,6 +332,8 @@ import ManagementAuth from ${json('./management-auth')};
 const pageComponents = { ${components} };
 const navItems = ${json(navigation)};
 const systemNavIds = ${json(SYSTEM_MANAGEMENT_PAGES.map((entry) => entry.id))};
+const pagePermissions: Record<string, string> = ${json(permissionFor)};
+const managementEnabled = ${json(managementEnabled)};
 const homePage = ${json(pages[0]!.id)};
 function currentPage() {
   let id = '';
@@ -331,6 +342,7 @@ function currentPage() {
 }
 export default function StudioApp() {
   const [page, setPage] = useState(currentPage);
+  const [grants, setGrants] = useState<string[]>([]);
   useEffect(() => {
     const change = () => setPage(currentPage());
     window.addEventListener('hashchange', change);
@@ -341,11 +353,11 @@ export default function StudioApp() {
     <aside className="atlas-app-sidebar" aria-label="页面目录">
       <div className="atlas-app-brand">{${json(document.blueprint.project.title)}}</div>
       <nav className="atlas-app-nav">
-        {navItems.filter((item) => ${json(shell.navigation)} === 'sidebar' ? !systemNavIds.includes(item.target) : true).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}
-        {${json(shell.navigation)} === 'sidebar' && navItems.some((item) => systemNavIds.includes(item.target)) ? <details className="atlas-system-group" open><summary>系统管理</summary><div>{navItems.filter((item) => systemNavIds.includes(item.target)).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}</div></details> : null}
+        {navItems.filter((item) => !managementEnabled || grants.includes('*') || grants.includes(pagePermissions[item.target])).filter((item) => ${json(shell.navigation)} === 'sidebar' ? !systemNavIds.includes(item.target) : true).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}
+        {${json(shell.navigation)} === 'sidebar' && navItems.some((item) => systemNavIds.includes(item.target)) ? <details className="atlas-system-group" open><summary>系统管理</summary><div>{navItems.filter((item) => systemNavIds.includes(item.target) && (!managementEnabled || grants.includes('*') || grants.includes(pagePermissions[item.target]))).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}</div></details> : null}
       </nav>
     </aside>
-    <main className="atlas-app-main"><ManagementAuth active={systemNavIds.includes(page)}><View/></ManagementAuth></main>
+    <main className="atlas-app-main"><ManagementAuth active={managementEnabled} requiredPermission={pagePermissions[page] ?? 'page:unregistered:view'} onPermissions={setGrants}><View/></ManagementAuth></main>
   </div>;
 }
 `;
@@ -411,6 +423,11 @@ function decodeP5Reference(base64: string): string {
   );
 }
 export function projectExportFiles(document: StudioDocument): Array<{ name: string; text: string }> {
+  for (const page of document.blueprint.pages) {
+    if (page.composition && !SYSTEM_MANAGEMENT_PAGES.some((item) => item.id === page.id) && !/^[a-z][a-z0-9-]{0,35}$/.test(page.id)) {
+      throw new Error('业务页面 ID 不符合内置权限系统规范（仅小写字母、数字、连字符，最长 36 个字符）。');
+    }
+  }
   const files: Array<{ name: string; text: string }> = [
     { name: 'package.json', text: JSON.stringify(STANDALONE_PROJECT_PACKAGE, null, 2) + '\n' },
     { name: 'index.html', text: '<!doctype html>\n<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pattern Atlas Export</title></head><body><div id="root"></div><script type="module" src="/src.tsx"></script></body></html>\n' },
@@ -428,6 +445,14 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
     { name: 'management-auth.tsx', text: exportedManagementAuth },
     { name: 'management/db.py', text: exportedManagementDb },
     { name: 'management/server.py', text: exportedManagementServer },
+    { name: 'management/maintenance.py', text: exportedManagementMaintenance },
+    { name: 'management/launch.py', text: exportedManagementLaunch },
+    { name: 'management/page-permissions.json', text: JSON.stringify({
+      pages: document.blueprint.pages.filter((page) => page.composition && !SYSTEM_MANAGEMENT_PAGES.some((item) => item.id === page.id))
+        .map((page) => ({ id: page.id, title: page.title }))
+    }, null, 2) + '\n' },
+    { name: 'start.bat', text: '@echo off\r\ncd /d "%~dp0"\r\npython management\\launch.py\r\nif errorlevel 1 pause\r\n' },
+    { name: 'start.sh', text: '#!/usr/bin/env sh\nset -eu\ncd "$(dirname "$0")"\npython3 management/launch.py\n' },
     { name: 'management/.gitignore', text: 'instance/\n__pycache__/\n*.py[cod]\n' },
     { name: 'vite.config.ts', text: "import { defineConfig } from 'vite';\nconst proxy = { '/api/system': { target: 'http://127.0.0.1:8765', changeOrigin: false } };\nexport default defineConfig({ server: { proxy }, preview: { proxy } });\n" },
     { name: 'system-management-actions.tsx', text: exportedSystemManagementActions },
@@ -443,11 +468,13 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
 
 ## 单独启动
 
-解压后进入目录，执行 \`npm install\`、\`npm run build\` 和 \`npm run dev\`，浏览器访问 Vite 终端显示的地址。此项目仅依赖公开的 React/Ant Design/Vite 包。
+解压后，在 Windows 双击 start.bat，或在 Linux/macOS 执行 python3 management/launch.py。需预先安装 Python 3.11+ 及 Node.js/npm；首次运行会安装前端依赖、构建 React、初始化管理员、注册页面权限，然后在 http://127.0.0.1:8765 以**同源**方式提供页面和内置管理 API。第二次运行会复用数据库和已安装依赖，不使用默认管理员密码。
 
 本文件包中包含：
 
 - **StudioApp.tsx**：多页面入口组件，支持左侧目录、顶部菜单或隐藏菜单；通过 #/页面ID 切换，无需额外路由依赖。将它作为目标 React 项目的 App。
+- **management/page-permissions.json**：从自定义页面生成的稳定访问权限，每页对应 page:<页面ID>:view；启动时只新增缺失菜单权限，不修改管理员已有授权和菜单状态。角色管理中的菜单权限分配会使用这些权限。系统管理启用后，业务页面同样必须登录；不具备权限时不挂载页面组件。注意：用户提供的外部业务 API 必须在自身服务端重复校验权限，前端保护不能保证数据接口安全。
+- **management/maintenance.py**：数据库安全维护。在线备份：python management/maintenance.py backup --db management/instance/management.sqlite3 --file backups/backup.sqlite3；离线恢复：停掉应用后执行 python management/maintenance.py restore --db management/instance/management.sqlite3 --file backups/backup.sqlite3 --yes-restore。恢复会先保存恢复前快照、完整性检查，并让所有旧会话失效。切勿直接覆盖正在使用的 SQLite 文件。
 - **pages/*.tsx + studio-effects.css**：React 19 / Ant Design 6 页面与特效源码。
 - **studio-records.tsx**：记录列表 GET、分页与表单联动；表格组件由 **studio-widget-preview.tsx** 处理独立的服务端分页、搜索、筛选、排序、行级「查看」只读详情抽屉与可选详情 GET、选中记录编辑 PATCH、二次确认的行级 DELETE。编辑提交后重新获取后端数据；删除成功后刷新列表与表格、清除被删除记录的选中上下文并在越页时回到有效页。删除失败时不伪造成功。
 - **studio-widget-preview.tsx + widgets.ts**：与设计器同源的组件，包括文件上传/文件列表、异步任务/执行日志、折线/环形/热力图等。文件上传需配置真实 POST 接口；任务进度需配置 GET 状态接口；多序列折线图可通过 dataUrl/dataPath 接入真实 GET；文件列表、日志与未配置接口的图表保持静态或本地交互。

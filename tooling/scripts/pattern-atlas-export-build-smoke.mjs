@@ -194,8 +194,10 @@ function exec(program, args, cwd) {
         'import sys',
         "sys.path.insert(0,'management')",
         'from db import initialize, create_admin',
+        'from maintenance import sync_pages',
         'initialize(sys.argv[1])',
-        "create_admin(sys.argv[1], 'test_admin', 'FixtureOnlyStrongPassword123!')"
+        "create_admin(sys.argv[1], 'test_admin', 'FixtureOnlyStrongPassword123!')",
+        "sync_pages(__import__('pathlib').Path(sys.argv[1]), __import__('pathlib').Path('management/page-permissions.json'))"
       ].join('; ');
       exec(python,['-c',fixture,dbPath],destination);
       managementServer = spawn(python,['management/server.py','serve','--db',dbPath,

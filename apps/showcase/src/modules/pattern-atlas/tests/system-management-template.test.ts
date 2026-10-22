@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { exportedManagementDb, exportedManagementServer } from '../studio/exported-management-service';
 import { exportedManagementAuth } from '../studio/exported-management-auth';
+import { exportedManagementLaunch, exportedManagementMaintenance } from '../studio/exported-management-operations';
 import { addSystemManagementPages, isSystemManagementPage, SYSTEM_MANAGEMENT_PAGES } from '../studio/system-management-template';
 import { createStudioDocument, parseStudioFile, serializeStudioDocument } from '../studio/model';
 import { generateStudioApp, projectExportFiles } from '../studio/exporter';
@@ -67,6 +68,27 @@ describe('System management starter pages', () => {
     expect(entries.find((entry) => entry.name === 'management/server.py')?.text).toBe(backend);
     expect(entries.find((entry) => entry.name === 'management/db.py')?.text).toBe(database);
     expect(entries.find((entry) => entry.name === 'management-auth.tsx')?.text).toBe(exportedManagementAuth);
+  });
+
+  it('exports a synchronized one-command local app, recoverable database and page-level permissions', () => {
+    const doc = addSystemManagementPages(createStudioDocument()).document;
+    const files = projectExportFiles(doc);
+    const read = (name: string) => files.find((entry) => entry.name === name)?.text;
+    const normalized = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    expect(exportedManagementMaintenance).toBe(normalized('../../../../../../services/management/maintenance.py'));
+    expect(exportedManagementLaunch).toBe(normalized('../../../../../../services/management/launch.py'));
+    expect(read('management/maintenance.py')).toBe(exportedManagementMaintenance);
+    expect(read('management/launch.py')).toBe(exportedManagementLaunch);
+    expect(read('start.bat')).toContain('management\\launch.py');
+    expect(read('start.sh')).toContain('python3 management/launch.py');
+    expect(JSON.parse(read('management/page-permissions.json') ?? '{}')).toEqual({
+      pages:[{id:'overview',title:'项目概览'}]
+    });
+    expect(read('StudioApp.tsx')).toContain('page:overview:view');
+    expect(read('StudioApp.tsx')).toContain('managementEnabled = true');
+    expect(read('StudioApp.tsx')).toContain('onPermissions={setGrants}');
+    expect(exportedManagementAuth).toContain('requiredPermission');
+    expect(exportedManagementAuth).toContain('无权访问此页面');
   });
 
   it('is idempotent and only fills missing pages, preserving custom data sources', () => {

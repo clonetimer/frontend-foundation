@@ -10,6 +10,9 @@ import sqlite3
 import sys
 import time
 from email.message import Message
+from mimetypes import guess_type
+from pathlib import Path
+from maintenance import server_lock
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlsplit
 from wsgiref.simple_server import make_server
@@ -117,8 +120,11 @@ def validate_entity(table: str, data: dict, creating: bool = False) -> dict:
     return values
 
 class ManagementApp:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, static_dir: str | None = None):
         self.db_path = db_path
+        self.static_dir = Path(static_dir).resolve() if static_dir else None
+        if self.static_dir and not (self.static_dir / 'index.html').is_file():
+            raise ValueError('Static directory must include a compiled index.html')
         initialize(db_path)
 
     def __call__(self, environ, start_response):
@@ -127,6 +133,8 @@ class ManagementApp:
         headers: list[tuple[str, str]] = []
         status = 200
         try:
+            if method in ("GET", "HEAD") and self.static_dir and (path in ("/", "/index.html") or path.startswith("/assets/") or path.startswith("/p5-reference/")):
+                return self.serve_static(path, start_response, method)
             if path == "/healthz" and method == "GET":
                 output = {"status": "ok"}
             elif not path.startswith(BASE + "/"):
@@ -180,6 +188,32 @@ class ManagementApp:
             *headers,
         ])
         return [body]
+
+    def serve_static(self, path, start_response, method):
+        # Serve only the compiled frontend. No access to SQLite, Python or .env files.
+        if path == "/" or path == "/index.html":
+            relative = "index.html"
+        else:
+            relative = path.lstrip("/")
+        if not re.fullmatch(r"[A-Za-z0-9_./-]{1,230}", relative) or ".." in relative.split("/"):
+            raise ApiError(404, "Invalid static path")
+        root = self.static_dir
+        target = (root / relative).resolve()
+        if not target.is_relative_to(root) or not target.is_file() or target.suffix.lower() not in (
+            ".html", ".js", ".css", ".json", ".svg", ".png", ".jpg", ".jpeg", ".gif",
+            ".woff", ".woff2", ".ico", ".webp", ".map"
+        ):
+            raise ApiError(404, "Static file not found")
+        raw = target.read_bytes()
+        mime = guess_type(target.name)[0] or "application/octet-stream"
+        start_response("200 OK", [
+            ("Content-Type", mime + ("; charset=utf-8" if mime.startswith("text/") or mime in ("application/javascript", "application/json") else "")),
+            ("Content-Length", str(len(raw))),
+            ("X-Content-Type-Options", "nosniff"),
+            ("X-Frame-Options", "DENY"),
+            ("Cache-Control", "no-store" if relative == "index.html" else "public, max-age=3600")
+        ])
+        return [b"" if method == "HEAD" else raw]
 
     @staticmethod
     def session_cookie(token: str, expire: bool = False) -> str:
@@ -346,6 +380,26 @@ class ManagementApp:
             db.execute("DELETE FROM sessions WHERE user_id=?", (rid,))
             self.audit(db,user,"reset-password","users/"+rid)
             return {"data":{"ok":True}},200
+        if route == "/pages/access" and method == "GET":
+            if self.is_root(db, user):
+                allowed = rows(db, "SELECT id,name,permission,path FROM menus WHERE id LIKE 'page-%' "
+                                   "AND status='enabled' ORDER BY sort,id")
+            else:
+                allowed = rows(db, "SELECT DISTINCT m.id,m.name,m.permission,m.path FROM menus m "
+                                   "JOIN role_menus rm ON m.id=rm.menu_id "
+                                   "JOIN roles r ON r.id=rm.role_id AND r.status='enabled' "
+                                   "JOIN role_users ru ON ru.role_id=r.id AND ru.user_id=? "
+                                   "WHERE m.id LIKE 'page-%' AND m.status='enabled' ORDER BY m.id", (user["id"],))
+            return {"data":{"items":[{"id":x["id"][5:],"name":x["name"],"permission":x["permission"]} for x in allowed]}},200
+        match_page = re.fullmatch(r"/pages/([a-z][a-z0-9-]{0,35})/authorize", route)
+        if match_page:
+            if method!="GET": raise ApiError(405,"GET only")
+            page_id = match_page.group(1)
+            menu = db.execute("SELECT id,permission FROM menus WHERE id=? AND status='enabled' "
+                              "AND permission=?", ("page-"+page_id, "page:"+page_id+":view")).fetchone()
+            if not menu: raise ApiError(404,"Unregistered or disabled page")
+            self.require(db,user,menu["permission"])
+            return {"data":{"authorized":True,"pageId":page_id}},200
         if route == "/users/options" and method == "GET":
             self.require(db, user, "system:roles:read", write=True)
             result = rows(db, "SELECT id,name FROM users ORDER BY username LIMIT 201")
@@ -453,6 +507,7 @@ class ManagementApp:
 def main():
     parser=argparse.ArgumentParser(description="FF built-in management API (single-instance SQLite)")
     parser.add_argument("command",choices=["serve","init-admin"])
+    parser.add_argument("--static-dir", help="Compiled React dist directory (single-origin local deployment)")
     parser.add_argument("--db",default=os.environ.get("FF_MANAGEMENT_DB","services/management/instance/management.sqlite3"))
     parser.add_argument("--host",default="127.0.0.1")
     parser.add_argument("--port",type=int,default=8765)
@@ -472,10 +527,11 @@ def main():
         raise SystemExit("Non-loopback binding requires FF_MANAGEMENT_ALLOWED_ORIGIN and a trusted reverse proxy")
     if allowed.startswith("https://") and os.environ.get("FF_MANAGEMENT_SECURE_COOKIE")!="1":
         raise SystemExit("HTTPS deployment requires FF_MANAGEMENT_SECURE_COOKIE=1")
-    app=ManagementApp(args.db)
-    print(f"FF Management API listening at {args.host}:{args.port}",flush=True)
-    with make_server(args.host,args.port,app) as server:
-        server.serve_forever()
+    app=ManagementApp(args.db, args.static_dir)
+    print(f"FF Management app listening at http://{args.host}:{args.port}",flush=True)
+    with server_lock(Path(args.db).resolve()):
+        with make_server(args.host,args.port,app) as server:
+            server.serve_forever()
 
 if __name__=="__main__":
     main()
