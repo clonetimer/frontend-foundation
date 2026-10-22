@@ -20,6 +20,8 @@ python services/management/server.py serve --host 127.0.0.1 --port 8765
 - `POST /api/system/auth/login`，JSON `{"username":"admin","password":"..."}`，设置 HttpOnly SameSite=Strict 会话 Cookie
 - `GET /api/system/auth/me`：当前用户以及授权权限标识
 - `POST /api/system/auth/logout`：撤销当前会话
+- `POST /api/system/auth/change-password`：已登录用户提交 `currentPassword` 与 `newPassword`，验证旧密码、撤销旧会话并旋转 Cookie
+- `POST /api/system/users/{id}/reset-password`：管理员使用 `newPassword` 重置其他用户密码，撤销目标账号全部会话并审计；不允许重置自己的密码
 - `GET /api/system/users` / `POST /api/system/users` / `GET|PATCH|DELETE /api/system/users/{id}`
 - 角色、菜单、字典、参数使用对应 `roles`、`menus`、`dictionaries`、`parameters` 名称，格式相同
 - `GET /api/system/users/options`，`GET /api/system/menus/tree`
@@ -46,3 +48,12 @@ python -m unittest discover -s services/management/tests -v
 ```
 
 GitHub PR 工作流 `FF Management Service` 在 Linux/Windows × Python 3.11/3.13 执行真正的内存 WSGI 请求和临时 SQLite 测试，验证登录、权限、变更、版本冲突、审计及账户保护。另需在完整 FF React ZIP 中做最终集成验收，不能仅凭后端测试标记成开箱即用。
+
+
+## R3 密码维护（无二次开发）
+
+导出的 React 项目中，登录后右上角可选择「修改我的密码」。人员管理页面选择一条人员记录后，可以使用「重置选中人员密码」，由服务端负责管理员权限判定。输入的密码只存在于当前表单内存中，不会保存到设计 JSON、URL、工作流或操作审计中。成功变更密码后，旧会话立即失效。
+
+### Windows Stable 临时文件清理
+
+独立 React ZIP 验收启动临时 Python 服务。Windows 下应等待进程退出后清理 SQLite 数据库及 WAL，避免文件句柄引起的 EPERM。以最新提交的 GitHub Linux/Windows Stable 流水线作为最终验收依据。
