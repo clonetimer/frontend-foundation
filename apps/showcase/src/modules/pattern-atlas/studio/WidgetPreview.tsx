@@ -3,6 +3,7 @@ import type { InputRef } from 'antd';
 import { Alert, Avatar, Breadcrumb, Checkbox, Collapse, DatePicker, Descriptions, Divider, Empty, Input, InputNumber, Progress, Radio, Rate, Modal, Skeleton, Slider, Space, Spin, Statistic, Steps, Switch, Table, Tag, Timeline, Button, Drawer, Popconfirm, message } from 'antd';
 import { safeWidgetImageUrl, widgetItems, widgetValues, parseChartSeries, parseRemoteChartDataset, parseOverlayFormFields, validateOverlayForm, mapOverlaySubmitPayload, classifyMutationHttpFailure, classifyMutationTransportFailure, parseMutationFieldErrors, type MutationFailure, overlaySubmitUrl, parseRemoteTableColumns, parseRemoteTablePage, strongRecordEtag, type RemoteTableRow, type RemoteTablePage, type OverlayRecordSelection, type ChartDataset, type ChartSeries, type StudioWidgetKind } from './widgets';
 import { normalizeStudioWorkflow, runStudioWorkflow, dispatchWorkflowComponentEvent, type StudioWorkflow } from './studio-workflows';
+import { SystemManagementAction } from './system-management-actions';
 
 const label = (value: unknown, defaultValue = ''): string => typeof value === 'string' || typeof value === 'number' ? String(value) : defaultValue;
 const rows = (value: unknown) => widgetItems(value).map((item, index) => { const [name, status = '—'] = item.split('|'); return { key: index, name, status }; });
@@ -802,6 +803,7 @@ export function WidgetPreview({ kind, props, live, recordSelection, workflowPage
     case 'steps': return <Steps responsive size="small" current={Math.max(0, Math.min(items.length, Math.floor(percent)))} items={items.map((item) => ({ title: item }))}/>;
     case 'timeline': return <Timeline items={items.map((item) => ({ children: item }))}/>;
     case 'table': return <RemoteTableWidget props={props} live={live} onRecordSelect={onRecordSelect}/>;
+    case 'management-actions': return <SystemManagementAction props={props} live={live} recordSelection={recordSelection}/>;
     case 'chart': return <div className="pa-studio-rich"><strong>{title}</strong><div className="pa-studio-mini-chart">{values.map((value, index) => <div key={index} title={`${items[index] ?? `数据${index+1}`}：${value}`}><i style={{ height: `${Math.max(2,value)}%` }}/><small>{items[index] ?? index + 1}</small></div>)}</div></div>;
     case 'descriptions': return <Descriptions size="small" title={title} column={1} items={rows(props.items).map((row) => ({ key: row.key, label: row.name, children: row.status }))}/>;
     case 'list': return <div className="pa-studio-rich"><strong>{title}</strong><ul className="pa-studio-rich-list">{items.map((item, index) => <li key={index}>{item}</li>)}</ul></div>;

@@ -912,7 +912,15 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('更新姓名') && !document.querySelector('.atlas-record-rows button.active')"), 'C6 repeated refresh reselected another record');
     assert.equal(legacySaveCalls.length, 5, 'C6 repeated refresh wrote another record');
 
-    assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
+    // Management R2: default endpoints are blank. The real exported app must
+    // render management controls but never enable writes or fake permissions.
+    await evaluate("location.hash = '#/system-roles'");
+    await until(() => evaluate("!!document.querySelector('[data-system-action=role-users]')"), 'Generated role page unavailable');
+    assert(await evaluate("(() => ['role-users','role-permissions','status'].every(kind => {const node = [...document.querySelectorAll('[data-system-action]')].find(el => el.getAttribute('data-system-action') === kind); return !!node && [...node.querySelectorAll('button')].every(button => button.disabled);}))()"), 'Unconfigured role management allows writes');
+    await evaluate("location.hash = '#/system-menus'");
+    await until(() => evaluate("!!document.querySelector('[data-system-action=menu-tree]')"), 'Generated menu tree page unavailable');
+    assert(await evaluate("!!document.querySelector('[data-system-action=menu-tree] button[disabled]')"), 'Unconfigured menu tree unexpectedly enabled');
+        assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
       const artifacts = join(process.env.GITHUB_WORKSPACE, 'artifacts');

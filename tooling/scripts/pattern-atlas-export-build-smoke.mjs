@@ -27,6 +27,7 @@ const { createStudioDocument, createNode, insertNode, setDecoration } = loadComp
 const { runExportedBrowserSmoke } = await import('./pattern-atlas-export-browser-check.mjs');
 const { projectExportFiles, zipTextFiles } = loadCompiled(join(studio, 'exporter.ts'));
 const { newDemoSource } = loadCompiled(join(studio, 'data-sources.ts'));
+const { addSystemManagementPages } = loadCompiled(join(studio, 'system-management-template.ts'));
 function exec(program, args, cwd) {
   // npm is a .cmd wrapper on Windows, which must be launched via cmd.exe.
   // This helper is only called with fixed internal commands/flags, never user input.
@@ -123,7 +124,11 @@ function exec(program, args, cwd) {
           sourceId: 'overlay-edit', formFields: 'name|姓名|text|required\nemail|邮箱|email|optional', submitUrl: '' }
       });
     }
+    // Compile real management pages as part of standalone acceptance, not only the default demo.
+    document = addSystemManagementPages(document).document;
     const files = projectExportFiles(document);
+    assert(files.some((entry) => entry.name === 'pages/system-roles.tsx'), 'Role page missing from the exported project');
+    assert(files.some((entry) => entry.name === 'system-management-actions.tsx'), 'RBAC runtime missing from independent ZIP');
     // P5-R3c2b1: the real ZIP must expose dormant modules through Vite's
     // public/ copy path, without including them in the built React bundle.
     const referenceNames=[

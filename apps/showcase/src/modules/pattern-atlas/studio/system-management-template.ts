@@ -22,7 +22,7 @@ export const SYSTEM_MANAGEMENT_PAGES: readonly SystemPageDefinition[] = [
     columns: [['name','角色名称'],['code','权限字符'],['sort','显示顺序'],['status','状态'],['createdAt','创建时间']],
     form: [['name','角色名称'],['code','权限字符'],['sort','显示顺序']] },
   { id: 'system-menus', title: '菜单管理', description: '维护菜单记录；菜单树、按钮权限与路由授权须由业务端实现。', readonly: false,
-    columns: [['name','菜单名称'],['parentId','上级菜单'],['path','路由地址'],['permission','权限字符'],['sort','排序']],
+    columns: [['name','菜单名称'],['parentId','上级菜单'],['path','路由地址'],['permission','权限字符'],['sort','排序'],['status','状态']],
     form: [['name','菜单名称'],['parentId','上级菜单'],['path','路由地址']] },
   { id: 'system-operation-logs', title: '操作日志', description: '只读查看后端提供的操作审计记录；不可从前端伪造审计日志。', readonly: true,
     columns: [['actor','操作人员'],['action','操作类型'],['resource','操作对象'],['result','执行结果'],['createdAt','操作时间']], form: [] },
@@ -101,5 +101,53 @@ export function addSystemManagementPages(document: StudioDocument): { document: 
       } });
     }
   }
-  return { document: next, added: missing.map((spec) => spec.id), firstPageId: missing[0]!.id };
+  return { document: addSystemManagementActions(next).document, added: missing.map((spec) => spec.id), firstPageId: missing[0]!.id };
+}
+
+
+type ExtraAction = { id: string; mode: 'role-users' | 'role-permissions' | 'menu-tree' | 'status'; title: string };
+const extras: Readonly<Record<string, readonly ExtraAction[]>> = {
+  'system-users': [{ id: 'systemUserStatus', mode: 'status', title: '人员状态' }],
+  'system-roles': [
+    { id: 'systemRoleUsers', mode: 'role-users', title: '角色关联人员' },
+    { id: 'systemRolePermissions', mode: 'role-permissions', title: '分配菜单权限' },
+    { id: 'systemRoleStatus', mode: 'status', title: '角色状态' }
+  ],
+  'system-menus': [
+    { id: 'systemMenuTree', mode: 'menu-tree', title: '菜单权限树' },
+    { id: 'systemMenuStatus', mode: 'status', title: '菜单状态' }
+  ],
+  'system-dictionaries': [{ id: 'systemDictionaryStatus', mode: 'status', title: '字典状态' }]
+};
+
+/** Opt-in migration for already-installed R1 pages; preserves any authored content and sources. */
+export function addSystemManagementActions(document: StudioDocument): { document: StudioDocument; added: string[] } {
+  const next: StudioDocument = structuredClone(document);
+  const added: string[] = [];
+  for (const [pageId, actions] of Object.entries(extras)) {
+    const page = next.blueprint.pages.find((entry) => entry.id === pageId);
+    const root = page?.composition;
+    // Never override a custom replacement page or its non-standard layout.
+    if (!root || root.id !== 'systemRoot' || root.kind !== 'layout' || root.type !== 'stack' || !root.children) continue;
+    const seen = new Set<string>();
+    const scan = (item: CompositionNode) => { seen.add(item.id); for (const child of item.children ?? []) scan(child); };
+    scan(root);
+    const pending = actions.filter((action) => !seen.has(action.id));
+    if (!pending.length) continue;
+    const inserts = pending.map((action): CompositionNode => widget(action.id, action.title));
+    const tableIndex = root.children.findIndex((item) => item.id === 'systemTable');
+    root.children.splice(tableIndex >= 0 ? tableIndex : root.children.length, 0, ...inserts);
+    for (const action of pending) {
+      const key = pageId + ':' + action.id;
+      // Set the decoration directly so a migration of old drafts does not discard user changes.
+      next.decorations[key] = {
+        widgetKind: 'management-actions',
+        widgetProps: { title: action.title, actionMode: action.mode,
+          optionsUrl: '', assignedUrl: '', detailUrl: '', submitUrl: '',
+          statusField: 'status', activeValue: 'enabled', inactiveValue: 'disabled' }
+      };
+      added.push(key);
+    }
+  }
+  return added.length ? { document: next, added } : { document, added: [] };
 }
