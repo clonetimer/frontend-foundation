@@ -928,7 +928,7 @@ export async function runExportedBrowserSmoke(directory) {
     // privileged reset without selecting a concrete personnel record.
     assert(await evaluate("(() => { const b=[...document.querySelectorAll('button')].find(e=>e.textContent?.includes('修改我的密码')); if(!b)return false;b.click();return true;})()"), 'Self-service password change control missing');
     await until(() => evaluate("!!document.querySelector('input[aria-label=当前密码]')"), 'Password change modal not accessible');
-    assert(await evaluate("(() => {const b=[...document.querySelectorAll('.ant-modal button')].find(e=>e.textContent?.trim()==='取消');if(!b)return false;b.click();return true;})()"), 'Cannot cancel password change');
+    assert(await evaluate("(() => {const b=document.querySelector('.ant-modal-close');if(!b)return false;b.click();return true;})()"), 'Cannot close password-change dialog');
     await evaluate("location.hash = '#/system-users'");
     await until(() => evaluate("!!document.querySelector('[data-system-action=reset-password]')"), 'Administrator reset password control missing');
     await evaluate("location.hash = '#/system-menus'");
