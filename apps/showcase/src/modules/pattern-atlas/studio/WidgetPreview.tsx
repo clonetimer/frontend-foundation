@@ -673,7 +673,7 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
       void notify.error('后续动作失败：' + messageText);
     }
   };
-  const close = () => { if (!pending.current) { setOpen(false); setErrors({}); setSubmitError(''); } };
+  const close = () => { if (!pending.current) { setOpen(false); setDraft({}); setErrors({}); setSubmitError(''); } };
   const openDialog = () => {
     if (editMode && (!selectedId || !recordSelection?.selected || recordSelection.detailStatus === 'loading' || recordSelection.detailStatus === 'error')) return;
     const defaults: Record<string, string> = {};
@@ -704,7 +704,8 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
     catch (problem) { setSubmitError(problem instanceof Error ? problem.message : '保存字段映射无效'); return; }
     pending.current = true;
     setBusy(true); setSubmitError(''); setWorkflowError('');
-    const snapshot = { ...draft };
+    // Never expose password form values to follow-up workflow templates, alerts or logs.
+    const snapshot = Object.fromEntries(Object.entries(draft).filter(([key]) => !fields.some((field) => field.key === key && field.type === 'password')));
     const submittedId = editMode ? editingId : '';
     const request = new AbortController();
     controller.current = request;
@@ -767,12 +768,12 @@ function OverlayWidget({ kind, props, live, recordSelection, workflowPages = [],
       <Input ref={(instance) => { fieldInputs.current[field.key] = instance; }}
         id={`${formId}-${field.key}`} aria-label={field.label} aria-invalid={Boolean(errors[field.key])}
         aria-describedby={errors[field.key] ? `${formId}-${field.key}-error` : undefined}
-        type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+        type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : field.type === 'password' ? 'password' : 'text'}
         maxLength={240} disabled={!live || busy} value={draft[field.key] ?? ''}
         onChange={(event) => { setDraft((values) => ({ ...values, [field.key]: event.target.value })); setErrors((current) => ({ ...current, [field.key]: '' })); }}/>
       {errors[field.key] ? <small id={`${formId}-${field.key}-error`} role="alert">{errors[field.key]}</small> : null}
     </label>)}
-    {!fields.length ? <small role="alert">字段配置无效：格式为 key|标签|text/email/number|required/optional，每行一个</small> : null}
+    {!fields.length ? <small role="alert">字段配置无效：格式为 key|标签|text/email/number/password|required/optional，每行一个</small> : null}
     {submitError ? <small role="alert">{submitError}</small> : null}
     {workflowError ? <small role="alert">{workflowError}</small> : null}
     {!url ? <small>编辑模式请设置含 {'{id}'} 的保存地址；新增模式设置普通地址</small> : null}
