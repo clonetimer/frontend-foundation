@@ -211,8 +211,25 @@ function exec(program, args, cwd) {
     }
     console.log('STANDALONE EXPORT BUILD PASSED');
   } finally {
-    managementServer?.kill();
+    // On Windows, killing a Python WSGI child is asynchronous. Deleting its
+    // SQLite WAL and interpreter files immediately causes sporadic EPERM.
+    if (managementServer && managementServer.exitCode === null && managementServer.signalCode === null) {
+      await new Promise((resolve) => {
+        const finish = () => { clearTimeout(timeout); resolve(); };
+        const timeout = setTimeout(finish, 10000);
+        managementServer.once('exit', finish);
+        managementServer.kill();
+      });
+    }
     if(process.env.KEEP_ATLAS_EXPORT==='1') console.log('Preserving',destination);
-    else rmSync(destination,{recursive:true,force:true});
+    else {
+      // Windows may retain a closed handle momentarily after process exit.
+      let lastError;
+      for (let attempt=0;attempt<12;attempt++){
+        try { rmSync(destination,{recursive:true,force:true,maxRetries:6,retryDelay:250}); lastError=null; break; }
+        catch(error){lastError=error;await new Promise(resolve=>setTimeout(resolve,350));}
+      }
+      if (lastError) throw lastError;
+    }
   }
 })().catch((error) => { console.error('STANDALONE EXPORT BUILD FAILED',error);process.exitCode=1; });
