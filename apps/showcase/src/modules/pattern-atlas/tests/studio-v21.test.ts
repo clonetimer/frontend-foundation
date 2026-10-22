@@ -12,7 +12,7 @@ describe('Phase 21 · bounded overlay business forms', () => {
     expect(fields.map((f) => f.type)).toEqual(['text','email','number']);
     expect(parseOverlayFormFields('__proto__|非法|text|required')).toEqual([]);
     expect(parseOverlayFormFields('name|名称|text|required\nname|重复|text|required')).toEqual([]);
-    expect(parseOverlayFormFields('name|名称|password|required')).toEqual([]);
+    expect(parseOverlayFormFields('password|初始密码|password|required')[0]?.type).toBe('password');
     expect(parseOverlayFormFields('name|名称|text|maybe')).toEqual([]);
     expect(parseOverlayFormFields(Array.from({length:9}, (_,n) => 'field' + n + '|字段|text|optional').join('\n'))).toEqual([]);
   });
