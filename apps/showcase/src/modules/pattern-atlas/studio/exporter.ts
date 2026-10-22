@@ -9,6 +9,7 @@ import { exportedWidgetCatalog, exportedWidgetPreview } from './exported-widgets
 import { exportedP5ReferenceSources } from './exported-p5-reference';
 import { exportedWorkflowRuntime } from './exported-workflows';
 import { studioWidgetStyles } from './widget-styles';
+import { SYSTEM_MANAGEMENT_PAGES } from './system-management-template';
 import { findRecordRules } from './record-bindings';
 
 function json(value: unknown): string {
@@ -34,6 +35,11 @@ ${studioWidgetStyles}
 .atlas-app-nav{display:flex;flex-direction:column;gap:6px}
 .atlas-app-nav a{color:#3a6350;display:block;text-decoration:none;padding:11px 13px;border-radius:9px}
 .atlas-app-nav a.active{background:#d9ebe0;color:#15633f;font-weight:800}
+.atlas-system-group{width:100%;min-width:0}
+.atlas-system-group summary{list-style:revert;cursor:pointer;padding:10px 12px;border-radius:8px;color:#345c48;font-size:13px;font-weight:750}
+.atlas-system-group summary:hover{background:#e2eee7}
+.atlas-system-group>div{display:flex;flex-direction:column;padding-left:11px;gap:3px}
+.atlas-app-nav .atlas-system-group a{font-size:12px;padding:9px 10px}
 .atlas-app-main{flex:1;min-width:0}
 .atlas-app-top{flex-direction:column}
 .atlas-app-top .atlas-app-sidebar{width:100%;flex:0 0 auto;border-right:0;border-bottom:1px solid #d7e5dc;padding:12px 22px;display:flex;align-items:center;gap:20px}
@@ -312,6 +318,7 @@ ${imports}
 import './studio-effects.css';
 const pageComponents = { ${components} };
 const navItems = ${json(navigation)};
+const systemNavIds = ${json(SYSTEM_MANAGEMENT_PAGES.map((entry) => entry.id))};
 const homePage = ${json(pages[0]!.id)};
 function currentPage() {
   let id = '';
@@ -329,7 +336,10 @@ export default function StudioApp() {
   return <div className={${json(`atlas-app-shell atlas-app-${shell.navigation}`)}} style={{ '--app-sidebar-width': ${json(`${shell.sidebarWidth}px`)} } as CSSProperties}>
     <aside className="atlas-app-sidebar" aria-label="页面目录">
       <div className="atlas-app-brand">{${json(document.blueprint.project.title)}}</div>
-      <nav className="atlas-app-nav">{navItems.map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}</nav>
+      <nav className="atlas-app-nav">
+        {navItems.filter((item) => ${json(shell.navigation)} === 'sidebar' ? !systemNavIds.includes(item.target) : true).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}
+        {${json(shell.navigation)} === 'sidebar' && navItems.some((item) => systemNavIds.includes(item.target)) ? <details className="atlas-system-group" open><summary>系统管理</summary><div>{navItems.filter((item) => systemNavIds.includes(item.target)).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}</div></details> : null}
+      </nav>
     </aside>
     <main className="atlas-app-main"><View/></main>
   </div>;

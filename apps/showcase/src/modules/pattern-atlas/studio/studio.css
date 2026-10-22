@@ -436,3 +436,10 @@
   .pa-studio-sidebar>.pa-studio-palette{min-height:90px}
   .pa-studio-sidebar>.pa-studio-layers{min-height:110px;max-height:none}
 }
+
+/* Virtual system-management group: editor/standalone share stable page IDs. */
+.pa-studio-preview-links .pa-studio-system-nav{width:100%;min-width:0}
+.pa-studio-preview-links .pa-studio-system-nav summary{cursor:pointer;padding:10px 12px;border-radius:7px;font-size:12px;font-weight:750;color:#3c6451}
+.pa-studio-preview-links .pa-studio-system-nav>div{display:flex;flex-direction:column;padding-left:12px;gap:3px}
+.pa-studio-preview-links .pa-studio-system-nav button{width:100%}
+.pa-studio-preview-links .pa-studio-system-nav summary:focus-visible{outline:2px solid #267b5c;outline-offset:2px}

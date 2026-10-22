@@ -13,6 +13,7 @@ import { p5R3c2SourceIsEligible } from '../../../../../../tooling/scripts/aas_p0
 import { WorkflowGraph } from './WorkflowGraph';
 import { useStudioRecordFlow } from './StudioRecords';
 import { addRecordEditorExample, addLinkedRecordExample } from './record-template';
+import { addSystemManagementPages, isSystemManagementPage } from './system-management-template';
 import { countDataSourceUses, detailRequestUrl, mergeRecordDetail, newDemoSource, newServerDemoSource, validDetailTemplate, type StudioDataSource } from './data-sources';
 import { buildStudioListUrl, readStudioListPayload, validQueryParameter, type StudioFieldMapping } from './source-query';
 import { validRecordField, validRecordPath, validRecordUrl, type StudioRecordFieldBinding, type StudioRecordListBinding, type StudioRecordSubmitBinding } from './record-bindings';
@@ -208,6 +209,17 @@ export function Component() {
       setNewPageOpen(false);
       void notice.success('新页面已加入项目。');
     } catch (error) { void notice.error(error instanceof Error ? error.message : '无法添加页面'); }
+  };
+  const installSystemManagement = () => {
+    try {
+      const result = addSystemManagementPages(doc);
+      if (!result.added.length) { void notice.info('系统管理的七个页面已经存在，没有重复添加。'); return; }
+      commit(result.document);
+      setPageId(result.firstPageId);
+      setSelectedId('systemRoot');
+      setInspector('接口管理'); setInspectorOpen(true); setLive(false);
+      void notice.success(`已添加 ${result.added.length} 个系统管理页面；请配置真实后端接口。`);
+    } catch (error) { void notice.error(error instanceof Error ? error.message : '添加系统管理页面失败'); }
   };
   const addThreeApiExample = () => {
     try {
@@ -790,6 +802,8 @@ export function Component() {
     {page ? <TextSetting title="当前页面名称" value={page.title} change={renamePage}/> : null}
     <div className="pa-studio-subtitle">本页数据连接</div>
     <div className="pa-studio-page-connections">{Object.entries(doc.decorations).filter(([id, value]) => id.startsWith(`${page?.id}:`) && (value.recordList || value.recordSubmit || value.api)).map(([id, value]) => <button type="button" key={id} onClick={() => { setSelectedId(id.slice((page?.id ?? '').length + 1)); setInspector('组件数据'); }}><span>{value.recordList ? 'GET 列表' : value.recordSubmit ? 'POST 保存' : `${value.api?.method ?? 'GET'} 请求`}</span><small>{value.recordList?.sourceId ?? value.recordSubmit?.sourceId ?? value.recordList?.url ?? value.recordSubmit?.url ?? value.api?.url}</small></button>)}{!Object.entries(doc.decorations).some(([id, value]) => id.startsWith(`${page?.id}:`) && (value.recordList || value.recordSubmit || value.api)) ? <small>暂无数据连接</small> : null}</div>
+    <Button block type="primary" ghost onClick={installSystemManagement}>＋ 添加系统管理（7 个固定页面）</Button>
+    <div className="pa-studio-note">人员、角色、菜单、操作日志、登录日志、字典及参数设置。只安装缺失页面；导出项目保留同名“系统管理”左侧导航分组。后端连接需另行配置，日志页默认只读。</div>
     <Button block type="primary" ghost onClick={addThreeApiExample}>＋ 创建列表／详情／保存联动示例</Button>
     <Button block onClick={addLinkedExample}>＋ 创建兼容版记录编辑页</Button>
     <Button block onClick={() => { setNewPageId(`page-${doc.blueprint.pages.length + 1}`); setNewPageTitle('新业务页面'); setNewPageTemplate('blank'); setNewPageOpen(true); }}>＋ 添加页面</Button>
@@ -847,7 +861,10 @@ export function Component() {
         </span>)}</nav> : null}<div className="pa-studio-canvas-area"><div className={`pa-studio-device device-${viewport} ${doc.design.motion !== 'system' ? 'atlas-no-motion' : ''}`} style={cssVars}>
         <div className="pa-studio-browserbar"><span/><span/><span/><div>{doc.blueprint.project.id} / {page?.id}</div></div>
         <div className={`pa-studio-preview-shell pa-shell-${doc.shell.navigation}`} style={{ '--studio-sidebar-width': `${doc.shell.sidebarWidth}px` } as CSSProperties}>
-          {doc.shell.navigation !== 'none' ? <nav aria-label="项目页面导航" className="pa-studio-preview-navigation"><div className="pa-studio-preview-brand">{doc.blueprint.project.title}</div><div className="pa-studio-preview-links">{orderedNavigation.map((entry) => <button type="button" key={entry.target} className={entry.target === page?.id ? 'active' : ''} onClick={() => selectPage(entry.target)}>{entry.label}</button>)}</div></nav> : null}
+          {doc.shell.navigation !== 'none' ? <nav aria-label="项目页面导航" className="pa-studio-preview-navigation"><div className="pa-studio-preview-brand">{doc.blueprint.project.title}</div><div className="pa-studio-preview-links">{doc.shell.navigation === 'sidebar' ? <>
+            {orderedNavigation.filter((entry) => !isSystemManagementPage(entry.target)).map((entry) => <button type="button" key={entry.target} className={entry.target === page?.id ? 'active' : ''} onClick={() => selectPage(entry.target)}>{entry.label}</button>)}
+            {orderedNavigation.some((entry) => isSystemManagementPage(entry.target)) ? <details className="pa-studio-system-nav" open><summary>系统管理</summary><div>{orderedNavigation.filter((entry) => isSystemManagementPage(entry.target)).map((entry) => <button type="button" key={entry.target} className={entry.target === page?.id ? 'active' : ''} onClick={() => selectPage(entry.target)}>{entry.label}</button>)}</div></details> : null}
+          </> : orderedNavigation.map((entry) => <button type="button" key={entry.target} className={entry.target === page?.id ? 'active' : ''} onClick={() => selectPage(entry.target)}>{entry.label}</button>)}</div></nav> : null}
           <div className="pa-studio-screen" key={`${page?.id}-${replayKey}`} style={{ minHeight: Math.max(400, ...Object.entries(doc.decorations).filter(([key, meta]) => key.startsWith(`${page?.id}:`) && meta.geometry?.mode === 'absolute').map(([, meta]) => (meta.geometry?.y ?? 0) + (meta.geometry?.height ?? 150) + 52)) }}>
             <div ref={setAbsoluteLayer} className="pa-studio-absolute-layer" aria-label="页面绝对定位图层"/>
             {root ? <StudioCanvas node={root} selectedId={chosen?.id} decorations={doc.decorations} pageId={page?.id} live={live} readOnly={live} onSelect={selectLayer} onDropItem={drop} onNavigate={selectPage} recordFlow={recordFlow} dataSources={doc.dataSources} tableSelection={tableSelection} onTableSelection={setTableSelection} workflowPages={doc.blueprint.pages.map((entry) => entry.id)} absoluteLayer={absoluteLayer} onWorkflowTrace={(trace) => setWorkflowTraces((before) => appendWorkflowTrace(before, trace))}/> : <div>暂不支持编辑这一页的内容</div>}
