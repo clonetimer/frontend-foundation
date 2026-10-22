@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { exportedManagementDb, exportedManagementServer } from '../studio/exported-management-service';
+import { exportedManagementAuth } from '../studio/exported-management-auth';
 import { addSystemManagementPages, isSystemManagementPage, SYSTEM_MANAGEMENT_PAGES } from '../studio/system-management-template';
 import { createStudioDocument, parseStudioFile, serializeStudioDocument } from '../studio/model';
 import { generateStudioApp, projectExportFiles } from '../studio/exporter';
@@ -14,7 +17,8 @@ describe('System management starter pages', () => {
     expect(result.document.blueprint.navigation.items.slice(-7).map((item) => item.label)).toEqual(SYSTEM_MANAGEMENT_PAGES.map((item) => item.title));
     expect(serializeStudioDocument(initial)).toEqual(original);
     expect(result.document.dataSources).toHaveLength(7);
-    expect(result.document.dataSources.every((item) => item.listUrl === '' && item.saveUrl === '' && item.deleteUrl === '')).toBe(true);
+    expect(result.document.dataSources.every((item) => item.listUrl.startsWith('/api/system/'))).toBe(true);
+    expect(result.document.dataSources.filter((item) => item.id.includes('logs')).every((item) => !item.saveUrl && !item.deleteUrl)).toBe(true);
     expect(result.document.shell.navigation).toBe('sidebar');
     expect(result.document.blueprint.schemaVersion).toBe(1);
     expect(isSystemManagementPage('system-roles')).toBe(true);
@@ -46,6 +50,23 @@ describe('System management starter pages', () => {
     expect(exported.find((file) => file.name === 'StudioApp.tsx')?.text).not.toContain('json(shell.navigation) ===');
     expect(generateStudioApp(doc)).toContain('"system-roles"');
     expect(exported.find((file) => file.name === 'pages/system-roles.tsx')?.text).toContain('sourceError');
+    expect(exported.some((file) => file.name === 'management/server.py')).toBe(true);
+    expect(exported.some((file) => file.name === 'management/db.py')).toBe(true);
+    expect(exported.some((file) => file.name === 'management-auth.tsx')).toBe(true);
+    expect(exported.some((file) => file.name === 'vite.config.ts')).toBe(true);
+  });
+
+  it('ships exactly the source-tested Python service and session/password management UI', () => {
+    const backend = readFileSync(new URL('../../../../../../services/management/server.py', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    const database = readFileSync(new URL('../../../../../../services/management/db.py', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    expect(exportedManagementServer).toBe(backend);
+    expect(exportedManagementDb).toBe(database);
+    expect(exportedManagementAuth).toContain('/api/system/auth/change-password');
+    const doc = addSystemManagementPages(createStudioDocument()).document;
+    const entries = projectExportFiles(doc);
+    expect(entries.find((entry) => entry.name === 'management/server.py')?.text).toBe(backend);
+    expect(entries.find((entry) => entry.name === 'management/db.py')?.text).toBe(database);
+    expect(entries.find((entry) => entry.name === 'management-auth.tsx')?.text).toBe(exportedManagementAuth);
   });
 
   it('is idempotent and only fills missing pages, preserving custom data sources', () => {

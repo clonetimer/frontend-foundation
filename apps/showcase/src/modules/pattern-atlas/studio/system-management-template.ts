@@ -13,6 +13,34 @@ export interface SystemPageDefinition {
   form: readonly (readonly [string, string])[];
 }
 
+
+/** First-party service contracts; only applies to the seven built-in page IDs. */
+function serviceResource(id: string): string {
+  return id === 'system-operation-logs' ? 'logs/operations' :
+    id === 'system-login-logs' ? 'logs/logins' : id.replace(/^system-/, '');
+}
+function managementDefaults(id: string) {
+  const base = '/api/system/' + serviceResource(id);
+  const readonly = id === 'system-operation-logs' || id === 'system-login-logs';
+  return { listUrl: base, detailUrl: readonly ? '' : base + '/{id}',
+    saveUrl: readonly ? '' : base + '/{id}',
+    createUrl: readonly ? '' : base, deleteUrl: readonly ? '' : base + '/{id}' };
+}
+function operationDefaults(pageId: string, mode: ExtraAction['mode']): Record<string, string> {
+  if (mode === 'role-users')
+    return { optionsUrl:'/api/system/users/options', assignedUrl:'/api/system/roles/{id}/users',
+      detailUrl:'', submitUrl:'/api/system/roles/{id}/users' };
+  if (mode === 'role-permissions')
+    return { optionsUrl:'/api/system/menus/tree', assignedUrl:'/api/system/roles/{id}/permissions',
+      detailUrl:'', submitUrl:'/api/system/roles/{id}/permissions' };
+  if (mode === 'menu-tree')
+    return { optionsUrl:'/api/system/menus/tree', assignedUrl:'', detailUrl:'', submitUrl:'' };
+  if (mode === 'reset-password')
+    return { optionsUrl:'', assignedUrl:'', detailUrl:'', submitUrl:'/api/system/users/{id}/reset-password' };
+  const base = '/api/system/' + serviceResource(pageId) + '/{id}';
+  return { optionsUrl:'', assignedUrl:'', detailUrl:base, submitUrl:base };
+}
+
 /** IDs are deliberately stable: preview/export use them to render one grouped navigation entry. */
 export const SYSTEM_MANAGEMENT_PAGES: readonly SystemPageDefinition[] = [
   { id: 'system-users', title: '人员管理', description: '查询人员、维护人员资料；角色关联与授权由业务后端负责。', readonly: false,
@@ -40,12 +68,12 @@ const systemIds = new Set(SYSTEM_MANAGEMENT_PAGES.map((entry) => entry.id));
 export function isSystemManagementPage(id: string): boolean { return systemIds.has(id); }
 
 function widget(id: string, title: string): CompositionNode {
-  return { id, kind: 'widget', type: 'placeholder', props: { title, description: '通过右侧“接口管理”连接自己的后端' } };
+  return { id, kind: 'widget', type: 'placeholder', props: { title, description: '已预置 FF 内置系统管理接口；请先启动服务并登录' } };
 }
 function composition(spec: SystemPageDefinition): CompositionNode {
   const children: CompositionNode[] = [
     { id: 'systemHeading', kind: 'widget', type: 'text', props: { text: spec.title, variant: 'title' } },
-    { id: 'systemNote', kind: 'widget', type: 'text', props: { text: spec.description + ' 请先在「接口管理」配置对应数据源。', variant: 'secondary' } },
+    { id: 'systemNote', kind: 'widget', type: 'text', props: { text: spec.description + ' 已预置内置管理 API。首次使用请初始化管理员并启动管理服务。', variant: 'secondary' } },
   ];
   if (!spec.readonly) {
     children.push({ id: 'systemActions', kind: 'layout', type: 'grid', props: { columns: 2, gap: 8 }, children: [
@@ -65,7 +93,7 @@ export function addSystemManagementPages(document: StudioDocument): { document: 
   if (document.dataSources.length + newSources.length > 25) throw new Error('数据源数量已达项目上限，无法添加完整系统管理模板。');
   let next: StudioDocument = { ...document, dataSources: [
     ...document.dataSources, ...newSources.map((spec) => ({
-      ...newDemoSource(spec.id), name: spec.title, listUrl: '', detailUrl: '', saveUrl: '', createUrl: '', deleteUrl: '',
+      ...newDemoSource(spec.id), name: spec.title, ...managementDefaults(spec.id),
       itemsPath: 'data.items', totalPath: 'data.total', detailPath: 'data.item',
       idField: 'id', labelField: spec.columns[0]?.[0] ?? 'id', pageSize: 10,
       paginationMode: 'server' as const, filterField: '', filterValues: [], sortField: ''
@@ -86,11 +114,12 @@ export function addSystemManagementPages(document: StudioDocument): { document: 
       filterField: '', filterValues: '', sortField: '', detailUrl: '', detailPath: 'data.item', deleteUrl: ''
     } });
     if (!spec.readonly) {
-      const fields = spec.form.map(([field, label]) => `${field}|${label}|text|required`).join('\n');
+      const fields = spec.form.map(([field, label]) => `${field}|${label}|${field === 'sort' ? 'number' : 'text'}|required`).join('\n');
+      const createFields = spec.id === 'system-users' ? fields + '\npassword|初始密码|password|required' : fields;
       next = setDecoration(next, `${spec.id}:systemCreate`, { widgetKind: 'modal', widgetProps: {
         title: '新增' + spec.title.replace('管理',''), triggerText: '＋ 新增',
-        description: '连接并验证后端接口后才允许提交。', okText: '确认新增', cancelText: '取消',
-        formFields: fields, submitUrl: '', formMode: 'create', submitMethod: 'POST', sourceId: spec.id,
+        description: '需要登录并具有相应管理权限，保存由内置后端执行。', okText: '确认新增', cancelText: '取消',
+        formFields: createFields, submitUrl: '', formMode: 'create', submitMethod: 'POST', sourceId: spec.id,
         successWorkflow: '', failureWorkflow: ''
       } });
       next = setDecoration(next, `${spec.id}:systemEdit`, { widgetKind: 'modal', widgetProps: {
@@ -105,9 +134,10 @@ export function addSystemManagementPages(document: StudioDocument): { document: 
 }
 
 
-type ExtraAction = { id: string; mode: 'role-users' | 'role-permissions' | 'menu-tree' | 'status'; title: string };
+type ExtraAction = { id: string; mode: 'role-users' | 'role-permissions' | 'menu-tree' | 'status' | 'reset-password'; title: string };
 const extras: Readonly<Record<string, readonly ExtraAction[]>> = {
-  'system-users': [{ id: 'systemUserStatus', mode: 'status', title: '人员状态' }],
+  'system-users': [{ id: 'systemUserStatus', mode: 'status', title: '人员状态' },
+    { id: 'systemUserPasswordReset', mode: 'reset-password', title: '重置人员密码' }],
   'system-roles': [
     { id: 'systemRoleUsers', mode: 'role-users', title: '角色关联人员' },
     { id: 'systemRolePermissions', mode: 'role-permissions', title: '分配菜单权限' },
@@ -143,11 +173,43 @@ export function addSystemManagementActions(document: StudioDocument): { document
       next.decorations[key] = {
         widgetKind: 'management-actions',
         widgetProps: { title: action.title, actionMode: action.mode,
-          optionsUrl: '', assignedUrl: '', detailUrl: '', submitUrl: '',
+          ...operationDefaults(pageId, action.mode),
           statusField: 'status', activeValue: 'enabled', inactiveValue: 'disabled' }
       };
       added.push(key);
     }
   }
   return added.length ? { document: next, added } : { document, added: [] };
+}
+
+
+/** Safe upgrade for older templates: fill blank first-party endpoints only.
+ * Never change a user-customized source URL or widget binding. */
+export function connectBuiltInManagement(document: StudioDocument): { document: StudioDocument; changed: number } {
+  const next: StudioDocument = structuredClone(document);
+  let changed = 0;
+  for (const source of next.dataSources) {
+    if (!SYSTEM_MANAGEMENT_PAGES.some((entry) => entry.id === source.id)) continue;
+    const defaults = managementDefaults(source.id);
+    for (const [field, value] of Object.entries(defaults)) {
+      if (!value || source[field as keyof typeof defaults]) continue;
+      (source as unknown as Record<string, unknown>)[field] = value;
+      changed++;
+    }
+  }
+  for (const [pageId, actions] of Object.entries(extras)) {
+    for (const action of actions) {
+      const key = pageId + ':' + action.id;
+      const dec = next.decorations[key];
+      if (!dec || dec.widgetKind !== 'management-actions') continue;
+      const props = { ...dec.widgetProps };
+      for (const [field, value] of Object.entries(operationDefaults(pageId, action.mode))) {
+        if (!value || props[field]) continue;
+        props[field] = value;
+        changed++;
+      }
+      next.decorations[key] = { ...dec, widgetProps: props };
+    }
+  }
+  return { document: changed ? next : document, changed };
 }

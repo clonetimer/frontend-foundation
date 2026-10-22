@@ -37,7 +37,7 @@ describe('system-management privileged interactions', () => {
     const expectations: Record<string,string[]> = {
       'system-roles': ['systemRoleUsers','systemRolePermissions','systemRoleStatus'],
       'system-menus': ['systemMenuTree','systemMenuStatus'],
-      'system-users': ['systemUserStatus'],
+      'system-users': ['systemUserStatus','systemUserPasswordReset'],
       'system-dictionaries': ['systemDictionaryStatus']
     };
     for (const [pageId, ids] of Object.entries(expectations)) {
@@ -46,10 +46,11 @@ describe('system-management privileged interactions', () => {
         expect(page.composition?.children?.some((item) => item.id === id)).toBe(true);
         expect(doc.decorations[pageId+':'+id]?.widgetKind).toBe('management-actions');
         const props = doc.decorations[pageId+':'+id]?.widgetProps;
-        expect(props?.optionsUrl).toBe('');
-        expect(props?.submitUrl).toBe('');
+        expect(props?.optionsUrl === '' || String(props?.optionsUrl).startsWith('/api/system/')).toBe(true);
+        expect(props?.submitUrl === '' || String(props?.submitUrl).startsWith('/api/system/')).toBe(true);
       }
     }
+    expect(doc.decorations['system-users:systemUserPasswordReset']?.widgetProps?.submitUrl).toBe('/api/system/users/{id}/reset-password');
     expect(doc.decorations['system-operation-logs:systemRoleUsers']).toBeUndefined();
     expect(doc.decorations['system-login-logs:systemMenuTree']).toBeUndefined();
     expect(normalizeWidgetProps('management-actions', { actionMode: 'status' }).actionMode).toBe('status');
@@ -57,12 +58,12 @@ describe('system-management privileged interactions', () => {
   it('adds only missing actions for existing system pages, preserving configured sources', () => {
     const installed = addSystemManagementPages(createStudioDocument()).document;
     const original = structuredClone(installed);
-    const ids = ['systemRoleUsers','systemRolePermissions','systemRoleStatus','systemMenuTree','systemMenuStatus','systemUserStatus','systemDictionaryStatus'];
+    const ids = ['systemRoleUsers','systemRolePermissions','systemRoleStatus','systemMenuTree','systemMenuStatus','systemUserStatus','systemUserPasswordReset','systemDictionaryStatus'];
     for (const key of Object.keys(original.decorations)) if (original.decorations[key]?.widgetKind === 'management-actions') delete original.decorations[key];
     for (const page of original.blueprint.pages) if (page.id.startsWith('system-')) page.composition!.children = page.composition!.children!.filter((child) => !ids.includes(child.id));
     original.dataSources.find((item) => item.id === 'system-roles')!.listUrl = '/api/custom';
     const result = addSystemManagementActions(original);
-    expect(result.added).toHaveLength(7);
+    expect(result.added).toHaveLength(8);
     expect(result.document.dataSources.find((item) => item.id === 'system-roles')?.listUrl).toBe('/api/custom');
     expect(addSystemManagementActions(result.document).added).toEqual([]);
     const roundtrip = parseStudioFile(serializeStudioDocument(result.document));
