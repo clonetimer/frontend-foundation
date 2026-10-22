@@ -912,15 +912,23 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('更新姓名') && !document.querySelector('.atlas-record-rows button.active')"), 'C6 repeated refresh reselected another record');
     assert.equal(legacySaveCalls.length, 5, 'C6 repeated refresh wrote another record');
 
-    // Management R3: the generated app must not mount privileged data widgets
-    // until its own first-party session endpoint confirms an authenticated user.
-    // This fixture intentionally has NO backend at port 8765.
+    // Management R3: exercise the real packaged Python backend, configured
+    // through the exported Vite same-origin proxy with a synthetic test-only account.
     await evaluate("location.hash = '#/system-roles'");
-    await until(() => evaluate("document.body.textContent.includes('无法连接系统管理服务')"), 'Management auth boundary did not detect missing backend');
-    assert(await evaluate("!document.querySelector('[data-system-action]')"), 'Role action unexpectedly mounted before authentication');
+    await until(() => evaluate("!!document.querySelector('input[aria-label=管理账号]')"), 'Management login form absent');
+    assert(await evaluate("!document.querySelector('[data-system-action]')"), 'Role actions mounted before authentication');
+    assert(await evaluate("(() => { const e=document.querySelector('input[aria-label=管理账号]'); if(!e)return false;e.focus();return document.activeElement===e;})()"), 'Cannot focus test login');
+    await call('Input.insertText',{text:'test_admin'});
+    assert(await evaluate("(() => { const e=document.querySelector('input[aria-label=管理密码]'); if(!e)return false;e.focus();return document.activeElement===e;})()"), 'Cannot focus test password');
+    await call('Input.insertText',{text:'FixtureOnlyStrongPassword123!'});
+    assert(await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(b=>b.textContent?.includes('登录系统管理'));if(!e||e.disabled)return false;e.click();return true;})()"), 'Cannot submit first-party login');
+    await until(() => evaluate("!!document.querySelector('[data-system-action=role-users]')"), 'Management session did not enable real role page');
+    await until(() => evaluate("document.body.textContent.includes('超级管理员')"), 'Role list did not load from packaged SQLite backend');
     await evaluate("location.hash = '#/system-menus'");
-    await until(() => evaluate("document.body.textContent.includes('无法连接系统管理服务')"), 'Menu auth boundary missing');
-    assert(await evaluate("!document.querySelector('[data-system-action=menu-tree]')"), 'Menu tree mounted without session');
+    await until(() => evaluate("!!document.querySelector('[data-system-action=menu-tree]')"), 'Menu tree page did not mount after authenticated navigation');
+    assert(await evaluate("(() => { const e=[...document.querySelectorAll('button')].find(b=>b.textContent?.includes('退出系统管理'));if(!e)return false;e.click();return true;})()"), 'Logout action missing');
+    await until(() => evaluate("!!document.querySelector('input[aria-label=管理账号]')"), 'Logout did not revoke client management view');
+    assert(await evaluate("!document.querySelector('[data-system-action]')"), 'Privileged page remained mounted after logout');
         assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
