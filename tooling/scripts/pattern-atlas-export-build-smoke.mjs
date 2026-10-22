@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Build the actual Studio ZIP in a new temp project outside this workspace. */
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -40,6 +40,7 @@ function exec(program, args, cwd) {
 }
 (async () => {
   const destination = mkdtempSync(join(tmpdir(), 'pattern-atlas-export-'));
+  let managementServer = null;
   try {
     const browserAcceptance = process.argv.includes('--browser');
     let document = createStudioDocument();
@@ -184,9 +185,33 @@ function exec(program, args, cwd) {
         'Vite production build omitted or rewrote P5 source: '+name
       );
     }
-    if (browserAcceptance) await runExportedBrowserSmoke(destination);
+    if (browserAcceptance) {
+      // Exercise the service copied into the downloadable ZIP, not the
+      // source-tree backend, with a disposable synthetic-only test identity.
+      const python = process.platform === 'win32' ? 'python' : 'python3';
+      const dbPath = join(destination,'management','instance','test.sqlite3');
+      const fixture = [
+        'import sys',
+        "sys.path.insert(0,'management')",
+        'from db import initialize, create_admin',
+        'initialize(sys.argv[1])',
+        "create_admin(sys.argv[1], 'test_admin', 'FixtureOnlyStrongPassword123!')"
+      ].join('; ');
+      exec(python,['-c',fixture,dbPath],destination);
+      managementServer = spawn(python,['management/server.py','serve','--db',dbPath,
+        '--host','127.0.0.1','--port','8765'], { cwd:destination, stdio:'ignore' });
+      let available=false;
+      for(let attempt=0;attempt<100;attempt++){
+        try {const result=await fetch('http://127.0.0.1:8765/healthz');
+          if(result.ok){available=true;break;}}catch{}
+        await new Promise(resolve=>setTimeout(resolve,100));
+      }
+      assert(available,'Packaged Python management service failed to start');
+      await runExportedBrowserSmoke(destination);
+    }
     console.log('STANDALONE EXPORT BUILD PASSED');
   } finally {
+    managementServer?.kill();
     if(process.env.KEEP_ATLAS_EXPORT==='1') console.log('Preserving',destination);
     else rmSync(destination,{recursive:true,force:true});
   }
