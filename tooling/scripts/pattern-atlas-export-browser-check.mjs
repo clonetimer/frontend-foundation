@@ -912,14 +912,15 @@ export async function runExportedBrowserSmoke(directory) {
     await until(() => evaluate("document.querySelector('.atlas-record-rows')?.textContent?.includes('更新姓名') && !document.querySelector('.atlas-record-rows button.active')"), 'C6 repeated refresh reselected another record');
     assert.equal(legacySaveCalls.length, 5, 'C6 repeated refresh wrote another record');
 
-    // Management R2: default endpoints are blank. The real exported app must
-    // render management controls but never enable writes or fake permissions.
+    // Management R3: the generated app must not mount privileged data widgets
+    // until its own first-party session endpoint confirms an authenticated user.
+    // This fixture intentionally has NO backend at port 8765.
     await evaluate("location.hash = '#/system-roles'");
-    await until(() => evaluate("!!document.querySelector('[data-system-action=role-users]')"), 'Generated role page unavailable');
-    assert(await evaluate("(() => ['role-users','role-permissions','status'].every(kind => {const node = [...document.querySelectorAll('[data-system-action]')].find(el => el.getAttribute('data-system-action') === kind); return !!node && [...node.querySelectorAll('button')].every(button => button.disabled);}))()"), 'Unconfigured role management allows writes');
+    await until(() => evaluate("document.body.textContent.includes('无法连接系统管理服务')"), 'Management auth boundary did not detect missing backend');
+    assert(await evaluate("!document.querySelector('[data-system-action]')"), 'Role action unexpectedly mounted before authentication');
     await evaluate("location.hash = '#/system-menus'");
-    await until(() => evaluate("!!document.querySelector('[data-system-action=menu-tree]')"), 'Generated menu tree page unavailable');
-    assert(await evaluate("!!document.querySelector('[data-system-action=menu-tree] button[disabled]')"), 'Unconfigured menu tree unexpectedly enabled');
+    await until(() => evaluate("document.body.textContent.includes('无法连接系统管理服务')"), 'Menu auth boundary missing');
+    assert(await evaluate("!document.querySelector('[data-system-action=menu-tree]')"), 'Menu tree mounted without session');
         assert.equal(errors.length, 0, 'Browser runtime exceptions: ' + errors.join('; '));
     const snapshot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     if (process.env.GITHUB_WORKSPACE && snapshot.data) {
