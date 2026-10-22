@@ -11,6 +11,7 @@ import { exportedWorkflowRuntime } from './exported-workflows';
 import { studioWidgetStyles } from './widget-styles';
 import { SYSTEM_MANAGEMENT_PAGES } from './system-management-template';
 import { exportedManagementDb, exportedManagementServer } from './exported-management-service';
+import { exportedManagementMaintenance, exportedManagementLaunch } from './exported-management-operations';
 import { exportedManagementAuth } from './exported-management-auth';
 import { exportedSystemManagementActions } from './exported-system-management-actions';
 import { findRecordRules } from './record-bindings';
@@ -315,6 +316,14 @@ export function generateStudioApp(document: StudioDocument): string {
   const items = [...(document.blueprint.navigation?.items ?? [])].sort((a,b) => a.order - b.order).filter((entry) => pages.some((page) => page.id === entry.target));
   const navigation = items.length ? items.map(({target,label}) => ({target,label})) : pages.map((entry) => ({target:entry.id,label:entry.title}));
   const shell = document.shell;
+  const systemPermissions: Record<string, string> = {
+    'system-users':'system:users:read', 'system-roles':'system:roles:read',
+    'system-menus':'system:menus:read', 'system-operation-logs':'system:logs:read',
+    'system-login-logs':'system:logs:read', 'system-dictionaries':'system:dictionaries:read',
+    'system-parameters':'system:parameters:read'
+  };
+  const permissionFor = Object.fromEntries(pages.map((entry) => [entry.id, systemPermissions[entry.id] ?? ('page:' + entry.id + ':view')]));
+  const managementEnabled = pages.some((entry) => SYSTEM_MANAGEMENT_PAGES.some((spec) => spec.id === entry.id));
   return `/** Generated standalone multi-page entry. Use as your React application's App.tsx. */
 import { useEffect, useState, type CSSProperties } from 'react';
 ${imports}
@@ -323,6 +332,8 @@ import ManagementAuth from ${json('./management-auth')};
 const pageComponents = { ${components} };
 const navItems = ${json(navigation)};
 const systemNavIds = ${json(SYSTEM_MANAGEMENT_PAGES.map((entry) => entry.id))};
+const pagePermissions: Record<string, string> = ${json(permissionFor)};
+const managementEnabled = ${json(managementEnabled)};
 const homePage = ${json(pages[0]!.id)};
 function currentPage() {
   let id = '';
@@ -331,6 +342,7 @@ function currentPage() {
 }
 export default function StudioApp() {
   const [page, setPage] = useState(currentPage);
+  const [grants, setGrants] = useState<string[]>([]);
   useEffect(() => {
     const change = () => setPage(currentPage());
     window.addEventListener('hashchange', change);
@@ -341,11 +353,11 @@ export default function StudioApp() {
     <aside className="atlas-app-sidebar" aria-label="页面目录">
       <div className="atlas-app-brand">{${json(document.blueprint.project.title)}}</div>
       <nav className="atlas-app-nav">
-        {navItems.filter((item) => ${json(shell.navigation)} === 'sidebar' ? !systemNavIds.includes(item.target) : true).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}
-        {${json(shell.navigation)} === 'sidebar' && navItems.some((item) => systemNavIds.includes(item.target)) ? <details className="atlas-system-group" open><summary>系统管理</summary><div>{navItems.filter((item) => systemNavIds.includes(item.target)).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}</div></details> : null}
+        {navItems.filter((item) => !managementEnabled || grants.includes('*') || grants.includes(pagePermissions[item.target])).filter((item) => ${json(shell.navigation)} === 'sidebar' ? !systemNavIds.includes(item.target) : true).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}
+        {${json(shell.navigation)} === 'sidebar' && navItems.some((item) => systemNavIds.includes(item.target)) ? <details className="atlas-system-group" open><summary>系统管理</summary><div>{navItems.filter((item) => systemNavIds.includes(item.target) && (!managementEnabled || grants.includes('*') || grants.includes(pagePermissions[item.target]))).map((item) => <a key={item.target} href={'#/' + item.target} className={page === item.target ? 'active' : ''}>{item.label}</a>)}</div></details> : null}
       </nav>
     </aside>
-    <main className="atlas-app-main"><ManagementAuth active={systemNavIds.includes(page)}><View/></ManagementAuth></main>
+    <main className="atlas-app-main"><ManagementAuth active={managementEnabled} requiredPermission={pagePermissions[page] ?? 'page:unregistered:view'} onPermissions={setGrants}><View/></ManagementAuth></main>
   </div>;
 }
 `;
@@ -428,6 +440,14 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
     { name: 'management-auth.tsx', text: exportedManagementAuth },
     { name: 'management/db.py', text: exportedManagementDb },
     { name: 'management/server.py', text: exportedManagementServer },
+    { name: 'management/maintenance.py', text: exportedManagementMaintenance },
+    { name: 'management/launch.py', text: exportedManagementLaunch },
+    { name: 'management/page-permissions.json', text: JSON.stringify({
+      pages: document.blueprint.pages.filter((page) => page.composition && !SYSTEM_MANAGEMENT_PAGES.some((item) => item.id === page.id))
+        .map((page) => ({ id: page.id, title: page.title }))
+    }, null, 2) + '\n' },
+    { name: 'start.bat', text: '@echo off\r\ncd /d "%~dp0"\r\npython management\\launch.py\r\nif errorlevel 1 pause\r\n' },
+    { name: 'start.sh', text: '#!/usr/bin/env sh\nset -eu\ncd "$(dirname "$0")"\npython3 management/launch.py\n' },
     { name: 'management/.gitignore', text: 'instance/\n__pycache__/\n*.py[cod]\n' },
     { name: 'vite.config.ts', text: "import { defineConfig } from 'vite';\nconst proxy = { '/api/system': { target: 'http://127.0.0.1:8765', changeOrigin: false } };\nexport default defineConfig({ server: { proxy }, preview: { proxy } });\n" },
     { name: 'system-management-actions.tsx', text: exportedSystemManagementActions },
