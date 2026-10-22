@@ -197,12 +197,13 @@ def open_wizard(root_path: Path = ROOT, db_path: Path | None = None) -> None:
         # Clear Tk-held secrets as soon as the operation has been handed off.
         account_pass.set("")
         account_confirm.set("")
+        skip_build = (root_path / "dist" / "index.html").is_file() and not rebuild.get()
         starting = True
         stop_signal.clear()
         status.set("正在准备应用和初始化数据库…")
         def work():
             try:
-                launch(root_path, db_path, port, (root_path / "dist" / "index.html").is_file() and not rebuild.get(),
+                launch(root_path, db_path, port, skip_build,
                        False, True, credentials=credentials, stop_event=stop_signal,
                        on_ready=lambda url: bus.put(("ready", url)),
                        on_progress=lambda text: bus.put(("progress", text)))
