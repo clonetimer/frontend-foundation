@@ -11,7 +11,7 @@ import { exportedWorkflowRuntime } from './exported-workflows';
 import { studioWidgetStyles } from './widget-styles';
 import { SYSTEM_MANAGEMENT_PAGES } from './system-management-template';
 import { exportedManagementDb, exportedManagementServer } from './exported-management-service';
-import { exportedManagementMaintenance, exportedManagementLaunch } from './exported-management-operations';
+import { exportedManagementMaintenance, exportedManagementLaunch, exportedManagementGui } from './exported-management-operations';
 import { exportedManagementAuth } from './exported-management-auth';
 import { exportedSystemManagementActions } from './exported-system-management-actions';
 import { findRecordRules } from './record-bindings';
@@ -447,6 +447,9 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
     { name: 'management/server.py', text: exportedManagementServer },
     { name: 'management/maintenance.py', text: exportedManagementMaintenance },
     { name: 'management/launch.py', text: exportedManagementLaunch },
+    { name: 'management/gui.py', text: exportedManagementGui },
+    { name: 'start-gui.bat', text: '@echo off\r\ncd /d "%~dp0"\r\nwhere pythonw >nul 2>nul\r\nif not errorlevel 1 (\r\n  start "" pythonw "%~dp0management\\gui.py"\r\n) else (\r\n  python management\\gui.py\r\n  if errorlevel 1 pause\r\n)\r\n' },
+    { name: 'start-gui.sh', text: '#!/usr/bin/env sh\nset -eu\ncd "$(dirname "$0")"\npython3 management/gui.py\n' },
     { name: 'management/page-permissions.json', text: JSON.stringify({
       pages: document.blueprint.pages.filter((page) => page.composition && !SYSTEM_MANAGEMENT_PAGES.some((item) => item.id === page.id))
         .map((page) => ({ id: page.id, title: page.title }))
@@ -468,7 +471,7 @@ export function projectExportFiles(document: StudioDocument): Array<{ name: stri
 
 ## 单独启动
 
-解压后，在 Windows 双击 start.bat，或在 Linux/macOS 执行 python3 management/launch.py。需预先安装 Python 3.11+ 及 Node.js/npm；首次运行会安装前端依赖、构建 React、初始化管理员、注册页面权限，然后在 http://127.0.0.1:8765 以**同源**方式提供页面和内置管理 API。第二次运行会复用数据库和已安装依赖，不使用默认管理员密码。
+**优先使用图形向导：Windows 双击 `start-gui.bat`，Linux/macOS 执行 `sh start-gui.sh`。** 部署向导提供环境检查、管理员首次初始化、启动/停止应用、备份与离线恢复按钮；不用手工敲备份命令。需要 Python 3.11+（含 Tkinter）和 Node.js/npm，首次安装依赖需要联网。部署成功后打开 http://127.0.0.1:8765。\n\n仍保留命令行方式：Windows 双击 `start.bat`，或 Linux/macOS 执行 `python3 management/launch.py`。首次启动构建前端、注册页面权限并创建管理员，后续复用已有数据库。**恢复操作必须先停止应用**，会二次确认、备份原数据库并强制所有用户重新登录。
 
 本文件包中包含：
 
