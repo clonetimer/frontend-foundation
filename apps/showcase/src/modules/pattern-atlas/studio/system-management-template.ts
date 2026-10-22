@@ -35,6 +35,8 @@ function operationDefaults(pageId: string, mode: ExtraAction['mode']): Record<st
       detailUrl:'', submitUrl:'/api/system/roles/{id}/permissions' };
   if (mode === 'menu-tree')
     return { optionsUrl:'/api/system/menus/tree', assignedUrl:'', detailUrl:'', submitUrl:'' };
+  if (mode === 'reset-password')
+    return { optionsUrl:'', assignedUrl:'', detailUrl:'', submitUrl:'/api/system/users/{id}/reset-password' };
   const base = '/api/system/' + serviceResource(pageId) + '/{id}';
   return { optionsUrl:'', assignedUrl:'', detailUrl:base, submitUrl:base };
 }
@@ -132,9 +134,10 @@ export function addSystemManagementPages(document: StudioDocument): { document: 
 }
 
 
-type ExtraAction = { id: string; mode: 'role-users' | 'role-permissions' | 'menu-tree' | 'status'; title: string };
+type ExtraAction = { id: string; mode: 'role-users' | 'role-permissions' | 'menu-tree' | 'status' | 'reset-password'; title: string };
 const extras: Readonly<Record<string, readonly ExtraAction[]>> = {
-  'system-users': [{ id: 'systemUserStatus', mode: 'status', title: '人员状态' }],
+  'system-users': [{ id: 'systemUserStatus', mode: 'status', title: '人员状态' },
+    { id: 'systemUserPasswordReset', mode: 'reset-password', title: '重置人员密码' }],
   'system-roles': [
     { id: 'systemRoleUsers', mode: 'role-users', title: '角色关联人员' },
     { id: 'systemRolePermissions', mode: 'role-permissions', title: '分配菜单权限' },
