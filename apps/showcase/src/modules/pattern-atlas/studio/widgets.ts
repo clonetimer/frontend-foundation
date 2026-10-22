@@ -26,6 +26,10 @@ export const studioWidgetDefinitions = [
   { kind: 'slider', label: '滑块', icon: '━', group: '表单', defaults: { title: '进度调整', percent: 45 } },
   { kind: 'rate', label: '评分', icon: '★', group: '表单', defaults: { title: '满意度' } },
 
+  { kind: 'management-actions', label: '系统管理操作', icon: '⚙', group: '反馈', defaults: {
+    title: '系统管理操作', actionMode: 'role-users', optionsUrl: '', assignedUrl: '', detailUrl: '', submitUrl: '',
+    statusField: 'status', activeValue: 'enabled', inactiveValue: 'disabled'
+  } },
   { kind: 'modal', label: '模态弹窗', icon: '▣', group: '反馈', defaults: { title: '操作确认', triggerText: '打开弹窗', description: '请确认后继续操作。', okText: '确认', cancelText: '取消', formFields: '', submitUrl: '', formMode: 'create', submitMethod: 'POST', sourceId: '', successWorkflow: '', failureWorkflow: '' } },
   { kind: 'drawer', label: '侧边抽屉', icon: '◩', group: '反馈', defaults: { title: '详情面板', triggerText: '查看详情', description: '这里展示当前记录详情。', placement: 'right', width: 420, formFields: '', submitUrl: '', formMode: 'create', submitMethod: 'POST', sourceId: '', successWorkflow: '', failureWorkflow: '', okText: '保存', cancelText: '取消' } },
   { kind: 'popconfirm', label: '气泡确认', icon: '☷', group: '反馈', defaults: { title: '确认操作？', triggerText: '执行操作', description: '操作前请确认。', okText: '确认', cancelText: '取消' } },
@@ -307,7 +311,7 @@ export function normalizeWidgetProps(kind: StudioWidgetKind, value: unknown): Re
     const candidate = Object.prototype.hasOwnProperty.call(source, key) ? source[key] : undefined;
     if (typeof initial === 'string' && typeof candidate === 'string') {
       const overlayOption = normalizedOverlayOption(kind, key, candidate);
-      defaults[key] = overlayOption ?? candidate.slice(0, ['src', 'statusUrl', 'uploadUrl', 'dataUrl', 'submitUrl', 'detailUrl'].includes(key) ? 500 : key === 'formFields' ? 1600 : key === 'tableColumns' ? 1000 : key === 'filterValues' ? 500 : key === 'successWorkflow' || key === 'failureWorkflow' ? 5000 : key === 'series' ? 1200 : 240);
+      defaults[key] = overlayOption ?? candidate.slice(0, ['src', 'statusUrl', 'uploadUrl', 'dataUrl', 'submitUrl', 'detailUrl', 'optionsUrl', 'assignedUrl'].includes(key) ? 500 : key === 'formFields' ? 1600 : key === 'tableColumns' ? 1000 : key === 'filterValues' ? 500 : key === 'successWorkflow' || key === 'failureWorkflow' ? 5000 : key === 'series' ? 1200 : 240);
     }
     if (typeof initial === 'number' && typeof candidate === 'number' && Number.isFinite(candidate)) defaults[key] = Math.round(Math.max(key === 'pollMs' ? 1500 : key === 'maxSizeMb' ? 1 : key === 'width' ? 280 : key === 'refreshMs' ? (candidate > 0 ? 5000 : 0) : 0, Math.min(key === 'pollMs' ? 30000 : key === 'refreshMs' ? 60000 : key === 'pageSize' ? 20 : key === 'maxSizeMb' ? 30 : key === 'width' ? 800 : 100, candidate)));
     if (Array.isArray(initial) && Array.isArray(candidate)) defaults[key] = candidate.filter((item): item is string => typeof item === 'string').slice(0,30).map((item) => item.slice(0,160));
