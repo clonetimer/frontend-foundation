@@ -143,6 +143,8 @@ class ManagementApp:
                         if route == "/auth/me" and method == "GET":
                             output = {"data": {"user": public_user(user),
                                 "permissions": self.permissions(db, user)}}
+                        elif route == "/auth/change-password" and method == "POST":
+                            output, headers = self.change_password(db, environ, user)
                         elif route == "/auth/logout" and method == "POST":
                             raw = cookie_token(environ)
                             if raw: db.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash(raw),))
@@ -213,6 +215,31 @@ class ManagementApp:
         db.execute("INSERT INTO sessions(token_hash,user_id,expires_at,createdAt) VALUES(?,?,?,?)",
                    (token_hash(raw), record["id"], now + SESSION_SECONDS, utcnow()))
         return {"data": {"user": public_user(dict(record))}}, [("Set-Cookie", self.session_cookie(raw))], 200
+
+    def change_password(self, db, environ, user):
+        """Self-service password rotation: verify old secret, revoke every prior session."""
+        payload = safe_json(environ)
+        if set(payload) != {"currentPassword", "newPassword"}:
+            raise ApiError(422, "Both currentPassword and newPassword are required")
+        old, new = payload["currentPassword"], payload["newPassword"]
+        if not isinstance(old, str) or not isinstance(new, str) or len(old) > 200:
+            raise ApiError(422, "Invalid password input")
+        if not verify_password(old, user["password_hash"]):
+            raise ApiError(403, "Current password is incorrect")
+        if new == old:
+            raise ApiError(422, "New password must differ")
+        try:
+            hashed = hash_password(new)
+        except ValueError as exc:
+            raise ApiError(422, str(exc)) from exc
+        db.execute("UPDATE users SET password_hash=?,revision=revision+1,updatedAt=? WHERE id=?",
+                   (hashed, utcnow(), user["id"]))
+        db.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
+        raw = issue_token()
+        db.execute("INSERT INTO sessions(token_hash,user_id,expires_at,createdAt) VALUES(?,?,?,?)",
+                   (token_hash(raw), user["id"], int(time.time()) + SESSION_SECONDS, utcnow()))
+        self.audit(db, user, "change-own-password", "users/" + user["id"])
+        return {"data": {"ok": True}}, [("Set-Cookie", self.session_cookie(raw))]
 
     def authenticate(self, db, environ) -> dict:
         raw = cookie_token(environ)
@@ -297,6 +324,28 @@ class ManagementApp:
             total = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             items = rows(db, f"SELECT * FROM {table} ORDER BY id DESC LIMIT ? OFFSET ?", (size,(page-1)*size))
             return {"data":{"items":items,"total":total}}, 200
+        password_reset = re.fullmatch(r"/users/([A-Za-z0-9-]{1,60})/reset-password", route)
+        if password_reset:
+            if method != "POST":
+                raise ApiError(405, "Method not allowed")
+            self.require(db, user, "system:users:read", write=True)
+            rid = password_reset.group(1)
+            if rid == user["id"]:
+                raise ApiError(403, "Use self-service change-password instead")
+            row = db.execute("SELECT id FROM users WHERE id=?", (rid,)).fetchone()
+            if row is None: raise ApiError(404, "User not found")
+            payload = safe_json(environ)
+            if set(payload) != {"newPassword"} or not isinstance(payload["newPassword"], str):
+                raise ApiError(422, "newPassword is required")
+            try:
+                hashed = hash_password(payload["newPassword"])
+            except ValueError as exc:
+                raise ApiError(422, str(exc)) from exc
+            db.execute("UPDATE users SET password_hash=?,revision=revision+1,updatedAt=? WHERE id=?",
+                       (hashed,utcnow(),rid))
+            db.execute("DELETE FROM sessions WHERE user_id=?", (rid,))
+            self.audit(db,user,"reset-password","users/"+rid)
+            return {"data":{"ok":True}},200
         if route == "/users/options" and method == "GET":
             self.require(db, user, "system:roles:read", write=True)
             result = rows(db, "SELECT id,name FROM users ORDER BY username LIMIT 201")
@@ -353,6 +402,10 @@ class ManagementApp:
             return (self.detail(db,table,rid) if rid else self.list_entity(db,table,environ)),200
         if method=="POST" and not rid:
             payload=validate_entity(table,safe_json(environ),creating=True)
+            if table == "users" and not payload.get("username"):
+                raise ApiError(422, "Username is required")
+            if table == "roles" and payload.get("code") == "superadmin":
+                raise ApiError(403, "Reserved built-in role code")
             if table=="users":
                 # Avoid password hash field being set by callers.
                 pass
@@ -378,6 +431,8 @@ class ManagementApp:
                 return {"data":{"ok":True}},200
             payload=validate_entity(table,safe_json(environ))
             if not payload: raise ApiError(422,"No fields")
+            if table == "roles" and payload.get("code") == "superadmin":
+                raise ApiError(403, "Reserved built-in role code")
             if "status" in payload: self.require_match(environ,old["revision"])
             if table=="users" and rid==user["id"] and payload.get("status")=="disabled":
                 raise ApiError(403,"Cannot disable own user")
