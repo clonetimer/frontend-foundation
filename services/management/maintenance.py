@@ -32,7 +32,7 @@ def snapshot(source: Path, destination: Path) -> Path:
     if temporary.exists():
         raise ValueError("Partial backup already exists; inspect it before retrying")
     try:
-        with sqlite3.connect(str(source)) as src, sqlite3.connect(str(temporary)) as out:
+        with contextlib.closing(sqlite3.connect(str(source))) as src, contextlib.closing(sqlite3.connect(str(temporary))) as out:
             verify(src)
             src.backup(out)
             verify(out)
@@ -79,12 +79,12 @@ def restore(source: Path, destination: Path, confirmed: bool = False) -> Path:
         raise ValueError("Restore requires an existing initialized database")
     # The process-level lock must also be held by the WSGI server.
     with server_lock(destination):
-        with sqlite3.connect(str(source)) as src:
+        with contextlib.closing(sqlite3.connect(str(source))) as src:
             verify(src)
         checkpoint = destination.with_name(destination.name + ".pre-restore-" + str(int(time.time_ns())) + ".sqlite3")
         snapshot(destination, checkpoint)
         try:
-            with sqlite3.connect(str(source)) as src, sqlite3.connect(str(destination)) as target:
+            with contextlib.closing(sqlite3.connect(str(source))) as src, contextlib.closing(sqlite3.connect(str(destination))) as target:
                 target.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 src.backup(target)
                 target.execute("DELETE FROM sessions")  # No historical login cookie remains valid.
@@ -92,7 +92,7 @@ def restore(source: Path, destination: Path, confirmed: bool = False) -> Path:
                 target.commit()
                 verify(target)
         except Exception:
-            with sqlite3.connect(str(checkpoint)) as before, sqlite3.connect(str(destination)) as target:
+            with contextlib.closing(sqlite3.connect(str(checkpoint))) as before, contextlib.closing(sqlite3.connect(str(destination))) as target:
                 before.backup(target)
             raise
         return checkpoint
@@ -116,7 +116,7 @@ def sync_pages(path: Path, manifest: Path) -> int:
             raise ValueError("Invalid title")
         seen.add(pid)
         normalized.append((pid, title, "#/" + pid))
-    with sqlite3.connect(str(path)) as db:
+    with contextlib.closing(sqlite3.connect(str(path))) as db:
         verify(db)
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         count = 0
