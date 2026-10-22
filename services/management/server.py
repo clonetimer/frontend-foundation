@@ -137,7 +137,7 @@ class ManagementApp:
                     raise ApiError(403, "Origin not allowed")
                 with database(self.db_path) as db:
                     if route == "/auth/login" and method == "POST":
-                        output, headers = self.login(db, environ)
+                        output, headers, status = self.login(db, environ)
                     else:
                         user = self.authenticate(db, environ)
                         if route == "/auth/me" and method == "GET":
@@ -205,12 +205,14 @@ class ManagementApp:
                    (username, environ.get("REMOTE_ADDR", "")[:64], "success" if valid else "denied", utcnow()))
         if not valid:
             db.execute("INSERT INTO login_attempts(username,at) VALUES(?,?)", (username,now))
-            raise ApiError(401, "Invalid credentials")
+            # Return an HTTP error *without* raising: the DB transaction must
+            # commit denial logs and login attempts for effective throttling.
+            return {"error": "Invalid credentials"}, [], 401
         db.execute("DELETE FROM login_attempts WHERE username=?", (username,))
         raw = issue_token()
         db.execute("INSERT INTO sessions(token_hash,user_id,expires_at,createdAt) VALUES(?,?,?,?)",
                    (token_hash(raw), record["id"], now + SESSION_SECONDS, utcnow()))
-        return {"data": {"user": public_user(dict(record))}}, [("Set-Cookie", self.session_cookie(raw))]
+        return {"data": {"user": public_user(dict(record))}}, [("Set-Cookie", self.session_cookie(raw))], 200
 
     def authenticate(self, db, environ) -> dict:
         raw = cookie_token(environ)
